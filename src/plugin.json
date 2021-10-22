@@ -1,0 +1,43 @@
+{
+  "$schema": "https://raw.githubusercontent.com/grafana/grafana/master/docs/sources/developers/plugins/plugin.schema.json",
+  "type": "datasource",
+  "name": "kafka-datasource",
+  "id": "exaco-kafka-datasource",
+  "metrics": true,
+  "backend": true,
+  "executable": "gpx_kafka-datasource",
+  "info": {
+    "description": "A backend datasource plugin for Apache Kafka",
+    "author": {
+      "name": "hoptical",
+      "url": ""
+    },
+    "keywords": [
+      "kafka",
+      "datasource",
+      "backend",
+      "stream"
+    ],
+    "logos": {
+      "small": "img/logo.svg",
+      "large": "img/logo.svg"
+    },
+    "links": [
+      {
+        "name": "Website",
+        "url": "https://github.com/grafana/grafana-starter-datasource-backend"
+      },
+      {
+        "name": "License",
+        "url": "https://github.com/grafana/grafana-starter-datasource-backend/blob/master/LICENSE"
+      }
+    ],
+    "screenshots": [],
+    "version": "%VERSION%",
+    "updated": "%TODAY%"
+  },
+  "dependencies": {
+    "grafanaDependency": ">=7.0.0",
+    "plugins": []
+  }
+}
