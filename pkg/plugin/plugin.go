@@ -11,6 +11,8 @@ import (
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 	"github.com/grafana/grafana-plugin-sdk-go/data"
 	"github.com/grafana/grafana-plugin-sdk-go/live"
+
+	"github.com/grafana/grafana-starter-datasource-backend/pkg/kafka_helper"
 )
 
 // Make sure SampleDatasource implements required interfaces. This is important to do
@@ -72,6 +74,13 @@ type queryModel struct {
 }
 
 func (d *SampleDatasource) query(_ context.Context, pCtx backend.PluginContext, query backend.DataQuery) backend.DataResponse {
+	// initialize kafka broker
+	consumer := kafka_helper.BrokerInitialize()
+	msg_data, _ := kafka_helper.ConsumerPull(consumer)
+	// if event == nil {
+	// 	// continue in case of poll timeout
+	// }
+	consumer.Close()
 	response := backend.DataResponse{}
 
 	// Unmarshal the JSON into our queryModel.
@@ -88,9 +97,8 @@ func (d *SampleDatasource) query(_ context.Context, pCtx backend.PluginContext, 
 	// add fields.
 	frame.Fields = append(frame.Fields,
 		data.NewField("time", nil, []time.Time{query.TimeRange.From, query.TimeRange.To}),
-		data.NewField("values", nil, []int64{10, 20}),
+		data.NewField("values", nil, []int64{msg_data.Value1, msg_data.Value2}),
 	)
-
 	// If query called with streaming on then return a channel
 	// to subscribe on a client-side and consume updates from a plugin.
 	// Feel free to remove this if you don't need streaming for your datasource.
