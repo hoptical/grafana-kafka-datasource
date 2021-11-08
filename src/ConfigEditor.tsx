@@ -44,6 +44,14 @@ export class ConfigEditor extends PureComponent<Props, State> {
       },
     });
   };
+  onURLChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const { onOptionsChange, options } = this.props;
+    const jsonData = {
+      ...options.jsonData,
+      URLs: event.target.value,
+    };
+    onOptionsChange({ ...options, jsonData });
+  };
 
   render() {
     const { options } = this.props;
@@ -53,6 +61,12 @@ export class ConfigEditor extends PureComponent<Props, State> {
     return (
       <div className="gf-form-group">
         <div className="gf-form">
+          <FormField
+            label="Bootstrap Servers"
+            onChange={this.onURLChange}
+            value={jsonData.URLs || ''}
+            placeholder="broker1:9092"
+          />
           <FormField
             label="Path"
             labelWidth={6}

@@ -3,6 +3,7 @@ package plugin
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"math/rand"
 	"time"
 
@@ -11,6 +12,8 @@ import (
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 	"github.com/grafana/grafana-plugin-sdk-go/data"
 	"github.com/grafana/grafana-plugin-sdk-go/live"
+
+	"github.com/grafana/grafana-starter-datasource-backend/pkg/kafka_helper"
 )
 
 // Make sure SampleDatasource implements required interfaces. This is important to do
@@ -31,18 +34,23 @@ var (
 
 // NewSampleDatasource creates a new datasource instance.
 func NewSampleDatasource(_ backend.DataSourceInstanceSettings) (instancemgmt.Instance, error) {
-	return &SampleDatasource{}, nil
+	kafka_client := kafka_helper.KafkaClient{}
+	return &SampleDatasource{kafka_client}, nil
 }
 
 // SampleDatasource is an example datasource which can respond to data queries, reports
 // its health and has streaming skills.
-type SampleDatasource struct{}
+
+type SampleDatasource struct {
+	client kafka_helper.KafkaClient
+}
 
 // Dispose here tells plugin SDK that plugin wants to clean up resources when a new instance
 // created. As soon as datasource settings change detected by SDK old datasource instance will
 // be disposed and a new one will be created using NewSampleDatasource factory function.
 func (d *SampleDatasource) Dispose() {
 	// Clean up datasource instance resources.
+	d.client.Consumer.Close()
 }
 
 // QueryData handles multiple queries and returns multiple responses.
@@ -72,6 +80,7 @@ type queryModel struct {
 }
 
 func (d *SampleDatasource) query(_ context.Context, pCtx backend.PluginContext, query backend.DataQuery) backend.DataResponse {
+
 	response := backend.DataResponse{}
 
 	// Unmarshal the JSON into our queryModel.
@@ -90,7 +99,6 @@ func (d *SampleDatasource) query(_ context.Context, pCtx backend.PluginContext, 
 		data.NewField("time", nil, []time.Time{query.TimeRange.From, query.TimeRange.To}),
 		data.NewField("values", nil, []int64{10, 20}),
 	)
-
 	// If query called with streaming on then return a channel
 	// to subscribe on a client-side and consume updates from a plugin.
 	// Feel free to remove this if you don't need streaming for your datasource.
@@ -134,11 +142,13 @@ func (d *SampleDatasource) CheckHealth(_ context.Context, req *backend.CheckHeal
 // allows sending the first message.
 func (d *SampleDatasource) SubscribeStream(_ context.Context, req *backend.SubscribeStreamRequest) (*backend.SubscribeStreamResponse, error) {
 	log.DefaultLogger.Info("SubscribeStream called", "request", req)
-
+	// initialize kafka broker
 	status := backend.SubscribeStreamStatusPermissionDenied
 	if req.Path == "stream" {
 		// Allow subscribing only on expected path.
 		status = backend.SubscribeStreamStatusOK
+		d.client.BrokerInitialize()
+		log.DefaultLogger.Info("Kafka Topic Subscrbied!")
 	}
 	return &backend.SubscribeStreamResponse{
 		Status: status,
@@ -149,18 +159,14 @@ func (d *SampleDatasource) SubscribeStream(_ context.Context, req *backend.Subsc
 // subscribed to the same channel.
 func (d *SampleDatasource) RunStream(ctx context.Context, req *backend.RunStreamRequest, sender *backend.StreamSender) error {
 	log.DefaultLogger.Info("RunStream called", "request", req)
-
 	// Create the same data frame as for query data.
 	frame := data.NewFrame("response")
-
 	// Add fields (matching the same schema used in QueryData).
 	frame.Fields = append(frame.Fields,
 		data.NewField("time", nil, make([]time.Time, 1)),
 		data.NewField("values", nil, make([]int64, 1)),
 	)
-
 	counter := 0
-
 	// Stream data frames periodically till stream closed by Grafana.
 	for {
 		select {
@@ -168,10 +174,21 @@ func (d *SampleDatasource) RunStream(ctx context.Context, req *backend.RunStream
 			log.DefaultLogger.Info("Context done, finish streaming", "path", req.Path)
 			return nil
 		case <-time.After(time.Second):
+			log.DefaultLogger.Warn("Before Pull")
+			a, _ := d.client.Consumer.Assignment()
+			log.DefaultLogger.Warn(fmt.Sprintf("Assignment; %v", a))
+			msg_data, event := d.client.ConsumerPull()
+
+			println(a)
+			if event == nil {
+				// continue in case of poll timeout
+				continue
+			}
 			// Send new data periodically.
 			frame.Fields[0].Set(0, time.Now())
-			frame.Fields[1].Set(0, int64(10*(counter%2+1)))
-
+			//frame.Fields[1].Set(0, int64(100*(counter%2+1)))
+			frame.Fields[1].Set(0, int64(msg_data.Value1))
+			log.DefaultLogger.Info("data: ", msg_data.Value1)
 			counter++
 
 			err := sender.SendFrame(frame, data.IncludeAll)
