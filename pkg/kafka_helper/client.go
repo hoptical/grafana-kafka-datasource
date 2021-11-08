@@ -8,8 +8,13 @@ import (
 	"github.com/confluentinc/confluent-kafka-go/kafka"
 )
 
-func BrokerInitialize() *kafka.Consumer {
-	consumer, err := kafka.NewConsumer(&kafka.ConfigMap{
+type KafkaClient struct {
+	Consumer *kafka.Consumer
+}
+
+func (client *KafkaClient) BrokerInitialize() *kafka.Consumer {
+	var err error
+	client.Consumer, err = kafka.NewConsumer(&kafka.ConfigMap{
 		"bootstrap.servers":  "localhost:9092",
 		"group.id":           "kafka-datasource",
 		"auto.offset.reset":  "earliest",
@@ -20,24 +25,23 @@ func BrokerInitialize() *kafka.Consumer {
 	}
 	// Define constants
 	topics := []string{"mytopic"}
-	err = consumer.SubscribeTopics(topics, nil)
+	err = client.Consumer.SubscribeTopics(topics, nil)
 
 	if err != nil {
 		panic(err)
 	}
 	fmt.Printf("Topic subscribed!\n")
 
-	return consumer
+	return client.Consumer
 }
 
 type Data struct {
 	Value1 int64
-	Value2 int64
 }
 
-func ConsumerPull(consumer *kafka.Consumer) (Data, kafka.Event) {
+func (client *KafkaClient) ConsumerPull() (Data, kafka.Event) {
 	var data Data
-	ev := consumer.Poll(100)
+	ev := client.Consumer.Poll(100)
 	if ev == nil {
 		return data, ev
 	}
@@ -45,7 +49,7 @@ func ConsumerPull(consumer *kafka.Consumer) (Data, kafka.Event) {
 	switch e := ev.(type) {
 	case *kafka.Message:
 		json.Unmarshal([]byte(e.Value), &data)
-		consumer.Commit()
+		client.Consumer.Commit()
 	case kafka.Error:
 		// Errors should generally be considered
 		// informational, the client will try to
