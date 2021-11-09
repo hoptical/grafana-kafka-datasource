@@ -3,7 +3,6 @@ package plugin
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"math/rand"
 	"time"
 
@@ -50,7 +49,6 @@ type SampleDatasource struct {
 // be disposed and a new one will be created using NewSampleDatasource factory function.
 func (d *SampleDatasource) Dispose() {
 	// Clean up datasource instance resources.
-	d.client.Consumer.Close()
 }
 
 // QueryData handles multiple queries and returns multiple responses.
@@ -97,7 +95,7 @@ func (d *SampleDatasource) query(_ context.Context, pCtx backend.PluginContext, 
 	// add fields.
 	frame.Fields = append(frame.Fields,
 		data.NewField("time", nil, []time.Time{query.TimeRange.From, query.TimeRange.To}),
-		data.NewField("values", nil, []int64{10, 20}),
+		data.NewField("values", nil, []int64{0, 0}),
 	)
 	// If query called with streaming on then return a channel
 	// to subscribe on a client-side and consume updates from a plugin.
@@ -147,8 +145,6 @@ func (d *SampleDatasource) SubscribeStream(_ context.Context, req *backend.Subsc
 	if req.Path == "stream" {
 		// Allow subscribing only on expected path.
 		status = backend.SubscribeStreamStatusOK
-		d.client.BrokerInitialize()
-		log.DefaultLogger.Info("Kafka Topic Subscrbied!")
 	}
 	return &backend.SubscribeStreamResponse{
 		Status: status,
@@ -159,6 +155,11 @@ func (d *SampleDatasource) SubscribeStream(_ context.Context, req *backend.Subsc
 // subscribed to the same channel.
 func (d *SampleDatasource) RunStream(ctx context.Context, req *backend.RunStreamRequest, sender *backend.StreamSender) error {
 	log.DefaultLogger.Info("RunStream called", "request", req)
+
+	d.client.ConsumerInitialize()
+	// offset=-1 means latest offset
+	d.client.TopicAssign("mytopic", 0, -1)
+	log.DefaultLogger.Info("Consumer Subscribed!")
 	// Create the same data frame as for query data.
 	frame := data.NewFrame("response")
 	// Add fields (matching the same schema used in QueryData).
@@ -174,12 +175,9 @@ func (d *SampleDatasource) RunStream(ctx context.Context, req *backend.RunStream
 			log.DefaultLogger.Info("Context done, finish streaming", "path", req.Path)
 			return nil
 		case <-time.After(time.Second):
-			log.DefaultLogger.Warn("Before Pull")
-			a, _ := d.client.Consumer.Assignment()
-			log.DefaultLogger.Warn(fmt.Sprintf("Assignment; %v", a))
+			//log.DefaultLogger.Warn(fmt.Sprintf("Assignment; %v", a))
 			msg_data, event := d.client.ConsumerPull()
 
-			println(a)
 			if event == nil {
 				// continue in case of poll timeout
 				continue
@@ -188,7 +186,6 @@ func (d *SampleDatasource) RunStream(ctx context.Context, req *backend.RunStream
 			frame.Fields[0].Set(0, time.Now())
 			//frame.Fields[1].Set(0, int64(100*(counter%2+1)))
 			frame.Fields[1].Set(0, int64(msg_data.Value1))
-			log.DefaultLogger.Info("data: ", msg_data.Value1)
 			counter++
 
 			err := sender.SendFrame(frame, data.IncludeAll)

@@ -12,7 +12,7 @@ type KafkaClient struct {
 	Consumer *kafka.Consumer
 }
 
-func (client *KafkaClient) BrokerInitialize() *kafka.Consumer {
+func (client *KafkaClient) ConsumerInitialize() {
 	var err error
 	client.Consumer, err = kafka.NewConsumer(&kafka.ConfigMap{
 		"bootstrap.servers":  "localhost:9092",
@@ -23,16 +23,25 @@ func (client *KafkaClient) BrokerInitialize() *kafka.Consumer {
 	if err != nil {
 		panic(err)
 	}
-	// Define constants
-	topics := []string{"mytopic"}
-	err = client.Consumer.SubscribeTopics(topics, nil)
+}
+
+func (client *KafkaClient) TopicAssign(topic string, partition int32, offset int64) {
+	var err error
+	topic_partition := kafka.TopicPartition{
+		Topic:     &topic,
+		Partition: partition,
+		Offset:    kafka.Offset(offset),
+		//Offset:   kafka.OffsetEnd,
+		Metadata: new(string),
+		Error:    err,
+	}
+	partitions := []kafka.TopicPartition{topic_partition}
+	err = client.Consumer.Assign(partitions)
 
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf("Topic subscribed!\n")
-
-	return client.Consumer
+	fmt.Printf("Topic Assigned!\n")
 }
 
 type Data struct {
