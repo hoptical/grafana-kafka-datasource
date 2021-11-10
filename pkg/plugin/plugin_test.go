@@ -10,7 +10,7 @@ import (
 
 // This is where the tests for the datasource backend live.
 func TestQueryData(t *testing.T) {
-	ds := plugin.SampleDatasource{}
+	ds := plugin.KafkaDatasource{}
 
 	resp, err := ds.QueryData(
 		context.Background(),

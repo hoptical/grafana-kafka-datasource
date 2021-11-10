@@ -32,9 +32,25 @@ var (
 )
 
 // NewKafkaDatasource creates a new datasource instance.
-func NewKafkaDatasource(_ backend.DataSourceInstanceSettings) (instancemgmt.Instance, error) {
-	kafka_client := kafka_helper.KafkaClient{}
+func NewKafkaDatasource(s backend.DataSourceInstanceSettings) (instancemgmt.Instance, error) {
+	settings, err := getDatasourceSettings(s)
+	if err != nil {
+		return nil, err
+	}
+
+	kafka_client := kafka_helper.NewKafkaClient(*settings)
+
 	return &KafkaDatasource{kafka_client}, nil
+}
+
+func getDatasourceSettings(s backend.DataSourceInstanceSettings) (*kafka_helper.Options, error) {
+	settings := &kafka_helper.Options{}
+
+	if err := json.Unmarshal(s.JSONData, settings); err != nil {
+		return nil, err
+	}
+
+	return settings, nil
 }
 
 // KafkaDatasource is an example datasource which can respond to data queries, reports
