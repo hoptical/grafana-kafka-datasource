@@ -3,7 +3,6 @@ package plugin
 import (
 	"context"
 	"encoding/json"
-	"math/rand"
 	"time"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
@@ -137,13 +136,12 @@ func (d *KafkaDatasource) query(_ context.Context, pCtx backend.PluginContext, q
 // a datasource is working as expected.
 func (d *KafkaDatasource) CheckHealth(_ context.Context, req *backend.CheckHealthRequest) (*backend.CheckHealthResult, error) {
 	log.DefaultLogger.Info("CheckHealth called", "request", req)
-
 	var status = backend.HealthStatusOk
 	var message = "Data source is working"
-
-	if rand.Int()%2 == 0 {
+	err := d.client.HealthCheck()
+	if err != nil {
 		status = backend.HealthStatusError
-		message = "randomized error"
+		message = "Cannot connect to the brokers!"
 	}
 
 	return &backend.CheckHealthResult{

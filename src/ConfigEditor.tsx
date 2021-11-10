@@ -73,7 +73,7 @@ export class ConfigEditor extends PureComponent<Props, State> {
             label="Servers"
             onChange={this.onBootstrapServersChange}
             value={jsonData.bootstrapServers || ''}
-            placeholder="broker1:9092"
+            placeholder="broker1:9092, broker2:9092"
           />
         </div>
 

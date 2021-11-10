@@ -77,3 +77,15 @@ func (client *KafkaClient) ConsumerPull() (KafkaMessage, kafka.Event) {
 	}
 	return message, ev
 }
+
+func (client KafkaClient) HealthCheck() error {
+	client.ConsumerInitialize()
+	topic := ""
+	_, err := client.Consumer.GetMetadata(&topic, false, 200)
+	if err != nil {
+		if err.(kafka.Error).Code() == kafka.ErrTransport {
+			return err
+		}
+	}
+	return nil
+}
