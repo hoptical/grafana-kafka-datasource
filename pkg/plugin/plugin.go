@@ -161,13 +161,7 @@ func (d *SampleDatasource) RunStream(ctx context.Context, req *backend.RunStream
 	d.client.TopicAssign("mytopic", 0, -1)
 	log.DefaultLogger.Info("Consumer Subscribed!")
 	// Create the same data frame as for query data.
-	frame := data.NewFrame("response")
-	// Add fields (matching the same schema used in QueryData).
-	frame.Fields = append(frame.Fields,
-		data.NewField("time", nil, make([]time.Time, 1)),
-		data.NewField("values", nil, make([]int64, 1)),
-	)
-	counter := 0
+
 	// Stream data frames periodically till stream closed by Grafana.
 	for {
 		select {
@@ -177,17 +171,24 @@ func (d *SampleDatasource) RunStream(ctx context.Context, req *backend.RunStream
 		case <-time.After(time.Second):
 			//log.DefaultLogger.Warn(fmt.Sprintf("Assignment; %v", a))
 			msg_data, event := d.client.ConsumerPull()
-
 			if event == nil {
 				// continue in case of poll timeout
 				continue
 			}
-			// Send new data periodically.
+			frame := data.NewFrame("response")
+			// Add fields (matching the same schema used in QueryData).
+			frame.Fields = append(frame.Fields,
+				data.NewField("time", nil, make([]time.Time, 1)),
+			)
 			frame.Fields[0].Set(0, time.Now())
-			//frame.Fields[1].Set(0, int64(100*(counter%2+1)))
-			frame.Fields[1].Set(0, int64(msg_data.Value1))
-			counter++
-
+			cnt := 1
+			for key, value := range msg_data {
+				frame.Fields = append(frame.Fields,
+					data.NewField(key, nil, make([]float64, 1)))
+				// Send new data periodically.
+				frame.Fields[cnt].Set(0, value)
+				cnt++
+			}
 			err := sender.SendFrame(frame, data.IncludeAll)
 			if err != nil {
 				log.DefaultLogger.Error("Error sending frame", "error", err)
