@@ -15,7 +15,7 @@ import (
 	"github.com/grafana/grafana-starter-datasource-backend/pkg/kafka_helper"
 )
 
-// Make sure SampleDatasource implements required interfaces. This is important to do
+// Make sure KafkaDatasource implements required interfaces. This is important to do
 // since otherwise we will only get a not implemented error response from plugin in
 // runtime. In this example datasource instance implements backend.QueryDataHandler,
 // backend.CheckHealthHandler, backend.StreamHandler interfaces. Plugin should not
@@ -25,29 +25,29 @@ import (
 // is useful to clean up resources used by previous datasource instance when a new datasource
 // instance created upon datasource settings changed.
 var (
-	_ backend.QueryDataHandler      = (*SampleDatasource)(nil)
-	_ backend.CheckHealthHandler    = (*SampleDatasource)(nil)
-	_ backend.StreamHandler         = (*SampleDatasource)(nil)
-	_ instancemgmt.InstanceDisposer = (*SampleDatasource)(nil)
+	_ backend.QueryDataHandler      = (*KafkaDatasource)(nil)
+	_ backend.CheckHealthHandler    = (*KafkaDatasource)(nil)
+	_ backend.StreamHandler         = (*KafkaDatasource)(nil)
+	_ instancemgmt.InstanceDisposer = (*KafkaDatasource)(nil)
 )
 
-// NewSampleDatasource creates a new datasource instance.
-func NewSampleDatasource(_ backend.DataSourceInstanceSettings) (instancemgmt.Instance, error) {
+// NewKafkaDatasource creates a new datasource instance.
+func NewKafkaDatasource(_ backend.DataSourceInstanceSettings) (instancemgmt.Instance, error) {
 	kafka_client := kafka_helper.KafkaClient{}
-	return &SampleDatasource{kafka_client}, nil
+	return &KafkaDatasource{kafka_client}, nil
 }
 
-// SampleDatasource is an example datasource which can respond to data queries, reports
+// KafkaDatasource is an example datasource which can respond to data queries, reports
 // its health and has streaming skills.
 
-type SampleDatasource struct {
+type KafkaDatasource struct {
 	client kafka_helper.KafkaClient
 }
 
 // Dispose here tells plugin SDK that plugin wants to clean up resources when a new instance
 // created. As soon as datasource settings change detected by SDK old datasource instance will
-// be disposed and a new one will be created using NewSampleDatasource factory function.
-func (d *SampleDatasource) Dispose() {
+// be disposed and a new one will be created using NewKafkaDatasource factory function.
+func (d *KafkaDatasource) Dispose() {
 	// Clean up datasource instance resources.
 }
 
@@ -55,7 +55,7 @@ func (d *SampleDatasource) Dispose() {
 // req contains the queries []DataQuery (where each query contains RefID as a unique identifier).
 // The QueryDataResponse contains a map of RefID to the response for each query, and each response
 // contains Frames ([]*Frame).
-func (d *SampleDatasource) QueryData(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
+func (d *KafkaDatasource) QueryData(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
 	log.DefaultLogger.Info("QueryData called", "request", req)
 
 	// create response struct
@@ -77,7 +77,7 @@ type queryModel struct {
 	WithStreaming bool `json:"withStreaming"`
 }
 
-func (d *SampleDatasource) query(_ context.Context, pCtx backend.PluginContext, query backend.DataQuery) backend.DataResponse {
+func (d *KafkaDatasource) query(_ context.Context, pCtx backend.PluginContext, query backend.DataQuery) backend.DataResponse {
 
 	response := backend.DataResponse{}
 
@@ -119,7 +119,7 @@ func (d *SampleDatasource) query(_ context.Context, pCtx backend.PluginContext, 
 // The main use case for these health checks is the test button on the
 // datasource configuration page which allows users to verify that
 // a datasource is working as expected.
-func (d *SampleDatasource) CheckHealth(_ context.Context, req *backend.CheckHealthRequest) (*backend.CheckHealthResult, error) {
+func (d *KafkaDatasource) CheckHealth(_ context.Context, req *backend.CheckHealthRequest) (*backend.CheckHealthResult, error) {
 	log.DefaultLogger.Info("CheckHealth called", "request", req)
 
 	var status = backend.HealthStatusOk
@@ -138,7 +138,7 @@ func (d *SampleDatasource) CheckHealth(_ context.Context, req *backend.CheckHeal
 
 // SubscribeStream is called when a client wants to connect to a stream. This callback
 // allows sending the first message.
-func (d *SampleDatasource) SubscribeStream(_ context.Context, req *backend.SubscribeStreamRequest) (*backend.SubscribeStreamResponse, error) {
+func (d *KafkaDatasource) SubscribeStream(_ context.Context, req *backend.SubscribeStreamRequest) (*backend.SubscribeStreamResponse, error) {
 	log.DefaultLogger.Info("SubscribeStream called", "request", req)
 	// initialize kafka broker
 	status := backend.SubscribeStreamStatusPermissionDenied
@@ -153,7 +153,7 @@ func (d *SampleDatasource) SubscribeStream(_ context.Context, req *backend.Subsc
 
 // RunStream is called once for any open channel.  Results are shared with everyone
 // subscribed to the same channel.
-func (d *SampleDatasource) RunStream(ctx context.Context, req *backend.RunStreamRequest, sender *backend.StreamSender) error {
+func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamRequest, sender *backend.StreamSender) error {
 	log.DefaultLogger.Info("RunStream called", "request", req)
 
 	d.client.ConsumerInitialize()
@@ -161,13 +161,7 @@ func (d *SampleDatasource) RunStream(ctx context.Context, req *backend.RunStream
 	d.client.TopicAssign("mytopic", 0, -1)
 	log.DefaultLogger.Info("Consumer Subscribed!")
 	// Create the same data frame as for query data.
-	frame := data.NewFrame("response")
-	// Add fields (matching the same schema used in QueryData).
-	frame.Fields = append(frame.Fields,
-		data.NewField("time", nil, make([]time.Time, 1)),
-		data.NewField("values", nil, make([]int64, 1)),
-	)
-	counter := 0
+
 	// Stream data frames periodically till stream closed by Grafana.
 	for {
 		select {
@@ -177,17 +171,24 @@ func (d *SampleDatasource) RunStream(ctx context.Context, req *backend.RunStream
 		case <-time.After(time.Second):
 			//log.DefaultLogger.Warn(fmt.Sprintf("Assignment; %v", a))
 			msg_data, event := d.client.ConsumerPull()
-
 			if event == nil {
 				// continue in case of poll timeout
 				continue
 			}
-			// Send new data periodically.
+			frame := data.NewFrame("response")
+			// Add fields (matching the same schema used in QueryData).
+			frame.Fields = append(frame.Fields,
+				data.NewField("time", nil, make([]time.Time, 1)),
+			)
 			frame.Fields[0].Set(0, time.Now())
-			//frame.Fields[1].Set(0, int64(100*(counter%2+1)))
-			frame.Fields[1].Set(0, int64(msg_data.Value1))
-			counter++
-
+			cnt := 1
+			for key, value := range msg_data {
+				frame.Fields = append(frame.Fields,
+					data.NewField(key, nil, make([]float64, 1)))
+				// Send new data periodically.
+				frame.Fields[cnt].Set(0, value)
+				cnt++
+			}
 			err := sender.SendFrame(frame, data.IncludeAll)
 			if err != nil {
 				log.DefaultLogger.Error("Error sending frame", "error", err)
@@ -198,7 +199,7 @@ func (d *SampleDatasource) RunStream(ctx context.Context, req *backend.RunStream
 }
 
 // PublishStream is called when a client sends a message to the stream.
-func (d *SampleDatasource) PublishStream(_ context.Context, req *backend.PublishStreamRequest) (*backend.PublishStreamResponse, error) {
+func (d *KafkaDatasource) PublishStream(_ context.Context, req *backend.PublishStreamRequest) (*backend.PublishStreamResponse, error) {
 	log.DefaultLogger.Info("PublishStream called", "request", req)
 
 	// Do not allow publishing at all.

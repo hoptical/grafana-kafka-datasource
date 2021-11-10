@@ -12,6 +12,8 @@ type KafkaClient struct {
 	Consumer *kafka.Consumer
 }
 
+type KafkaMessage map[string]float64
+
 func (client *KafkaClient) ConsumerInitialize() {
 	var err error
 	client.Consumer, err = kafka.NewConsumer(&kafka.ConfigMap{
@@ -31,9 +33,8 @@ func (client *KafkaClient) TopicAssign(topic string, partition int32, offset int
 		Topic:     &topic,
 		Partition: partition,
 		Offset:    kafka.Offset(offset),
-		//Offset:   kafka.OffsetEnd,
-		Metadata: new(string),
-		Error:    err,
+		Metadata:  new(string),
+		Error:     err,
 	}
 	partitions := []kafka.TopicPartition{topic_partition}
 	err = client.Consumer.Assign(partitions)
@@ -44,21 +45,16 @@ func (client *KafkaClient) TopicAssign(topic string, partition int32, offset int
 	fmt.Printf("Topic Assigned!\n")
 }
 
-type Data struct {
-	Value1 int64
-}
-
-func (client *KafkaClient) ConsumerPull() (Data, kafka.Event) {
-	var data Data
+func (client *KafkaClient) ConsumerPull() (KafkaMessage, kafka.Event) {
+	var message KafkaMessage
 	ev := client.Consumer.Poll(100)
 	if ev == nil {
-		return data, ev
+		return message, ev
 	}
 
 	switch e := ev.(type) {
 	case *kafka.Message:
-		json.Unmarshal([]byte(e.Value), &data)
-		client.Consumer.Commit()
+		json.Unmarshal([]byte(e.Value), &message)
 	case kafka.Error:
 		// Errors should generally be considered
 		// informational, the client will try to
@@ -71,5 +67,5 @@ func (client *KafkaClient) ConsumerPull() (Data, kafka.Event) {
 		}
 	default:
 	}
-	return data, ev
+	return message, ev
 }
