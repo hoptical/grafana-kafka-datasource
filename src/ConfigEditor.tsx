@@ -10,14 +10,15 @@ interface Props extends DataSourcePluginOptionsEditorProps<MyDataSourceOptions> 
 interface State {}
 
 export class ConfigEditor extends PureComponent<Props, State> {
-  onPathChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const { onOptionsChange, options } = this.props;
-    const jsonData = {
-      ...options.jsonData,
-      path: event.target.value,
-    };
-    onOptionsChange({ ...options, jsonData });
-  };
+  //const {bootstrapServers} = jsonData;
+  // onPathChange = (event: ChangeEvent<HTMLInputElement>) => {
+  //   const { onOptionsChange, options } = this.props;
+  //   const jsonData = {
+  //     ...options.jsonData,
+  //     path: event.target.value,
+  //   };
+  //   onOptionsChange({ ...options, jsonData });
+  // };
 
   // Secure field (only sent to the backend)
   onAPIKeyChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -44,15 +45,22 @@ export class ConfigEditor extends PureComponent<Props, State> {
       },
     });
   };
-  onURLChange = (event: ChangeEvent<HTMLInputElement>) => {
+  // onURLChange = (event: ChangeEvent<HTMLInputElement>) => {
+  //   const { onOptionsChange, options } = this.props;
+  //   const jsonData = {
+  //     ...options.jsonData,
+  //     URLs: event.target.value,
+  //   };
+  //   onOptionsChange({ ...options, jsonData });
+  // };
+  onBootstrapServersChange = (event: ChangeEvent<HTMLInputElement>) => {
     const { onOptionsChange, options } = this.props;
     const jsonData = {
       ...options.jsonData,
-      URLs: event.target.value,
+      bootstrapServers: event.target.value,
     };
     onOptionsChange({ ...options, jsonData });
   };
-
   render() {
     const { options } = this.props;
     const { jsonData, secureJsonFields } = options;
@@ -62,18 +70,10 @@ export class ConfigEditor extends PureComponent<Props, State> {
       <div className="gf-form-group">
         <div className="gf-form">
           <FormField
-            label="Bootstrap Servers"
-            onChange={this.onURLChange}
-            value={jsonData.URLs || ''}
-            placeholder="broker1:9092"
-          />
-          <FormField
-            label="Path"
-            labelWidth={6}
-            inputWidth={20}
-            onChange={this.onPathChange}
-            value={jsonData.path || ''}
-            placeholder="json field returned to frontend"
+            label="Servers"
+            onChange={this.onBootstrapServersChange}
+            value={jsonData.bootstrapServers || ''}
+            placeholder="broker1:9092, broker2:9092"
           />
         </div>
 

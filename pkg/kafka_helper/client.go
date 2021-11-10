@@ -8,18 +8,26 @@ import (
 	"github.com/confluentinc/confluent-kafka-go/kafka"
 )
 
+type Options struct {
+	BootstrapServers string `json:"bootstrapServers"`
+}
+
 type KafkaClient struct {
-	Consumer *kafka.Consumer
+	Consumer         *kafka.Consumer
+	BootstrapServers string
 }
 
 type KafkaMessage map[string]float64
 
+func NewKafkaClient(options Options) KafkaClient {
+	client := KafkaClient{BootstrapServers: options.BootstrapServers}
+	return client
+}
 func (client *KafkaClient) ConsumerInitialize() {
 	var err error
 	client.Consumer, err = kafka.NewConsumer(&kafka.ConfigMap{
-		"bootstrap.servers":  "localhost:9092",
+		"bootstrap.servers":  client.BootstrapServers,
 		"group.id":           "kafka-datasource",
-		"auto.offset.reset":  "earliest",
 		"enable.auto.commit": "false",
 	})
 	if err != nil {
@@ -68,4 +76,16 @@ func (client *KafkaClient) ConsumerPull() (KafkaMessage, kafka.Event) {
 	default:
 	}
 	return message, ev
+}
+
+func (client KafkaClient) HealthCheck() error {
+	client.ConsumerInitialize()
+	topic := ""
+	_, err := client.Consumer.GetMetadata(&topic, false, 200)
+	if err != nil {
+		if err.(kafka.Error).Code() == kafka.ErrTransport {
+			return err
+		}
+	}
+	return nil
 }

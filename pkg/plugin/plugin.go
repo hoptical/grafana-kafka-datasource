@@ -3,7 +3,6 @@ package plugin
 import (
 	"context"
 	"encoding/json"
-	"math/rand"
 	"time"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
@@ -32,9 +31,25 @@ var (
 )
 
 // NewKafkaDatasource creates a new datasource instance.
-func NewKafkaDatasource(_ backend.DataSourceInstanceSettings) (instancemgmt.Instance, error) {
-	kafka_client := kafka_helper.KafkaClient{}
+func NewKafkaDatasource(s backend.DataSourceInstanceSettings) (instancemgmt.Instance, error) {
+	settings, err := getDatasourceSettings(s)
+	if err != nil {
+		return nil, err
+	}
+
+	kafka_client := kafka_helper.NewKafkaClient(*settings)
+
 	return &KafkaDatasource{kafka_client}, nil
+}
+
+func getDatasourceSettings(s backend.DataSourceInstanceSettings) (*kafka_helper.Options, error) {
+	settings := &kafka_helper.Options{}
+
+	if err := json.Unmarshal(s.JSONData, settings); err != nil {
+		return nil, err
+	}
+
+	return settings, nil
 }
 
 // KafkaDatasource is an example datasource which can respond to data queries, reports
@@ -121,13 +136,12 @@ func (d *KafkaDatasource) query(_ context.Context, pCtx backend.PluginContext, q
 // a datasource is working as expected.
 func (d *KafkaDatasource) CheckHealth(_ context.Context, req *backend.CheckHealthRequest) (*backend.CheckHealthResult, error) {
 	log.DefaultLogger.Info("CheckHealth called", "request", req)
-
 	var status = backend.HealthStatusOk
 	var message = "Data source is working"
-
-	if rand.Int()%2 == 0 {
+	err := d.client.HealthCheck()
+	if err != nil {
 		status = backend.HealthStatusError
-		message = "randomized error"
+		message = "Cannot connect to the brokers!"
 	}
 
 	return &backend.CheckHealthResult{
