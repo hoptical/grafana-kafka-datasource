@@ -25,6 +25,6 @@ func TestQueryData(t *testing.T) {
 	}
 
 	if len(resp.Responses) != 1 {
-		t.Fatal("QueryData must return a response")
+		t.Fatal("QueryData must return a response.")
 	}
 }

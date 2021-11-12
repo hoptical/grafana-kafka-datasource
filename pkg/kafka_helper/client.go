@@ -10,25 +10,30 @@ import (
 
 type Options struct {
 	BootstrapServers string `json:"bootstrapServers"`
+	AutoOffsetReset  string `json:"autoOffsetReset"`
+	APIKey           string
 }
 
 type KafkaClient struct {
 	Consumer         *kafka.Consumer
 	BootstrapServers string
+	AutoOffsetReset  string
 }
 
 type KafkaMessage map[string]float64
 
 func NewKafkaClient(options Options) KafkaClient {
-	client := KafkaClient{BootstrapServers: options.BootstrapServers}
+	client := KafkaClient{BootstrapServers: options.BootstrapServers, AutoOffsetReset: options.AutoOffsetReset}
 	return client
 }
+
 func (client *KafkaClient) ConsumerInitialize() {
 	var err error
 	client.Consumer, err = kafka.NewConsumer(&kafka.ConfigMap{
 		"bootstrap.servers":  client.BootstrapServers,
-		"group.id":           "kafka-datasource",
+		"group.id":           "grafana-kafka-datasource",
 		"enable.auto.commit": "false",
+		"auto.offset.reset":  client.AutoOffsetReset,
 	})
 	if err != nil {
 		panic(err)
@@ -50,7 +55,7 @@ func (client *KafkaClient) TopicAssign(topic string, partition int32, offset int
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf("Topic Assigned!\n")
+	fmt.Printf("Topic assigned.\n")
 }
 
 func (client *KafkaClient) ConsumerPull() (KafkaMessage, kafka.Event) {
