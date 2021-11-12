@@ -1,8 +1,8 @@
 {
   "$schema": "https://raw.githubusercontent.com/grafana/grafana/master/docs/sources/developers/plugins/plugin.schema.json",
   "type": "datasource",
-  "name": "kafka-datasource",
-  "id": "exaco-kafka-datasource",
+  "name": "Kafka",
+  "id": "kafka",
   "metrics": true,
   "backend": true,
   "executable": "gpx_kafka-datasource",
@@ -19,8 +19,8 @@
       "stream"
     ],
     "logos": {
-      "small": "img/logo.svg",
-      "large": "img/logo.svg"
+      "small": "img/kafka_logo.svg",
+      "large": "img/kafka_logo.svg"
     },
     "links": [
       {
