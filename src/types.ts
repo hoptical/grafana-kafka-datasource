@@ -1,26 +1,31 @@
 import { DataQuery, DataSourceJsonData } from '@grafana/data';
 
-export interface MyQuery extends DataQuery {
-  queryText?: string;
-  constant: number;
-  withStreaming: boolean;
-}
-
-export const defaultQuery: Partial<MyQuery> = {
-  constant: 6.5,
-  withStreaming: false,
+export interface KafkaQuery extends DataQuery {
+  topicName: string;
+  partition: number;
+  withStreaming?: boolean;
 };
 
-/**
- * These are options configured for each DataSource instance.
- */
-export interface MyDataSourceOptions extends DataSourceJsonData {
-  bootstrapServers: string;
-}
+export const defaultQuery: Partial<KafkaQuery> = {
+  partition: 0,
+  withStreaming: true,
+};
 
-/**
- * Value that is used in the backend, but never sent over HTTP to the frontend
- */
-export interface MySecureJsonData {
+export enum AutoOffsetReset {
+  EARLIEST = 'earliest',
+  LATEST = 'latest',
+  NONE = 'none',
+};
+
+export type AutoOffsetResetInterface = {
+  [key in AutoOffsetReset]: string;
+};
+
+export interface KafkaOptions extends DataSourceJsonData {
+  bootstrapServers: string;
+  autoOffsetReset: AutoOffsetReset;
+};
+
+export interface KafkaSecureJsonData {
   apiKey?: string;
-}
+};
