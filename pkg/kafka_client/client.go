@@ -1,4 +1,4 @@
-package kafka_helper
+package kafka_client
 
 import (
 	"encoding/json"
@@ -23,6 +23,7 @@ func NewKafkaClient(options Options) KafkaClient {
 	client := KafkaClient{BootstrapServers: options.BootstrapServers}
 	return client
 }
+
 func (client *KafkaClient) ConsumerInitialize() {
 	var err error
 	client.Consumer, err = kafka.NewConsumer(&kafka.ConfigMap{
@@ -46,7 +47,6 @@ func (client *KafkaClient) TopicAssign(topic string, partition int32, offset int
 	}
 	partitions := []kafka.TopicPartition{topic_partition}
 	err = client.Consumer.Assign(partitions)
-
 	if err != nil {
 		panic(err)
 	}
@@ -59,7 +59,6 @@ func (client *KafkaClient) ConsumerPull() (KafkaMessage, kafka.Event) {
 	if ev == nil {
 		return message, ev
 	}
-
 	switch e := ev.(type) {
 	case *kafka.Message:
 		json.Unmarshal([]byte(e.Value), &message)

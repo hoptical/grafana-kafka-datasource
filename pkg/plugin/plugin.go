@@ -14,7 +14,7 @@ import (
 	"github.com/grafana/grafana-plugin-sdk-go/data"
 	"github.com/grafana/grafana-plugin-sdk-go/live"
 
-	"github.com/grafana/grafana-starter-datasource-backend/pkg/kafka_helper"
+	"github.com/grafana/grafana-starter-datasource-backend/pkg/kafka_client"
 )
 
 // Make sure KafkaDatasource implements required interfaces. This is important to do
@@ -33,25 +33,23 @@ var (
 	_ instancemgmt.InstanceDisposer = (*KafkaDatasource)(nil)
 )
 
-// NewKafkaDatasource creates a new datasource instance.
-func NewKafkaDatasource(s backend.DataSourceInstanceSettings) (instancemgmt.Instance, error) {
+// NewKafkaInstance creates a new datasource instance.
+func NewKafkaInstance(s backend.DataSourceInstanceSettings) (instancemgmt.Instance, error) {
 	settings, err := getDatasourceSettings(s)
 	if err != nil {
 		return nil, err
 	}
 
-	kafka_client := kafka_helper.NewKafkaClient(*settings)
+	kafka_client := kafka_client.NewKafkaClient(*settings)
 
 	return &KafkaDatasource{kafka_client}, nil
 }
 
-func getDatasourceSettings(s backend.DataSourceInstanceSettings) (*kafka_helper.Options, error) {
-	settings := &kafka_helper.Options{}
-
+func getDatasourceSettings(s backend.DataSourceInstanceSettings) (*kafka_client.Options, error) {
+	settings := &kafka_client.Options{}
 	if err := json.Unmarshal(s.JSONData, settings); err != nil {
 		return nil, err
 	}
-
 	return settings, nil
 }
 
@@ -59,12 +57,12 @@ func getDatasourceSettings(s backend.DataSourceInstanceSettings) (*kafka_helper.
 // its health and has streaming skills.
 
 type KafkaDatasource struct {
-	client kafka_helper.KafkaClient
+	client kafka_client.KafkaClient
 }
 
 // Dispose here tells plugin SDK that plugin wants to clean up resources when a new instance
 // created. As soon as datasource settings change detected by SDK old datasource instance will
-// be disposed and a new one will be created using NewKafkaDatasource factory function.
+// be disposed and a new one will be created using NewKafkaInstance factory function.
 func (d *KafkaDatasource) Dispose() {
 	// Clean up datasource instance resources.
 }
@@ -92,9 +90,9 @@ func (d *KafkaDatasource) QueryData(ctx context.Context, req *backend.QueryDataR
 }
 
 type queryModel struct {
-	WithStreaming bool   `json:"withStreaming"`
 	Topic         string `json:"topicName"`
 	Partition     int32  `json:"partition"`
+	WithStreaming bool   `json:"withStreaming"`
 }
 
 func (d *KafkaDatasource) query(_ context.Context, pCtx backend.PluginContext, query backend.DataQuery) backend.DataResponse {
