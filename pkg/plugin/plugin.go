@@ -193,7 +193,7 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 		case <-ctx.Done():
 			log.DefaultLogger.Info("Context done, finish streaming", "path", req.Path)
 			return nil
-		case <-time.After(time.Second):
+		default:
 			//log.DefaultLogger.Warn(fmt.Sprintf("Assignment; %v", a))
 			msg_data, event := d.client.ConsumerPull()
 			if event == nil {
