@@ -3,6 +3,9 @@ package plugin
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
@@ -89,7 +92,9 @@ func (d *KafkaDatasource) QueryData(ctx context.Context, req *backend.QueryDataR
 }
 
 type queryModel struct {
-	WithStreaming bool `json:"withStreaming"`
+	WithStreaming bool   `json:"withStreaming"`
+	Topic         string `json:"topicName"`
+	Partition     int32  `json:"partition"`
 }
 
 func (d *KafkaDatasource) query(_ context.Context, pCtx backend.PluginContext, query backend.DataQuery) backend.DataResponse {
@@ -115,11 +120,13 @@ func (d *KafkaDatasource) query(_ context.Context, pCtx backend.PluginContext, q
 	// If query called with streaming on then return a channel
 	// to subscribe on a client-side and consume updates from a plugin.
 	// Feel free to remove this if you don't need streaming for your datasource.
+	topic := qm.Topic
+	partition := qm.Partition
 	if qm.WithStreaming {
 		channel := live.Channel{
 			Scope:     live.ScopeDatasource,
 			Namespace: pCtx.DataSourceInstanceSettings.UID,
-			Path:      "stream",
+			Path:      topic + "_" + fmt.Sprintf("%d", partition),
 		}
 		frame.SetMeta(&data.FrameMeta{Channel: channel.String()})
 	}
@@ -156,10 +163,10 @@ func (d *KafkaDatasource) SubscribeStream(_ context.Context, req *backend.Subscr
 	log.DefaultLogger.Info("SubscribeStream called", "request", req)
 	// initialize kafka broker
 	status := backend.SubscribeStreamStatusPermissionDenied
-	if req.Path == "stream" {
-		// Allow subscribing only on expected path.
-		status = backend.SubscribeStreamStatusOK
-	}
+	//if req.Path == "stream" {
+	// Allow subscribing only on expected path.
+	status = backend.SubscribeStreamStatusOK
+	//}
 	return &backend.SubscribeStreamResponse{
 		Status: status,
 	}, nil
@@ -169,10 +176,14 @@ func (d *KafkaDatasource) SubscribeStream(_ context.Context, req *backend.Subscr
 // subscribed to the same channel.
 func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamRequest, sender *backend.StreamSender) error {
 	log.DefaultLogger.Info("RunStream called", "request", req)
-
+	// Unmarshal the JSON into our queryModel.
+	var path []string = strings.Split(req.Path, "_")
+	topic := path[0]
+	partition, _ := strconv.Atoi(path[1])
 	d.client.ConsumerInitialize()
 	// offset=-1 means latest offset
-	d.client.TopicAssign("mytopic", 0, -1)
+	log.DefaultLogger.Info("####################\n", topic, partition)
+	d.client.TopicAssign(topic, int32(partition), -1)
 	log.DefaultLogger.Info("Consumer Subscribed!")
 	// Create the same data frame as for query data.
 
