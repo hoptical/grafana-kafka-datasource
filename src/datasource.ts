@@ -1,9 +1,9 @@
 import { DataSourceInstanceSettings } from '@grafana/data';
 import { DataSourceWithBackend } from '@grafana/runtime';
-import { MyDataSourceOptions, MyQuery } from './types';
+import { KafkaDataSourceOptions, KafkaQuery } from './types';
 
-export class DataSource extends DataSourceWithBackend<MyQuery, MyDataSourceOptions> {
-  constructor(instanceSettings: DataSourceInstanceSettings<MyDataSourceOptions>) {
+export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourceOptions> {
+  constructor(instanceSettings: DataSourceInstanceSettings<KafkaDataSourceOptions>) {
     super(instanceSettings);
   }
 }

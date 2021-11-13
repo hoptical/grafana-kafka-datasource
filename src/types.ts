@@ -1,26 +1,20 @@
 import { DataQuery, DataSourceJsonData } from '@grafana/data';
 
-export interface MyQuery extends DataQuery {
+export interface KafkaQuery extends DataQuery {
   topicName: string;
   partition: number;
   withStreaming: boolean;
 }
 
-export const defaultQuery: Partial<MyQuery> = {
+export const defaultQuery: Partial<KafkaQuery> = {
   partition: 0,
   withStreaming: false,
 };
 
-/**
- * These are options configured for each DataSource instance.
- */
-export interface MyDataSourceOptions extends DataSourceJsonData {
+export interface KafkaDataSourceOptions extends DataSourceJsonData {
   bootstrapServers: string;
 }
 
-/**
- * Value that is used in the backend, but never sent over HTTP to the frontend
- */
-export interface MySecureJsonData {
+export interface KafkaSecureJsonData {
   apiKey?: string;
 }
