@@ -8,7 +8,6 @@ import (
 	"github.com/grafana/grafana-starter-datasource-backend/pkg/plugin"
 )
 
-// This is where the tests for the datasource backend live.
 func TestQueryData(t *testing.T) {
 	ds := plugin.KafkaDatasource{}
 
@@ -20,6 +19,7 @@ func TestQueryData(t *testing.T) {
 			},
 		},
 	)
+	
 	if err != nil {
 		t.Error(err)
 	}

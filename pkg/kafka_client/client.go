@@ -1,4 +1,4 @@
-package kafka_helper
+package kafka_client
 
 import (
 	"encoding/json"
@@ -23,6 +23,7 @@ func NewKafkaClient(options Options) KafkaClient {
 	client := KafkaClient{BootstrapServers: options.BootstrapServers}
 	return client
 }
+
 func (client *KafkaClient) ConsumerInitialize() {
 	var err error
 	client.Consumer, err = kafka.NewConsumer(&kafka.ConfigMap{
@@ -30,6 +31,7 @@ func (client *KafkaClient) ConsumerInitialize() {
 		"group.id":           "kafka-datasource",
 		"enable.auto.commit": "false",
 	})
+
 	if err != nil {
 		panic(err)
 	}
@@ -50,12 +52,14 @@ func (client *KafkaClient) TopicAssign(topic string, partition int32, offset int
 	if err != nil {
 		panic(err)
 	}
+
 	fmt.Printf("Topic Assigned!\n")
 }
 
 func (client *KafkaClient) ConsumerPull() (KafkaMessage, kafka.Event) {
 	var message KafkaMessage
 	ev := client.Consumer.Poll(100)
+
 	if ev == nil {
 		return message, ev
 	}
@@ -64,28 +68,27 @@ func (client *KafkaClient) ConsumerPull() (KafkaMessage, kafka.Event) {
 	case *kafka.Message:
 		json.Unmarshal([]byte(e.Value), &message)
 	case kafka.Error:
-		// Errors should generally be considered
-		// informational, the client will try to
-		// automatically recover.
-		// But in this example we choose to terminate
-		// the application if all brokers are down.
 		fmt.Fprintf(os.Stderr, "%% Error: %v: %v\n", e.Code(), e)
 		if e.Code() == kafka.ErrAllBrokersDown {
 			panic(e)
 		}
 	default:
 	}
+
 	return message, ev
 }
 
 func (client KafkaClient) HealthCheck() error {
 	client.ConsumerInitialize()
+
 	topic := ""
 	_, err := client.Consumer.GetMetadata(&topic, false, 200)
+
 	if err != nil {
 		if err.(kafka.Error).Code() == kafka.ErrTransport {
 			return err
 		}
 	}
+
 	return nil
 }
