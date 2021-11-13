@@ -1,16 +1,71 @@
-# Grafana Data Source Backend Plugin Template
+# Kafka Datasource for Grafana
 
-[![Build](https://github.com/grafana/grafana-starter-datasource-backend/workflows/CI/badge.svg)](https://github.com/grafana/grafana-datasource-backend/actions?query=workflow%3A%22CI%22)
+The Kafka data source plugin allows you to visualize streaming Kafka data from within Grafana.
 
-This template is a starting point for building Grafana Data Source Backend Plugins
+## Reqirements
 
-## What is Grafana Data Source Backend Plugin?
+- Apache Kafka v0.9+
+- Grafana v8.0+
 
-Grafana supports a wide range of data sources, including Prometheus, MySQL, and even Datadog. There’s a good chance you can already visualize metrics from the systems you have set up. In some cases, though, you already have an in-house metrics solution that you’d like to add to your Grafana dashboards. Grafana Data Source Plugins enables integrating such solutions with Grafana.
+> Note: This is a backend plugin, so the Grafana server should've access to the Kafka broker.
 
-For more information about backend plugins, refer to the documentation on [Backend plugins](https://grafana.com/docs/grafana/latest/developers/plugins/backend/).
+## Known limitations
+
+- The plugin currently does not support any authorization and authentication method.
+- The plugin currently does not support TLS.
+- Timestamps are determined concerning the current time of consuming messages by the plugin.
+
+This plugin automatically supports topics publishing very simple JSON formatted messages. Note that only the following structure is supported as of now:
+
+```json
+{
+    "value1": 1.0,
+    "value2": 2,
+    "value3": 3.33,
+    ...
+}
+```
+
+We plan to support more complex JSON data structures and Protobuf and AVRO in the upcoming releases. Contributions are highly encouraged!
 
 ## Getting started
+
+1. Download and place the data source release in grafana/plugins directory. This plugin is not signed yet, so Grafana will not allow loading it by default. You should enable it by adding `GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS` environment variable. For example, if you are using Grafana with containers, add:
+
+   ```yaml
+   -e "GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS=hamedkarbasi93-kafka-datasource"
+   ```
+
+2. In Grafana from the left-hand menu, navigate to **Configuration** > **Data sources**.
+3. From the top-right corner, click the **Add data source** button.
+4. Search for `Kafka` in the search field, and hover over the Kafka search result.
+5. Click the **Select** button for Kafka.
+
+## Configure the data source
+
+[Add a data source](https://grafana.com/docs/grafana/latest/datasources/add-a-data-source/) by filling in the following fields:
+
+### Basic fields
+
+| Field | Description                                        |
+| ----- | -------------------------------------------------- |
+| Name  | A name for this particular AppDynamics data source |
+| Servers  | The URL of the Kafka bootstrap servers separated by comma. E.g. `broker1:9092, broker2:9092`              |
+
+### Query the Data source
+
+To query the Kafka topic, you have to config the below items in the query editor.
+
+| Field | Description                                        |
+| ----- | -------------------------------------------------- |
+| Topic  | Topic Name |
+| Partition  | Partition Number |
+
+> **Note**: Make sure to enable the `streaming` toggle.
+
+![kafka dashboard](./src/img/graph.gif)
+
+## Compiling the data source by yourself
 
 A data source backend plugin consists of both frontend and backend components.
 
@@ -49,22 +104,22 @@ A data source backend plugin consists of both frontend and backend components.
    go mod tidy
    ```
 
-2. Build backend plugin binaries for Linux, Windows and Darwin:
+2. Build backend plugin binaries for Linux:
 
    ```bash
-   mage -v
+   go build -o dist/gpx_kafka-datasource_linux_amd64 ./pkg
    ```
 
-3. List all available Mage targets for additional commands:
+## Contributing
 
-   ```bash
-   mage -l
-   ```
+Thank you for considering contributing! If you find an issue or have a better way to do something, feel free to open an issue or a PR.
+
+## License
+
+This repository is open-sourced software licensed under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0).
 
 ## Learn more
 
 - [Build a data source backend plugin tutorial](https://grafana.com/tutorials/build-a-data-source-backend-plugin)
-- [Grafana documentation](https://grafana.com/docs/)
-- [Grafana Tutorials](https://grafana.com/tutorials/) - Grafana Tutorials are step-by-step guides that help you make the most of Grafana
-- [Grafana UI Library](https://developers.grafana.com/ui) - UI components to help you build interfaces using Grafana Design System
+
 - [Grafana plugin SDK for Go](https://grafana.com/docs/grafana/latest/developers/plugins/backend/grafana-plugin-sdk-for-go/)
