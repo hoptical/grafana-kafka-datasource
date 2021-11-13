@@ -11,46 +11,50 @@ const { FormField, Switch } = LegacyForms;
 type Props = QueryEditorProps<DataSource, MyQuery, MyDataSourceOptions>;
 
 export class QueryEditor extends PureComponent<Props> {
-  onQueryTextChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const { onChange, query } = this.props;
-    onChange({ ...query, queryText: event.target.value });
+  onTopicNameChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const { onChange, query, onRunQuery } = this.props;
+    onChange({ ...query, topicName: event.target.value });
+    onRunQuery();
   };
 
-  onConstantChange = (event: ChangeEvent<HTMLInputElement>) => {
+  onPartitionChange = (event: ChangeEvent<HTMLInputElement>) => {
     const { onChange, query, onRunQuery } = this.props;
-    onChange({ ...query, constant: parseFloat(event.target.value) });
-    // executes the query
+    onChange({ ...query, partition: parseFloat(event.target.value) });
     onRunQuery();
   };
 
   onWithStreamingChange = (event: SyntheticEvent<HTMLInputElement>) => {
     const { onChange, query, onRunQuery } = this.props;
     onChange({ ...query, withStreaming: event.currentTarget.checked });
-    // executes the query
     onRunQuery();
   };
 
   render() {
     const query = defaults(this.props.query, defaultQuery);
-    const { queryText, constant, withStreaming } = query;
+    const { topicName, partition, withStreaming } = query;
 
     return (
       <div className="gf-form">
         <FormField
-          width={4}
-          value={constant}
-          onChange={this.onConstantChange}
-          label="Constant"
-          type="number"
-          step="0.1"
+          labelWidth={7}
+          width={8}
+          value={topicName || ''}
+          onChange={this.onTopicNameChange}
+          label="Topic Name"
+          type="text"
         />
+
         <FormField
-          labelWidth={8}
-          value={queryText || ''}
-          onChange={this.onQueryTextChange}
-          label="Query Text"
-          tooltip="Not used yet"
+          labelWidth={5}
+          width={4}
+          value={partition}
+          onChange={this.onPartitionChange}
+          label="partition"
+          type="number"
+          step="1"
+          min="0"
         />
+
         <Switch checked={withStreaming || false} label="Enable streaming (v8+)" onChange={this.onWithStreamingChange} />
       </div>
     );
