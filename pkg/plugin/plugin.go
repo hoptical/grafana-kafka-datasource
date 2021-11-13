@@ -178,10 +178,10 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 	var path []string = strings.Split(req.Path, "_")
 	topic := path[0]
 	partition, _ := strconv.Atoi(path[1])
+	var offset int64 = -1 // means latest offset
 	d.client.ConsumerInitialize()
-	// offset=-1 means latest offset
 	log.DefaultLogger.Info("####################\n", topic, partition)
-	d.client.TopicAssign(topic, int32(partition), -1)
+	d.client.TopicAssign(topic, int32(partition), offset)
 	log.DefaultLogger.Info("Consumer Subscribed!")
 	// Create the same data frame as for query data.
 
