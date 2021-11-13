@@ -10,7 +10,6 @@ interface Props extends DataSourcePluginOptionsEditorProps<KafkaDataSourceOption
 interface State {}
 
 export class ConfigEditor extends PureComponent<Props, State> {
-
   onAPIKeyChange = (event: ChangeEvent<HTMLInputElement>) => {
     const { onOptionsChange, options } = this.props;
     onOptionsChange({
