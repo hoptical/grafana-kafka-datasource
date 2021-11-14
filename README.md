@@ -13,6 +13,7 @@ The Kafka data source plugin allows you to visualize streaming Kafka data from w
 
 - The plugin currently does not support any authorization and authentication method.
 - The plugin currently does not support TLS.
+- Messages are always consuming from the latest.
 - Timestamps are determined concerning the current time of consuming messages by the plugin.
 
 This plugin automatically supports topics publishing very simple JSON formatted messages. Note that only the following structure is supported as of now:
@@ -26,7 +27,7 @@ This plugin automatically supports topics publishing very simple JSON formatted 
 }
 ```
 
-We plan to support more complex JSON data structures and Protobuf and AVRO in the upcoming releases. Contributions are highly encouraged!
+We plan to support more complex JSON data structures, Protobuf and AVRO in the upcoming releases. Contributions are highly encouraged!
 
 ## Getting started
 
