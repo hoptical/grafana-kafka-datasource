@@ -1,7 +1,7 @@
 {
-  "name": "exaco-kafka-datasource",
-  "version": "1.0.0",
-  "description": "A backend datasource plugin for Apache Kafka",
+  "name": "hamedkarbasi93-kafka-datasource",
+  "version": "0.1.0",
+  "description": "Kafka Datasource Plugin",
   "scripts": {
     "build": "grafana-toolkit plugin:build",
     "test": "grafana-toolkit plugin:test",
@@ -10,7 +10,7 @@
     "sign": "grafana-toolkit plugin:sign",
     "start": "yarn watch"
   },
-  "author": "hoptical",
+  "author": "Hoptical",
   "license": "Apache-2.0",
   "devDependencies": {
     "@grafana/data": "latest",
