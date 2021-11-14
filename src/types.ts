@@ -8,7 +8,7 @@ export interface KafkaQuery extends DataQuery {
 
 export const defaultQuery: Partial<KafkaQuery> = {
   partition: 0,
-  withStreaming: false,
+  withStreaming: true,
 };
 
 export interface KafkaDataSourceOptions extends DataSourceJsonData {
