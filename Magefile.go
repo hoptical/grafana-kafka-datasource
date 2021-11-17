@@ -1,4 +1,5 @@
-//+build mage
+//go:build mage
+// +build mage
 
 package main
 
@@ -15,3 +16,8 @@ func Hello() {
 
 // Default configures the default target.
 var Default = build.BuildAll
+
+var _ = build.SetBeforeBuildCallback(func(cfg build.Config) (build.Config, error) {
+	cfg.EnableCGo = true
+	return cfg, nil
+})

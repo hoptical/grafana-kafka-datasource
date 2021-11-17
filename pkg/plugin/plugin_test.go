@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/exaco/grafana-kafka-datasource/pkg/plugin"
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
-	"github.com/grafana/grafana-starter-datasource-backend/pkg/plugin"
 )
 
 func TestQueryData(t *testing.T) {
@@ -19,7 +19,7 @@ func TestQueryData(t *testing.T) {
 			},
 		},
 	)
-	
+
 	if err != nil {
 		t.Error(err)
 	}
