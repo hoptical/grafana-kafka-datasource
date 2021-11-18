@@ -52,6 +52,7 @@ type KafkaDatasource struct {
 
 func (d *KafkaDatasource) Dispose() {
 	// Clean up datasource instance resources.
+	d.client.Dispose()
 }
 
 func (d *KafkaDatasource) QueryData(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
@@ -69,9 +70,11 @@ func (d *KafkaDatasource) QueryData(ctx context.Context, req *backend.QueryDataR
 }
 
 type queryModel struct {
-	Topic         string `json:"topicName"`
-	Partition     int32  `json:"partition"`
-	WithStreaming bool   `json:"withStreaming"`
+	Topic           string `json:"topicName"`
+	Partition       int32  `json:"partition"`
+	WithStreaming   bool   `json:"withStreaming"`
+	AutoOffsetReset string `json:"autoOffsetReset"`
+	TimestampMode   string `json:"timestampMode"`
 }
 
 func (d *KafkaDatasource) query(_ context.Context, pCtx backend.PluginContext, query backend.DataQuery) backend.DataResponse {
@@ -92,12 +95,13 @@ func (d *KafkaDatasource) query(_ context.Context, pCtx backend.PluginContext, q
 
 	topic := qm.Topic
 	partition := qm.Partition
-
+	autoOffsetReset := qm.AutoOffsetReset
+	timestampMode := qm.TimestampMode
 	if qm.WithStreaming {
 		channel := live.Channel{
 			Scope:     live.ScopeDatasource,
 			Namespace: pCtx.DataSourceInstanceSettings.UID,
-			Path:      topic + "_" + fmt.Sprintf("%d", partition),
+			Path:      fmt.Sprintf("%v_%d_%v_%v", topic, partition, autoOffsetReset, timestampMode),
 		}
 		frame.SetMeta(&data.FrameMeta{Channel: channel.String()})
 	}
@@ -128,7 +132,14 @@ func (d *KafkaDatasource) CheckHealth(_ context.Context, req *backend.CheckHealt
 
 func (d *KafkaDatasource) SubscribeStream(_ context.Context, req *backend.SubscribeStreamRequest) (*backend.SubscribeStreamResponse, error) {
 	log.DefaultLogger.Info("SubscribeStream called", "request", req)
-
+	// Extract the query parameters
+	var path []string = strings.Split(req.Path, "_")
+	topic := path[0]
+	partition, _ := strconv.Atoi(path[1])
+	autoOffsetReset := path[2]
+	timestampMode := path[3]
+	// Initialize Consumer and Assign the topic
+	d.client.TopicAssign(topic, int32(partition), autoOffsetReset, timestampMode)
 	status := backend.SubscribeStreamStatusPermissionDenied
 	status = backend.SubscribeStreamStatusOK
 
@@ -140,38 +151,33 @@ func (d *KafkaDatasource) SubscribeStream(_ context.Context, req *backend.Subscr
 func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamRequest, sender *backend.StreamSender) error {
 	log.DefaultLogger.Info("RunStream called", "request", req)
 
-	var path []string = strings.Split(req.Path, "_")
-	topic := path[0]
-	partition, _ := strconv.Atoi(path[1])
-	var offset int64 = -1 // means latest offset
-
-	d.client.ConsumerInitialize()
-	log.DefaultLogger.Info("####################\n", topic, partition)
-	d.client.TopicAssign(topic, int32(partition), offset)
-	log.DefaultLogger.Info("Consumer Subscribed!")
-
 	for {
 		select {
 		case <-ctx.Done():
 			log.DefaultLogger.Info("Context done, finish streaming", "path", req.Path)
 			return nil
 		default:
-			msg_data, event := d.client.ConsumerPull()
-
+			msg, event := d.client.ConsumerPull()
 			if event == nil {
 				continue
 			}
-
 			frame := data.NewFrame("response")
 			frame.Fields = append(frame.Fields,
 				data.NewField("time", nil, make([]time.Time, 1)),
 			)
-
-			frame.Fields[0].Set(0, time.Now())
+			var frame_time time.Time
+			if d.client.TimestampMode == "now" {
+				frame_time = time.Now()
+			} else {
+				frame_time = msg.Timestamp
+			}
+			log.DefaultLogger.Info("Offset", msg.Offset)
+			log.DefaultLogger.Info("timestamp", frame_time)
+			frame.Fields[0].Set(0, frame_time)
 
 			cnt := 1
 
-			for key, value := range msg_data {
+			for key, value := range msg.Value {
 				frame.Fields = append(frame.Fields,
 					data.NewField(key, nil, make([]float64, 1)))
 				frame.Fields[cnt].Set(0, value)
