@@ -74,6 +74,7 @@ type queryModel struct {
 	Partition       int32  `json:"partition"`
 	WithStreaming   bool   `json:"withStreaming"`
 	AutoOffsetReset string `json:"autoOffsetReset"`
+	TimestampMode   string `json:"timestampMode"`
 }
 
 func (d *KafkaDatasource) query(_ context.Context, pCtx backend.PluginContext, query backend.DataQuery) backend.DataResponse {
@@ -95,11 +96,12 @@ func (d *KafkaDatasource) query(_ context.Context, pCtx backend.PluginContext, q
 	topic := qm.Topic
 	partition := qm.Partition
 	autoOffsetReset := qm.AutoOffsetReset
+	timestampMode := qm.TimestampMode
 	if qm.WithStreaming {
 		channel := live.Channel{
 			Scope:     live.ScopeDatasource,
 			Namespace: pCtx.DataSourceInstanceSettings.UID,
-			Path:      topic + "_" + fmt.Sprintf("%d", partition) + "_" + autoOffsetReset,
+			Path:      fmt.Sprintf("%v_%d_%v_%v", topic, partition, autoOffsetReset, timestampMode),
 		}
 		frame.SetMeta(&data.FrameMeta{Channel: channel.String()})
 	}
@@ -130,16 +132,14 @@ func (d *KafkaDatasource) CheckHealth(_ context.Context, req *backend.CheckHealt
 
 func (d *KafkaDatasource) SubscribeStream(_ context.Context, req *backend.SubscribeStreamRequest) (*backend.SubscribeStreamResponse, error) {
 	log.DefaultLogger.Info("SubscribeStream called", "request", req)
-
 	// Extract the query parameters
 	var path []string = strings.Split(req.Path, "_")
 	topic := path[0]
 	partition, _ := strconv.Atoi(path[1])
 	autoOffsetReset := path[2]
+	timestampMode := path[3]
 	// Initialize Consumer and Assign the topic
-	d.client.ConsumerInitialize()
-	d.client.TopicAssign(topic, int32(partition), autoOffsetReset)
-
+	d.client.TopicAssign(topic, int32(partition), autoOffsetReset, timestampMode)
 	status := backend.SubscribeStreamStatusPermissionDenied
 	status = backend.SubscribeStreamStatusOK
 
@@ -165,8 +165,14 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 			frame.Fields = append(frame.Fields,
 				data.NewField("time", nil, make([]time.Time, 1)),
 			)
-
-			frame_time := time.Now()
+			var frame_time time.Time
+			if d.client.TimestampMode == "now" {
+				frame_time = time.Now()
+			} else {
+				frame_time = msg.Timestamp
+			}
+			log.DefaultLogger.Info("Offset", msg.Offset)
+			log.DefaultLogger.Info("timestamp", frame_time)
 			frame.Fields[0].Set(0, frame_time)
 
 			cnt := 1

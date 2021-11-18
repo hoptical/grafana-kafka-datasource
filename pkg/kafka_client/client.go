@@ -18,6 +18,7 @@ type Options struct {
 type KafkaClient struct {
 	Consumer         *kafka.Consumer
 	BootstrapServers string
+	TimestampMode    string
 }
 
 type KafkaMessage struct {
@@ -31,7 +32,7 @@ func NewKafkaClient(options Options) KafkaClient {
 	return client
 }
 
-func (client *KafkaClient) ConsumerInitialize() {
+func (client *KafkaClient) consumerInitialize() {
 	var err error
 	client.Consumer, err = kafka.NewConsumer(&kafka.ConfigMap{
 		"bootstrap.servers":  client.BootstrapServers,
@@ -44,7 +45,10 @@ func (client *KafkaClient) ConsumerInitialize() {
 	}
 }
 
-func (client *KafkaClient) TopicAssign(topic string, partition int32, autoOffsetReset string) {
+func (client *KafkaClient) TopicAssign(topic string, partition int32, autoOffsetReset string,
+	timestampMode string) {
+	client.consumerInitialize()
+	client.TimestampMode = timestampMode
 	var err error
 	var offset int64
 	var high, low int64
@@ -104,7 +108,7 @@ func (client *KafkaClient) ConsumerPull() (KafkaMessage, kafka.Event) {
 }
 
 func (client KafkaClient) HealthCheck() error {
-	client.ConsumerInitialize()
+	client.consumerInitialize()
 
 	topic := ""
 	_, err := client.Consumer.GetMetadata(&topic, false, 200)
