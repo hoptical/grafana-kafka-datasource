@@ -3,7 +3,7 @@ import React, { ChangeEvent, PureComponent, SyntheticEvent } from 'react';
 import { LegacyForms, InlineFormLabel } from '@grafana/ui';
 import { QueryEditorProps, SelectableValue } from '@grafana/data';
 import { DataSource } from './datasource';
-import { defaultQuery, KafkaDataSourceOptions, KafkaQuery, AutoOffsetReset } from './types';
+import { defaultQuery, KafkaDataSourceOptions, KafkaQuery, AutoOffsetReset, TimestampMode } from './types';
 
 const { FormField, Switch, Select } = LegacyForms;
 
@@ -19,6 +19,19 @@ const autoResetOffsets = [
     description: 'Consume from the latest offset',
   },
 ] as Array<SelectableValue<AutoOffsetReset>>;
+
+const timestampModes = [
+  {
+    label: 'Now',
+    value: TimestampMode.Now,
+    description: 'Current time while consuming the message',
+  },
+  {
+    label: 'Message Timestamp',
+    value: TimestampMode.Message,
+    description: 'The message timestamp while producing into topic',
+  },
+] as Array<SelectableValue<TimestampMode>>;
 
 type Props = QueryEditorProps<DataSource, KafkaQuery, KafkaDataSourceOptions>;
 
@@ -53,9 +66,23 @@ export class QueryEditor extends PureComponent<Props> {
     }
     return autoResetOffsets[0];
   };
+
+  onTimestampModeChanged = (selected: SelectableValue<TimestampMode>) => {
+    const { onChange, query, onRunQuery } = this.props;
+    onChange({ ...query, timestampMode: selected.value || TimestampMode.Now });
+    onRunQuery();
+  };
+
+  resolveTimestampMode = (value: string | undefined) => {
+    if (value === TimestampMode.Now) {
+      return timestampModes[0];
+    }
+    return timestampModes[1];
+  };
+
   render() {
     const query = defaults(this.props.query, defaultQuery);
-    const { topicName, partition, withStreaming, autoOffsetReset } = query;
+    const { topicName, partition, withStreaming, autoOffsetReset, timestampMode } = query;
 
     return (
       <div className="gf-form">
@@ -92,6 +119,18 @@ export class QueryEditor extends PureComponent<Props> {
             options={autoResetOffsets}
             defaultValue={autoResetOffsets[0]}
             onChange={this.onAutoResetOffsetChanged}
+          />
+        </div>
+        <div className="gf-form">
+          <InlineFormLabel className="width-5" tooltip="Timestamp of the kafka value to visualize.">
+            Timestamp Mode
+          </InlineFormLabel>
+          <Select
+            className="width-10"
+            value={this.resolveTimestampMode(timestampMode)}
+            options={timestampModes}
+            defaultValue={timestampModes[0]}
+            onChange={this.onTimestampModeChanged}
           />
         </div>
         <Switch checked={withStreaming || false} label="Enable streaming (v8+)" onChange={this.onWithStreamingChange} />
