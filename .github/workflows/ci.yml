@@ -3,10 +3,10 @@ name: CI
 on:
   push:
     branches:
-      - master
+      - main
   pull_request:
     branches:
-      - master
+      - main
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -58,7 +58,7 @@ jobs:
         if: steps.check-for-backend.outputs.has-backend == 'true'
         uses: actions/setup-go@v2
         with:
-          go-version: "1.16"
+          go-version: "1.18"
 
       - name: Test backend
         if: steps.check-for-backend.outputs.has-backend == 'true'
@@ -72,4 +72,4 @@ jobs:
         uses: magefile/mage-action@v1
         with:
           version: latest
-          args: buildAll
+          args: build:backend
