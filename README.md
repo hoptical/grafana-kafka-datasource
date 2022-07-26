@@ -1,4 +1,7 @@
 # Kafka Datasource for Grafana
+[![License](https://img.shields.io/github/license/hoptical/grafana-kafka-datasource)](LICENSE)
+[![CI](https://github.com/hoptical/grafana-kafka-datasource/actions/workflows/ci.yml/badge.svg)](https://github.com/hoptical/grafana-kafka-datasource/actions/workflows/ci.yml)
+[![Release](https://github.com/hoptical/grafana-kafka-datasource/actions/workflows/release.yml/badge.svg)](https://github.com/hoptical/grafana-kafka-datasource/actions/workflows/release.yml)
 
 The Kafka data source plugin allows you to visualize streaming Kafka data from within Grafana.
 
@@ -9,38 +12,21 @@ The Kafka data source plugin allows you to visualize streaming Kafka data from w
 
 > Note: This is a backend plugin, so the Grafana server should've access to the Kafka broker.
 
-## Known limitations
-
-- The plugin currently does not support any authorization and authentication method.
-- The plugin currently does not support TLS.
-- Messages are always consuming from the latest.
-- Timestamps are determined concerning the current time of consuming messages by the plugin.
-
-This plugin automatically supports topics publishing very simple JSON formatted messages. Note that only the following structure is supported as of now:
-
-```json
-{
-    "value1": 1.0,
-    "value2": 2,
-    "value3": 3.33,
-    ...
-}
-```
-
-We plan to support more complex JSON data structures, Protobuf and AVRO in the upcoming releases. Contributions are highly encouraged!
-
 ## Getting started
 
-1. Download and place the data source release in grafana/plugins directory. This plugin is not signed yet, so Grafana will not allow loading it by default. You should enable it by adding `GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS` environment variable. For example, if you are using Grafana with containers, add:
+### Installation via grafana-cli tool
 
-   ```yaml
-   -e "GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS=hamedkarbasi93-kafka-datasource"
-   ```
+Use the grafana-cli tool to install the plugin from the commandline:
 
-2. In Grafana from the left-hand menu, navigate to **Configuration** > **Data sources**.
-3. From the top-right corner, click the **Add data source** button.
-4. Search for `Kafka` in the search field, and hover over the Kafka search result.
-5. Click the **Select** button for Kafka.
+```bash
+grafana-cli plugins install hamedkarbasi93-kafka-datasource
+```
+
+The plugin will be installed into your grafana plugins directory; the default is `/var/lib/grafana/plugins`. [More information on the cli tool](https://grafana.com/docs/grafana/latest/administration/cli/#plugins-commands).
+
+### Installation via zip file
+
+Alternatively, you can manually download the [latest](https://github.com/hoptical/grafana-kafka-datasource/releases/latest) release .zip file and unpack it into your grafana plugins directory; the default is `/var/lib/grafana/plugins`.
 
 ## Configure the data source
 
@@ -61,11 +47,30 @@ To query the Kafka topic, you have to config the below items in the query editor
 | ----- | -------------------------------------------------- |
 | Topic  | Topic Name |
 | Partition  | Partition Number |
-
+| Auto offset reset | Starting offset to consume that can be from latest or last 100. |
+| Timestamp Mode | Timestamp of the message value to visualize; It can be Now or Message Timestamp
 > **Note**: Make sure to enable the `streaming` toggle.
 
-![kafka dashboard](./src/img/graph.gif)
+![kafka dashboard](https://raw.githubusercontent.com/hoptical/grafana-kafka-datasource/86ea8d360bfd67cfed41004f80adc39219983210/src/img/graph.gif)
 
+## Known limitations
+
+- The plugin currently does not support any authorization and authentication method.
+- The plugin currently does not support TLS.
+- Plugin is based on [confluent-kafka-go](https://github.com/confluentinc/confluent-kafka-go), hence it only supports Linux-based operating systems as discussed in [#6](https://github.com/hoptical/grafana-kafka-datasource/issues/6). However, we're cosidering changing the base package to support all operating systems.
+
+This plugin supports topics publishing very simple JSON formatted messages. Note that only the following structure is supported as of now:
+
+```json
+{
+    "value1": 1.0,
+    "value2": 2,
+    "value3": 3.33,
+    ...
+}
+```
+
+We plan to support more complex JSON data structures, Protobuf and AVRO in the upcoming releases. Contributions are highly encouraged!
 ## Compiling the data source by yourself
 
 A data source backend plugin consists of both frontend and backend components.
@@ -108,7 +113,7 @@ A data source backend plugin consists of both frontend and backend components.
 2. Build backend plugin binaries for Linux:
 
    ```bash
-   go build -o dist/gpx_kafka-datasource_linux_amd64 ./pkg
+   mage build:backend
    ```
 
 ## Contributing

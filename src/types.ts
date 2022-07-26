@@ -3,12 +3,12 @@ import { DataQuery, DataSourceJsonData } from '@grafana/data';
 export enum AutoOffsetReset {
   EARLIEST = 'earliest',
   LATEST = 'latest',
-};
+}
 
 export enum TimestampMode {
   Now = 'now',
   Message = 'message',
-};
+}
 
 export type AutoOffsetResetInterface = {
   [key in AutoOffsetReset]: string;
@@ -20,11 +20,11 @@ export type TimestampModeInterface = {
 
 export interface KafkaDataSourceOptions extends DataSourceJsonData {
   bootstrapServers: string;
-};
+}
 
 export interface KafkaSecureJsonData {
   apiKey?: string;
-};
+}
 
 export interface KafkaQuery extends DataQuery {
   topicName: string;
@@ -32,7 +32,7 @@ export interface KafkaQuery extends DataQuery {
   withStreaming: boolean;
   autoOffsetReset: AutoOffsetReset;
   timestampMode: TimestampMode;
-};
+}
 
 export const defaultQuery: Partial<KafkaQuery> = {
   partition: 0,
