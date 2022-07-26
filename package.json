@@ -1,6 +1,6 @@
 {
   "name": "hamedkarbasi93-kafka-datasource",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Kafka Datasource Plugin",
   "scripts": {
     "build": "grafana-toolkit plugin:build",
@@ -10,7 +10,7 @@
     "sign": "grafana-toolkit plugin:sign",
     "start": "yarn watch"
   },
-  "author": "Hoptical",
+  "author": "Hamed Karbasi",
   "license": "Apache-2.0",
   "devDependencies": {
     "@grafana/data": "latest",

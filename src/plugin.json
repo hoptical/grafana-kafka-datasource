@@ -9,7 +9,7 @@
   "info": {
     "description": "Kafka Datasource Plugin",
     "author": {
-      "name": "Hoptical",
+      "name": "Hamed Karbasi",
       "url": "https://github.com/hoptical"
     },
     "keywords": [
@@ -25,15 +25,20 @@
     "links": [
       {
         "name": "Website",
-        "url": "https://github.com/exaco/kafka-datasource"
+        "url": "https://github.com/hoptical/grafana-kafka-datasource"
       },
       {
         "name": "License",
-        "url": "https://github.com/exaco/kafka-datasource/blob/main/LICENSE"
+        "url": "https://github.com/hoptical/grafana-kafka-datasource/blob/main/LICENSE"
       }
     ],
-    "screenshots": [],
-    "version": "%VERSION%",
+    "screenshots": [
+      {
+        "name": "Streaming Data",
+        "path": "img/graph.gif"
+      }
+    ],
+    "version": "0.2.0",
     "updated": "%TODAY%"
   },
   "dependencies": {

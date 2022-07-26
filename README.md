@@ -113,7 +113,7 @@ A data source backend plugin consists of both frontend and backend components.
 2. Build backend plugin binaries for Linux:
 
    ```bash
-   go build -o dist/gpx_kafka-datasource_linux_amd64 ./pkg
+   mage build:backend
    ```
 
 ## Contributing
