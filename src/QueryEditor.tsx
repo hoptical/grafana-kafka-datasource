@@ -1,10 +1,9 @@
 import { defaults } from 'lodash';
 import React, { ChangeEvent, PureComponent, SyntheticEvent } from 'react';
 import { InlineFormLabel, InlineFieldRow, Select, Switch } from '@grafana/ui';
-import { QueryEditorProps, SelectableValue, } from '@grafana/data';
+import { QueryEditorProps, SelectableValue } from '@grafana/data';
 import { DataSource } from './datasource';
 import { defaultQuery, KafkaDataSourceOptions, KafkaQuery, AutoOffsetReset, TimestampMode } from './types';
-
 
 const autoResetOffsets = [
   {
@@ -87,22 +86,14 @@ export class QueryEditor extends PureComponent<Props> {
       <>
         <div className="gf-form">
           <InlineFieldRow>
-            <InlineFormLabel
-              width={10}
-            >
-              Topic
-            </InlineFormLabel>
+            <InlineFormLabel width={10}>Topic</InlineFormLabel>
             <input
               className="gf-form-input width-14"
               value={topicName || ''}
               onChange={this.onTopicNameChange}
               type="text"
             />
-            <InlineFormLabel
-              width={10}
-            >
-              Partition
-            </InlineFormLabel>
+            <InlineFormLabel width={10}>Partition</InlineFormLabel>
             <input
               className="gf-form-input width-14"
               value={partition}
@@ -117,7 +108,6 @@ export class QueryEditor extends PureComponent<Props> {
             <div className="add-data-source-item-badge">
               <Switch css checked={withStreaming || false} onChange={this.onWithStreamingChange} />
             </div>
-
           </InlineFieldRow>
         </div>
         <div className="gf-form">
@@ -137,9 +127,7 @@ export class QueryEditor extends PureComponent<Props> {
                 onChange={this.onAutoResetOffsetChanged}
               />
             </div>
-            <InlineFormLabel tooltip="Timestamp of the kafka value to visualize.">
-              Timestamp Mode
-            </InlineFormLabel>
+            <InlineFormLabel tooltip="Timestamp of the kafka value to visualize.">Timestamp Mode</InlineFormLabel>
             <div className="gf-form--has-input-icon">
               <Select
                 className="width-14"
