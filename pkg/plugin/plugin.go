@@ -14,7 +14,7 @@ import (
 	"github.com/grafana/grafana-plugin-sdk-go/data"
 	"github.com/grafana/grafana-plugin-sdk-go/live"
 
-	"github.com/exaco/grafana-kafka-datasource/pkg/kafka_client"
+	"github.com/hoptical/grafana-kafka-datasource/pkg/kafka_client"
 )
 
 var (
