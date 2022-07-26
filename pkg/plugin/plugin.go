@@ -52,7 +52,6 @@ type KafkaDatasource struct {
 
 func (d *KafkaDatasource) Dispose() {
 	// Clean up datasource instance resources.
-	d.client.Dispose()
 }
 
 func (d *KafkaDatasource) QueryData(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
