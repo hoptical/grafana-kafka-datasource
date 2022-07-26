@@ -1,4 +1,4 @@
-module github.com/exaco/grafana-kafka-datasource
+module github.com/hoptical/grafana-kafka-datasource
 
 go 1.16
 

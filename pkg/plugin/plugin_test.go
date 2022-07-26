@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/exaco/grafana-kafka-datasource/pkg/plugin"
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
+	"github.com/hoptical/grafana-kafka-datasource/pkg/plugin"
 )
 
 func TestQueryData(t *testing.T) {
