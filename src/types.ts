@@ -20,10 +20,15 @@ export type TimestampModeInterface = {
 
 export interface KafkaDataSourceOptions extends DataSourceJsonData {
   bootstrapServers: string;
+  consumerGroupId: string;
+  securityProtocol: string;
+  saslMechanisms: string;
+  saslUsername: string;
+  debug: string;
 }
 
 export interface KafkaSecureJsonData {
-  apiKey?: string;
+  saslPassword?: string;
 }
 
 export interface KafkaQuery extends DataQuery {

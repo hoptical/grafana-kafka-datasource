@@ -43,6 +43,10 @@ func getDatasourceSettings(s backend.DataSourceInstanceSettings) (*kafka_client.
 		return nil, err
 	}
 
+	if sasl_password, exists := s.DecryptedSecureJSONData["saslPassword"]; exists {
+		settings.SaslPassword = sasl_password
+	}
+
 	return settings, nil
 }
 

@@ -10,36 +10,81 @@ interface Props extends DataSourcePluginOptionsEditorProps<KafkaDataSourceOption
 interface State {}
 
 export class ConfigEditor extends PureComponent<Props, State> {
-  onAPIKeyChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const { onOptionsChange, options } = this.props;
-    onOptionsChange({
-      ...options,
-      secureJsonData: {
-        apiKey: event.target.value,
-      },
-    });
-  };
-
-  onResetAPIKey = () => {
-    const { onOptionsChange, options } = this.props;
-    onOptionsChange({
-      ...options,
-      secureJsonFields: {
-        ...options.secureJsonFields,
-        apiKey: false,
-      },
-      secureJsonData: {
-        ...options.secureJsonData,
-        apiKey: '',
-      },
-    });
-  };
-
   onBootstrapServersChange = (event: ChangeEvent<HTMLInputElement>) => {
     const { onOptionsChange, options } = this.props;
     const jsonData = {
       ...options.jsonData,
       bootstrapServers: event.target.value,
+    };
+    onOptionsChange({ ...options, jsonData });
+  };
+
+  onConsumerGroupIdChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const { onOptionsChange, options } = this.props;
+    const jsonData = {
+      ...options.jsonData,
+      consumerGroupId: event.target.value,
+    };
+    onOptionsChange({ ...options, jsonData });
+  };
+
+  onSecurityProtocolChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const { onOptionsChange, options } = this.props;
+    const jsonData = {
+      ...options.jsonData,
+      securityProtocol: event.target.value,
+    };
+    onOptionsChange({ ...options, jsonData });
+  };
+
+  onSaslMechanismsChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const { onOptionsChange, options } = this.props;
+    const jsonData = {
+      ...options.jsonData,
+      saslMechanisms: event.target.value,
+    };
+    onOptionsChange({ ...options, jsonData });
+  };
+
+  onSaslUsernameChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const { onOptionsChange, options } = this.props;
+    const jsonData = {
+      ...options.jsonData,
+      saslUsername: event.target.value,
+    };
+    onOptionsChange({ ...options, jsonData });
+  };
+
+  onSaslPasswordChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const { onOptionsChange, options } = this.props;
+    onOptionsChange({
+      ...options,
+      secureJsonData: {
+        saslPassword: event.target.value,
+      },
+    });
+  };
+
+  onResetSaslPassword = () => {
+    const { onOptionsChange, options } = this.props;
+    onOptionsChange({
+      ...options,
+      secureJsonFields: {
+        ...options.secureJsonFields,
+        saslPassword: false,
+      },
+      secureJsonData: {
+        ...options.secureJsonData,
+        saslPassword: '',
+      },
+    });
+  };
+
+  onDebugChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const { onOptionsChange, options } = this.props;
+    const jsonData = {
+      ...options.jsonData,
+      debug: event.target.value,
     };
     onOptionsChange({ ...options, jsonData });
   };
@@ -54,25 +99,77 @@ export class ConfigEditor extends PureComponent<Props, State> {
         <div className="gf-form">
           <FormField
             label="Servers"
+            labelWidth={8}
             onChange={this.onBootstrapServersChange}
             value={jsonData.bootstrapServers || ''}
             placeholder="broker1:9092, broker2:9092"
+            inputWidth={30}
+          />
+        </div>
+
+        <div className="gf-form">
+          <FormField
+            label="Consumer Group Id"
+            labelWidth={8}
+            onChange={this.onConsumerGroupIdChange}
+            value={jsonData.consumerGroupId || 'kafka-datasource'}
+            placeholder="kafka-datasource"
+          />
+        </div>
+
+        <div className="gf-form">
+          <FormField
+            label="Security Protocol"
+            labelWidth={8}
+            onChange={this.onSecurityProtocolChange}
+            value={jsonData.securityProtocol || ''}
+            placeholder="<PLAINTEXT|SASL_SSL>"
+          />
+        </div>
+
+        <div className="gf-form">
+          <FormField
+            label="Sasl Mechanisms"
+            labelWidth={8}
+            onChange={this.onSaslMechanismsChange}
+            value={jsonData.saslMechanisms || ''}
+            placeholder="<PLAIN|SCRAM-SHA-512>"
+          />
+        </div>
+
+        <div className="gf-form">
+          <FormField
+            label="Sasl Username"
+            labelWidth={8}
+            onChange={this.onSaslUsernameChange}
+            value={jsonData.saslUsername || ''}
+            placeholder="<SASL Username>"
           />
         </div>
 
         <div className="gf-form-inline">
           <div className="gf-form">
             <SecretFormField
-              isConfigured={(secureJsonFields && secureJsonFields.apiKey) as boolean}
-              value={secureJsonData.apiKey || ''}
-              label="API Key"
-              placeholder="secure json field (backend only)"
-              labelWidth={6}
+              isConfigured={(secureJsonFields && secureJsonFields.saslPassword) as boolean}
+              value={secureJsonData.saslPassword || ''}
+              label="SASL Password"
+              placeholder="<SASL Password>"
+              labelWidth={8}
               inputWidth={20}
-              onReset={this.onResetAPIKey}
-              onChange={this.onAPIKeyChange}
+              onReset={this.onResetSaslPassword}
+              onChange={this.onSaslPasswordChange}
             />
           </div>
+        </div>
+
+        <div className="gf-form">
+          <FormField
+            label="Debug"
+            labelWidth={8}
+            onChange={this.onDebugChange}
+            value={jsonData.debug || ''}
+            placeholder="<librdkafka Debug Level>"
+          />
         </div>
       </div>
     );

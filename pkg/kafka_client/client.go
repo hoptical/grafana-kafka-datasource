@@ -13,12 +13,24 @@ const MAX_EARLIEST int64 = 100
 
 type Options struct {
 	BootstrapServers string `json:"bootstrapServers"`
+	ConsumerGroupId  string `json:"consumerGroupId"`
+	SecurityProtocol string `json:"securityProtocol"`
+	SaslMechanisms   string `json:"saslMechanisms"`
+	SaslUsername     string `json:"saslUsername"`
+	SaslPassword     string `json:"saslPassword"`
+	Debug            string `json:"debug"`
 }
 
 type KafkaClient struct {
 	Consumer         *kafka.Consumer
 	BootstrapServers string
+	ConsumerGroupId  string
 	TimestampMode    string
+	SecurityProtocol string
+	SaslMechanisms   string
+	SaslUsername     string
+	SaslPassword     string
+	Debug            string
 }
 
 type KafkaMessage struct {
@@ -28,17 +40,47 @@ type KafkaMessage struct {
 }
 
 func NewKafkaClient(options Options) KafkaClient {
-	client := KafkaClient{BootstrapServers: options.BootstrapServers}
+	client := KafkaClient{
+		BootstrapServers: options.BootstrapServers,
+		ConsumerGroupId:  options.ConsumerGroupId,
+		SecurityProtocol: options.SecurityProtocol,
+		SaslMechanisms:   options.SaslMechanisms,
+		SaslUsername:     options.SaslUsername,
+		SaslPassword:     options.SaslPassword,
+		Debug:            options.Debug,
+	}
 	return client
 }
 
 func (client *KafkaClient) consumerInitialize() {
 	var err error
-	client.Consumer, err = kafka.NewConsumer(&kafka.ConfigMap{
+
+	config := kafka.ConfigMap{
 		"bootstrap.servers":  client.BootstrapServers,
 		"group.id":           "kafka-datasource",
 		"enable.auto.commit": "false",
-	})
+	}
+
+	if client.ConsumerGroupId != "" {
+		config.SetKey("group.id", client.ConsumerGroupId)
+	}
+	if client.SecurityProtocol != "" {
+		config.SetKey("security.protocol", client.SecurityProtocol)
+	}
+	if client.SaslMechanisms != "" {
+		config.SetKey("sasl.mechanisms", client.SaslMechanisms)
+	}
+	if client.SaslMechanisms != "" {
+		config.SetKey("sasl.username", client.SaslUsername)
+	}
+	if client.SaslMechanisms != "" {
+		config.SetKey("sasl.password", client.SaslPassword)
+	}
+	if client.Debug != "" {
+		config.SetKey("debug", client.Debug)
+	}
+
+	client.Consumer, err = kafka.NewConsumer(&config)
 
 	if err != nil {
 		panic(err)
@@ -110,8 +152,7 @@ func (client *KafkaClient) ConsumerPull() (KafkaMessage, kafka.Event) {
 func (client KafkaClient) HealthCheck() error {
 	client.consumerInitialize()
 
-	topic := ""
-	_, err := client.Consumer.GetMetadata(&topic, false, 200)
+	_, err := client.Consumer.GetMetadata(nil, true, 2000)
 
 	if err != nil {
 		if err.(kafka.Error).Code() == kafka.ErrTransport {
