@@ -12,25 +12,25 @@ import (
 const MAX_EARLIEST int64 = 100
 
 type Options struct {
-	BootstrapServers string `json:"bootstrapServers"`
-	ConsumerGroupId  string `json:"consumerGroupId"`
-	SecurityProtocol string `json:"securityProtocol"`
-	SaslMechanisms   string `json:"saslMechanisms"`
-	SaslUsername     string `json:"saslUsername"`
-	SaslPassword     string `json:"saslPassword"`
-	Debug            string `json:"debug"`
+	BootstrapServers   string `json:"bootstrapServers"`
+	SecurityProtocol   string `json:"securityProtocol"`
+	SaslMechanisms     string `json:"saslMechanisms"`
+	SaslUsername       string `json:"saslUsername"`
+	SaslPassword       string `json:"saslPassword"`
+	Debug              string `json:"debug"`
+	healthcheckTimeout int32  `json:"debug"`
 }
 
 type KafkaClient struct {
-	Consumer         *kafka.Consumer
-	BootstrapServers string
-	ConsumerGroupId  string
-	TimestampMode    string
-	SecurityProtocol string
-	SaslMechanisms   string
-	SaslUsername     string
-	SaslPassword     string
-	Debug            string
+	Consumer           *kafka.Consumer
+	BootstrapServers   string
+	TimestampMode      string
+	SecurityProtocol   string
+	SaslMechanisms     string
+	SaslUsername       string
+	SaslPassword       string
+	Debug              string
+	healthcheckTimeout int32
 }
 
 type KafkaMessage struct {
@@ -41,13 +41,13 @@ type KafkaMessage struct {
 
 func NewKafkaClient(options Options) KafkaClient {
 	client := KafkaClient{
-		BootstrapServers: options.BootstrapServers,
-		ConsumerGroupId:  options.ConsumerGroupId,
-		SecurityProtocol: options.SecurityProtocol,
-		SaslMechanisms:   options.SaslMechanisms,
-		SaslUsername:     options.SaslUsername,
-		SaslPassword:     options.SaslPassword,
-		Debug:            options.Debug,
+		BootstrapServers:   options.BootstrapServers,
+		SecurityProtocol:   options.SecurityProtocol,
+		SaslMechanisms:     options.SaslMechanisms,
+		SaslUsername:       options.SaslUsername,
+		SaslPassword:       options.SaslPassword,
+		Debug:              options.Debug,
+		healthcheckTimeout: options.healthcheckTimeout,
 	}
 	return client
 }
@@ -61,9 +61,6 @@ func (client *KafkaClient) consumerInitialize() {
 		"enable.auto.commit": "false",
 	}
 
-	if client.ConsumerGroupId != "" {
-		config.SetKey("group.id", client.ConsumerGroupId)
-	}
 	if client.SecurityProtocol != "" {
 		config.SetKey("security.protocol", client.SecurityProtocol)
 	}

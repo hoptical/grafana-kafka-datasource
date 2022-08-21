@@ -19,15 +19,6 @@ export class ConfigEditor extends PureComponent<Props, State> {
     onOptionsChange({ ...options, jsonData });
   };
 
-  onConsumerGroupIdChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const { onOptionsChange, options } = this.props;
-    const jsonData = {
-      ...options.jsonData,
-      consumerGroupId: event.target.value,
-    };
-    onOptionsChange({ ...options, jsonData });
-  };
-
   onSecurityProtocolChange = (event: ChangeEvent<HTMLInputElement>) => {
     const { onOptionsChange, options } = this.props;
     const jsonData = {
@@ -89,6 +80,15 @@ export class ConfigEditor extends PureComponent<Props, State> {
     onOptionsChange({ ...options, jsonData });
   };
 
+  onHealthcheckTimeoutChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const { onOptionsChange, options } = this.props;
+    const jsonData = {
+      ...options.jsonData,
+      healthcheckTimeout: parseFloat(event.target.value),
+    };
+    onOptionsChange({ ...options, jsonData });
+  };
+
   render() {
     const { options } = this.props;
     const { jsonData, secureJsonFields } = options;
@@ -99,7 +99,7 @@ export class ConfigEditor extends PureComponent<Props, State> {
         <div className="gf-form">
           <FormField
             label="Servers"
-            labelWidth={8}
+            labelWidth={11}
             onChange={this.onBootstrapServersChange}
             value={jsonData.bootstrapServers || ''}
             placeholder="broker1:9092, broker2:9092"
@@ -109,18 +109,8 @@ export class ConfigEditor extends PureComponent<Props, State> {
 
         <div className="gf-form">
           <FormField
-            label="Consumer Group Id"
-            labelWidth={8}
-            onChange={this.onConsumerGroupIdChange}
-            value={jsonData.consumerGroupId || 'kafka-datasource'}
-            placeholder="kafka-datasource"
-          />
-        </div>
-
-        <div className="gf-form">
-          <FormField
             label="Security Protocol"
-            labelWidth={8}
+            labelWidth={11}
             onChange={this.onSecurityProtocolChange}
             value={jsonData.securityProtocol || ''}
             placeholder="<PLAINTEXT|SASL_SSL>"
@@ -129,8 +119,8 @@ export class ConfigEditor extends PureComponent<Props, State> {
 
         <div className="gf-form">
           <FormField
-            label="Sasl Mechanisms"
-            labelWidth={8}
+            label="SASL Mechanisms"
+            labelWidth={11}
             onChange={this.onSaslMechanismsChange}
             value={jsonData.saslMechanisms || ''}
             placeholder="<PLAIN|SCRAM-SHA-512>"
@@ -139,8 +129,8 @@ export class ConfigEditor extends PureComponent<Props, State> {
 
         <div className="gf-form">
           <FormField
-            label="Sasl Username"
-            labelWidth={8}
+            label="SASL Username"
+            labelWidth={11}
             onChange={this.onSaslUsernameChange}
             value={jsonData.saslUsername || ''}
             placeholder="<SASL Username>"
@@ -154,7 +144,7 @@ export class ConfigEditor extends PureComponent<Props, State> {
               value={secureJsonData.saslPassword || ''}
               label="SASL Password"
               placeholder="<SASL Password>"
-              labelWidth={8}
+              labelWidth={11}
               inputWidth={20}
               onReset={this.onResetSaslPassword}
               onChange={this.onSaslPasswordChange}
@@ -165,10 +155,22 @@ export class ConfigEditor extends PureComponent<Props, State> {
         <div className="gf-form">
           <FormField
             label="Debug"
-            labelWidth={8}
+            labelWidth={11}
             onChange={this.onDebugChange}
             value={jsonData.debug || ''}
             placeholder="<librdkafka Debug Level>"
+          />
+        </div>
+
+        <div className="gf-form">
+          <FormField
+            label="Healthcheck Timeout (ms)"
+            labelWidth={11}
+            onChange={this.onHealthcheckTimeoutChange}
+            value={jsonData.healthcheckTimeout || 2000}
+            type="number"
+            step="1"
+            min="200"
           />
         </div>
       </div>
