@@ -12,13 +12,15 @@ import (
 const MAX_EARLIEST int64 = 100
 
 type Options struct {
-	BootstrapServers   string `json:"bootstrapServers"`
-	SecurityProtocol   string `json:"securityProtocol"`
-	SaslMechanisms     string `json:"saslMechanisms"`
-	SaslUsername       string `json:"saslUsername"`
-	SaslPassword       string `json:"saslPassword"`
+	BootstrapServers string `json:"bootstrapServers"`
+	SecurityProtocol string `json:"securityProtocol"`
+	SaslMechanisms   string `json:"saslMechanisms"`
+	SaslUsername     string `json:"saslUsername"`
+	SaslPassword     string `json:"saslPassword"`
+	// TODO: If Debug is before HealthcheckTimeout, then json.Unmarshall
+	// silently fails to parse the timeout from the s.JSONData.  Figure out why.
+	HealthcheckTimeout int32  `json:"healthcheckTimeout"`
 	Debug              string `json:"debug"`
-	healthcheckTimeout int32  `json:"debug"`
 }
 
 type KafkaClient struct {
@@ -30,7 +32,7 @@ type KafkaClient struct {
 	SaslUsername       string
 	SaslPassword       string
 	Debug              string
-	healthcheckTimeout int32
+	HealthcheckTimeout int32
 }
 
 type KafkaMessage struct {
@@ -47,7 +49,7 @@ func NewKafkaClient(options Options) KafkaClient {
 		SaslUsername:       options.SaslUsername,
 		SaslPassword:       options.SaslPassword,
 		Debug:              options.Debug,
-		healthcheckTimeout: options.healthcheckTimeout,
+		HealthcheckTimeout: options.HealthcheckTimeout,
 	}
 	return client
 }
@@ -149,7 +151,7 @@ func (client *KafkaClient) ConsumerPull() (KafkaMessage, kafka.Event) {
 func (client KafkaClient) HealthCheck() error {
 	client.consumerInitialize()
 
-	_, err := client.Consumer.GetMetadata(nil, true, 2000)
+	_, err := client.Consumer.GetMetadata(nil, true, int(client.HealthcheckTimeout))
 
 	if err != nil {
 		if err.(kafka.Error).Code() == kafka.ErrTransport {

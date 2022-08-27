@@ -170,7 +170,7 @@ export class ConfigEditor extends PureComponent<Props, State> {
             value={jsonData.healthcheckTimeout || 2000}
             type="number"
             step="1"
-            min="200"
+            min="0"
           />
         </div>
       </div>
