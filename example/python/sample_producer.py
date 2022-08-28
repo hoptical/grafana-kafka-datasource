@@ -19,4 +19,5 @@ while True:
     producer.produce("test", value=json.dumps(data))
     print("Sample #{} produced!".format(counter))
     counter += 1
+    producer.flush(1)
     sleep(0.5)
