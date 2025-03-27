@@ -163,7 +163,8 @@ Install dependencies as described [in this guide](https://stackoverflow.com/a/77
    yarn run server
    ```
 
-Grafana will be available on `localhost:3000` with plugin already installed.
+Grafana will be available on `localhost:3000` with plugin already installed.  
+Kafka will be available on `localhost:9092` for localhost connections and on `kafka:29092` for docker connections.
 
 ## Contributing
 
