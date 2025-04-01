@@ -27,6 +27,7 @@ export interface KafkaDataSourceOptions extends DataSourceJsonData {
   healthcheckTimeout: number;
 }
 
+// Default options used when creating a new Kafka datasource
 export const defaultDataSourceOptions: Partial<KafkaDataSourceOptions> = {
   bootstrapServers: '',
   securityProtocol: '',
