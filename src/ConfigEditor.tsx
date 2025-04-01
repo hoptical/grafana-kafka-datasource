@@ -1,7 +1,8 @@
 import React, { ChangeEvent, PureComponent } from 'react';
 import { LegacyForms } from '@grafana/ui';
 import { DataSourcePluginOptionsEditorProps } from '@grafana/data';
-import { KafkaDataSourceOptions, KafkaSecureJsonData } from './types';
+import {KafkaDataSourceOptions, KafkaSecureJsonData, defaultDataSourceOptions} from './types';
+import { defaults } from 'lodash';
 
 const { SecretFormField, FormField } = LegacyForms;
 
@@ -91,7 +92,8 @@ export class ConfigEditor extends PureComponent<Props, State> {
 
   render() {
     const { options } = this.props;
-    const { jsonData, secureJsonFields } = options;
+    const { secureJsonFields } = options;
+    const jsonData = defaults(options.jsonData, defaultDataSourceOptions);
     const secureJsonData = (options.secureJsonData || {}) as KafkaSecureJsonData;
 
     return (
@@ -101,7 +103,7 @@ export class ConfigEditor extends PureComponent<Props, State> {
             label="Servers"
             labelWidth={11}
             onChange={this.onBootstrapServersChange}
-            value={jsonData.bootstrapServers || ''}
+            value={jsonData.bootstrapServers}
             placeholder="broker1:9092, broker2:9092"
             inputWidth={30}
           />
@@ -112,7 +114,7 @@ export class ConfigEditor extends PureComponent<Props, State> {
             label="Security Protocol"
             labelWidth={11}
             onChange={this.onSecurityProtocolChange}
-            value={jsonData.securityProtocol || ''}
+            value={jsonData.securityProtocol}
             placeholder="<PLAINTEXT|SASL_SSL>"
           />
         </div>
@@ -122,7 +124,7 @@ export class ConfigEditor extends PureComponent<Props, State> {
             label="SASL Mechanisms"
             labelWidth={11}
             onChange={this.onSaslMechanismsChange}
-            value={jsonData.saslMechanisms || ''}
+            value={jsonData.saslMechanisms}
             placeholder="<PLAIN|SCRAM-SHA-512>"
           />
         </div>
@@ -132,7 +134,7 @@ export class ConfigEditor extends PureComponent<Props, State> {
             label="SASL Username"
             labelWidth={11}
             onChange={this.onSaslUsernameChange}
-            value={jsonData.saslUsername || ''}
+            value={jsonData.saslUsername}
             placeholder="<SASL Username>"
           />
         </div>
@@ -157,7 +159,7 @@ export class ConfigEditor extends PureComponent<Props, State> {
             label="Debug"
             labelWidth={11}
             onChange={this.onDebugChange}
-            value={jsonData.debug || ''}
+            value={jsonData.debug}
             placeholder="<librdkafka Debug Level>"
           />
         </div>
@@ -167,7 +169,7 @@ export class ConfigEditor extends PureComponent<Props, State> {
             label="Healthcheck Timeout (ms)"
             labelWidth={11}
             onChange={this.onHealthcheckTimeoutChange}
-            value={jsonData.healthcheckTimeout || 2000}
+            value={jsonData.healthcheckTimeout}
             type="number"
             step="1"
             min="0"

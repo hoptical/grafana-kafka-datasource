@@ -27,6 +27,15 @@ export interface KafkaDataSourceOptions extends DataSourceJsonData {
   healthcheckTimeout: number;
 }
 
+export const defaultDataSourceOptions: Partial<KafkaDataSourceOptions> = {
+  bootstrapServers: '',
+  securityProtocol: '',
+  saslMechanisms: '',
+  saslUsername: '',
+  debug: '',
+  healthcheckTimeout: 2000
+};
+
 export interface KafkaSecureJsonData {
   saslPassword?: string;
 }
