@@ -1,30 +1,34 @@
 package kafka_client
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/confluentinc/confluent-kafka-go/kafka"
+	kafka2 "github.com/segmentio/kafka-go"
 )
 
 const MAX_EARLIEST int64 = 100
+const consumerGroupID = "kafka-datasource"
 
 type Options struct {
-	BootstrapServers string `json:"bootstrapServers"`
-	SecurityProtocol string `json:"securityProtocol"`
-	SaslMechanisms   string `json:"saslMechanisms"`
-	SaslUsername     string `json:"saslUsername"`
-	SaslPassword     string `json:"saslPassword"`
-	// TODO: If Debug is before HealthcheckTimeout, then json.Unmarshall
-	// silently fails to parse the timeout from the s.JSONData.  Figure out why.
+	BootstrapServers   string `json:"bootstrapServers"`
+	SecurityProtocol   string `json:"securityProtocol"`
+	SaslMechanisms     string `json:"saslMechanisms"`
+	SaslUsername       string `json:"saslUsername"`
+	SaslPassword       string `json:"saslPassword"`
 	HealthcheckTimeout int32  `json:"healthcheckTimeout"`
 	Debug              string `json:"debug"`
 }
 
 type KafkaClient struct {
 	Consumer           *kafka.Consumer
+	dialer             *kafka2.Dialer
+	reader             *kafka2.Reader
 	BootstrapServers   string
 	TimestampMode      string
 	SecurityProtocol   string
@@ -84,6 +88,24 @@ func (client *KafkaClient) consumerInitialize() {
 	if err != nil {
 		panic(err)
 	}
+
+	// *********** kafka-go ************
+	dialer := &kafka2.Dialer{
+		Timeout: 10 * time.Second,
+	}
+
+	client.dialer = dialer
+}
+
+func (client *KafkaClient) newReader(topic string, partition int, offset int64) *kafka2.Reader {
+	return kafka2.NewReader(kafka2.ReaderConfig{
+		Brokers:     strings.Split(client.BootstrapServers, ","),
+		GroupID:     consumerGroupID,
+		Topic:       topic,
+		Partition:   partition,
+		Dialer:      client.dialer,
+		StartOffset: offset,
+	})
 }
 
 func (client *KafkaClient) TopicAssign(topic string, partition int32, autoOffsetReset string,
@@ -97,7 +119,7 @@ func (client *KafkaClient) TopicAssign(topic string, partition int32, autoOffset
 	case "latest":
 		offset = int64(kafka.OffsetEnd)
 	case "earliest":
-		low, high, err = client.Consumer.QueryWatermarkOffsets(topic, partition, 100)
+		low, high, err = client.Consumer.QueryWatermarkOffsets(topic, partition, 100) // low=300, high=800
 		if err != nil {
 			panic(err)
 		}
@@ -123,6 +145,34 @@ func (client *KafkaClient) TopicAssign(topic string, partition int32, autoOffset
 	if err != nil {
 		panic(err)
 	}
+
+	// ********** kafka-go ************
+	switch autoOffsetReset {
+	case "latest":
+		offset = kafka2.LastOffset
+	case "earliest":
+		// We have to connect to the partition leader to read offsets
+		conn, err := client.dialer.DialLeader(context.Background(), "tcp", client.BootstrapServers, topic, int(partition))
+		if err != nil {
+			panic(err)
+		}
+		defer conn.Close()
+
+		low, high, err = conn.ReadOffsets()
+		if err != nil {
+			panic(err)
+		}
+
+		if high-low > MAX_EARLIEST {
+			offset = high - MAX_EARLIEST
+		} else {
+			offset = low
+		}
+	default:
+		offset = kafka2.LastOffset
+	}
+
+	client.reader = client.newReader(topic, int(partition), offset)
 }
 
 func (client *KafkaClient) ConsumerPull() (KafkaMessage, kafka.Event) {
@@ -148,15 +198,43 @@ func (client *KafkaClient) ConsumerPull() (KafkaMessage, kafka.Event) {
 	return message, ev
 }
 
-func (client KafkaClient) HealthCheck() error {
+func (client *KafkaClient) ConsumerPull2() (KafkaMessage, error) {
+	var message KafkaMessage
+
+	msg, err := client.reader.ReadMessage(context.Background())
+	if err != nil {
+		return message, fmt.Errorf("error reading message from Kafka: %v", err)
+	}
+
+	if err := json.Unmarshal(msg.Value, &message.Value); err != nil {
+		return message, fmt.Errorf("error unmarshalling message: %w", err)
+	}
+
+	message.Offset = kafka.Offset(msg.Offset)
+	message.Timestamp = msg.Time
+
+	return message, nil
+}
+
+func (client *KafkaClient) HealthCheck() error {
 	client.consumerInitialize()
 
 	_, err := client.Consumer.GetMetadata(nil, true, int(client.HealthcheckTimeout))
-
 	if err != nil {
 		if err.(kafka.Error).Code() == kafka.ErrTransport {
 			return err
 		}
+	}
+
+	// *********** kafka-go *********
+	conn, err := client.dialer.Dial("tcp", client.BootstrapServers)
+	if err != nil {
+		return fmt.Errorf("error connecting to Kafka: %w", err)
+	}
+	defer conn.Close()
+
+	if _, err = conn.ReadPartitions(); err != nil {
+		return fmt.Errorf("error reading partitions: %w", err)
 	}
 
 	return nil
@@ -164,4 +242,5 @@ func (client KafkaClient) HealthCheck() error {
 
 func (client *KafkaClient) Dispose() {
 	client.Consumer.Close()
+	client.reader.Close()
 }

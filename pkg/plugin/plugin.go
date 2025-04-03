@@ -160,9 +160,9 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 			log.DefaultLogger.Info("Context done, finish streaming", "path", req.Path)
 			return nil
 		default:
-			msg, event := d.client.ConsumerPull()
-			if event == nil {
-				continue
+			msg, err := d.client.ConsumerPull2()
+			if err != nil {
+				return err
 			}
 			frame := data.NewFrame("response")
 			frame.Fields = append(frame.Fields,
@@ -187,8 +187,7 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 				cnt++
 			}
 
-			err := sender.SendFrame(frame, data.IncludeAll)
-
+			err = sender.SendFrame(frame, data.IncludeAll)
 			if err != nil {
 				log.DefaultLogger.Error("Error sending frame", "error", err)
 				continue
