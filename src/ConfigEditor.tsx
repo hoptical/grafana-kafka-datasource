@@ -160,7 +160,7 @@ export class ConfigEditor extends PureComponent<Props, State> {
             labelWidth={11}
             onChange={this.onDebugChange}
             value={jsonData.debug}
-            placeholder="<librdkafka Debug Level>"
+            placeholder="<debug|error>"
           />
         </div>
 

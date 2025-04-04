@@ -2,18 +2,24 @@ package kafka_client
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"os"
+	"github.com/segmentio/kafka-go/sasl"
+	"github.com/segmentio/kafka-go/sasl/plain"
+	"github.com/segmentio/kafka-go/sasl/scram"
+	"log"
 	"strings"
 	"time"
 
-	"github.com/confluentinc/confluent-kafka-go/kafka"
-	kafka2 "github.com/segmentio/kafka-go"
+	"github.com/segmentio/kafka-go"
 )
 
-const MAX_EARLIEST int64 = 100
+const maxEarliest int64 = 100
 const consumerGroupID = "kafka-datasource"
+const network = "tcp"
+const debugLogLevel = "debug"
+const errorLogLevel = "error"
 
 type Options struct {
 	BootstrapServers   string `json:"bootstrapServers"`
@@ -26,9 +32,8 @@ type Options struct {
 }
 
 type KafkaClient struct {
-	Consumer           *kafka.Consumer
-	dialer             *kafka2.Dialer
-	reader             *kafka2.Reader
+	Dialer             *kafka.Dialer
+	Reader             *kafka.Reader
 	BootstrapServers   string
 	TimestampMode      string
 	SecurityProtocol   string
@@ -42,7 +47,7 @@ type KafkaClient struct {
 type KafkaMessage struct {
 	Value     map[string]float64
 	Timestamp time.Time
-	Offset    kafka.Offset
+	Offset    int64
 }
 
 func NewKafkaClient(options Options) KafkaClient {
@@ -60,51 +65,56 @@ func NewKafkaClient(options Options) KafkaClient {
 
 func (client *KafkaClient) consumerInitialize() {
 	var err error
+	var mechanism sasl.Mechanism
 
-	config := kafka.ConfigMap{
-		"bootstrap.servers":  client.BootstrapServers,
-		"group.id":           "kafka-datasource",
-		"enable.auto.commit": "false",
-	}
-
-	if client.SecurityProtocol != "" {
-		config.SetKey("security.protocol", client.SecurityProtocol)
-	}
 	if client.SaslMechanisms != "" {
-		config.SetKey("sasl.mechanisms", client.SaslMechanisms)
-	}
-	if client.SaslMechanisms != "" {
-		config.SetKey("sasl.username", client.SaslUsername)
-	}
-	if client.SaslMechanisms != "" {
-		config.SetKey("sasl.password", client.SaslPassword)
-	}
-	if client.Debug != "" {
-		config.SetKey("debug", client.Debug)
+		mechanism, err = client.getSASLMechanism()
+		if err != nil {
+			panic(err)
+		}
 	}
 
-	client.Consumer, err = kafka.NewConsumer(&config)
-
-	if err != nil {
-		panic(err)
-	}
-
-	// *********** kafka-go ************
-	dialer := &kafka2.Dialer{
+	dialer := &kafka.Dialer{
 		Timeout: 10 * time.Second,
 	}
 
-	client.dialer = dialer
+	if mechanism != nil {
+		dialer.SASLMechanism = mechanism
+	}
+
+	if client.SecurityProtocol == "SASL_SSL" {
+		dialer.TLS = &tls.Config{}
+	}
+
+	client.Dialer = dialer
 }
 
-func (client *KafkaClient) newReader(topic string, partition int, offset int64) *kafka2.Reader {
-	return kafka2.NewReader(kafka2.ReaderConfig{
-		Brokers:     strings.Split(client.BootstrapServers, ","),
-		GroupID:     consumerGroupID,
-		Topic:       topic,
-		Partition:   partition,
-		Dialer:      client.dialer,
-		StartOffset: offset,
+func (client *KafkaClient) newReader(topic string, partition int, offset int64) *kafka.Reader {
+	var logger kafka.LoggerFunc
+	var errorLogger kafka.LoggerFunc
+
+	if client.Debug == debugLogLevel {
+		logger = func(msg string, args ...interface{}) {
+			log.Printf("[KAFKA DEBUG] "+msg, args...)
+		}
+	}
+
+	if client.Debug == errorLogLevel {
+		errorLogger = func(msg string, args ...interface{}) {
+			log.Printf("[KAFKA ERROR] "+msg, args...)
+		}
+	}
+
+	return kafka.NewReader(kafka.ReaderConfig{
+		Brokers:        strings.Split(client.BootstrapServers, ","),
+		GroupID:        consumerGroupID,
+		Topic:          topic,
+		Partition:      partition,
+		Dialer:         client.Dialer,
+		StartOffset:    offset,
+		CommitInterval: 0, // enable.auto.commit=false
+		Logger:         logger,
+		ErrorLogger:    errorLogger,
 	})
 }
 
@@ -112,47 +122,15 @@ func (client *KafkaClient) TopicAssign(topic string, partition int32, autoOffset
 	timestampMode string) {
 	client.consumerInitialize()
 	client.TimestampMode = timestampMode
-	var err error
 	var offset int64
 	var high, low int64
+
 	switch autoOffsetReset {
 	case "latest":
-		offset = int64(kafka.OffsetEnd)
-	case "earliest":
-		low, high, err = client.Consumer.QueryWatermarkOffsets(topic, partition, 100) // low=300, high=800
-		if err != nil {
-			panic(err)
-		}
-		if high-low > MAX_EARLIEST {
-			offset = high - MAX_EARLIEST
-		} else {
-			offset = low
-		}
-	default:
-		offset = int64(kafka.OffsetEnd)
-	}
-
-	topic_partition := kafka.TopicPartition{
-		Topic:     &topic,
-		Partition: partition,
-		Offset:    kafka.Offset(offset),
-		Metadata:  new(string),
-		Error:     err,
-	}
-	partitions := []kafka.TopicPartition{topic_partition}
-	err = client.Consumer.Assign(partitions)
-
-	if err != nil {
-		panic(err)
-	}
-
-	// ********** kafka-go ************
-	switch autoOffsetReset {
-	case "latest":
-		offset = kafka2.LastOffset
+		offset = kafka.LastOffset
 	case "earliest":
 		// We have to connect to the partition leader to read offsets
-		conn, err := client.dialer.DialLeader(context.Background(), "tcp", client.BootstrapServers, topic, int(partition))
+		conn, err := client.Dialer.DialLeader(context.Background(), network, client.BootstrapServers, topic, int(partition))
 		if err != nil {
 			panic(err)
 		}
@@ -163,45 +141,22 @@ func (client *KafkaClient) TopicAssign(topic string, partition int32, autoOffset
 			panic(err)
 		}
 
-		if high-low > MAX_EARLIEST {
-			offset = high - MAX_EARLIEST
+		if high-low > maxEarliest {
+			offset = high - maxEarliest
 		} else {
 			offset = low
 		}
 	default:
-		offset = kafka2.LastOffset
+		offset = kafka.LastOffset
 	}
 
-	client.reader = client.newReader(topic, int(partition), offset)
+	client.Reader = client.newReader(topic, int(partition), offset)
 }
 
-func (client *KafkaClient) ConsumerPull() (KafkaMessage, kafka.Event) {
-	var message KafkaMessage
-	ev := client.Consumer.Poll(100)
-
-	if ev == nil {
-		return message, ev
-	}
-
-	switch e := ev.(type) {
-	case *kafka.Message:
-		json.Unmarshal([]byte(e.Value), &message.Value)
-		message.Offset = e.TopicPartition.Offset
-		message.Timestamp = e.Timestamp
-	case kafka.Error:
-		fmt.Fprintf(os.Stderr, "%% Error: %v: %v\n", e.Code(), e)
-		if e.Code() == kafka.ErrAllBrokersDown {
-			panic(e)
-		}
-	default:
-	}
-	return message, ev
-}
-
-func (client *KafkaClient) ConsumerPull2() (KafkaMessage, error) {
+func (client *KafkaClient) ConsumerPull() (KafkaMessage, error) {
 	var message KafkaMessage
 
-	msg, err := client.reader.ReadMessage(context.Background())
+	msg, err := client.Reader.ReadMessage(context.Background())
 	if err != nil {
 		return message, fmt.Errorf("error reading message from Kafka: %v", err)
 	}
@@ -210,7 +165,7 @@ func (client *KafkaClient) ConsumerPull2() (KafkaMessage, error) {
 		return message, fmt.Errorf("error unmarshalling message: %w", err)
 	}
 
-	message.Offset = kafka.Offset(msg.Offset)
+	message.Offset = msg.Offset
 	message.Timestamp = msg.Time
 
 	return message, nil
@@ -218,29 +173,49 @@ func (client *KafkaClient) ConsumerPull2() (KafkaMessage, error) {
 
 func (client *KafkaClient) HealthCheck() error {
 	client.consumerInitialize()
+	var conn *kafka.Conn
+	var err error
 
-	_, err := client.Consumer.GetMetadata(nil, true, int(client.HealthcheckTimeout))
-	if err != nil {
-		if err.(kafka.Error).Code() == kafka.ErrTransport {
-			return err
+	// It is better to try several times due to possible network issues
+	timeout := time.After(time.Duration(client.HealthcheckTimeout) * time.Millisecond)
+	ticker := time.NewTicker(200 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-timeout:
+			return fmt.Errorf("health check timed out after %d ms: %w", client.HealthcheckTimeout, err)
+		case <-ticker.C:
+			conn, err = client.Dialer.Dial(network, client.BootstrapServers)
+			if err == nil {
+				defer conn.Close()
+				if _, err = conn.ReadPartitions(); err != nil {
+					return fmt.Errorf("error reading partitions: %w", err)
+				}
+				return nil
+			}
 		}
 	}
-
-	// *********** kafka-go *********
-	conn, err := client.dialer.Dial("tcp", client.BootstrapServers)
-	if err != nil {
-		return fmt.Errorf("error connecting to Kafka: %w", err)
-	}
-	defer conn.Close()
-
-	if _, err = conn.ReadPartitions(); err != nil {
-		return fmt.Errorf("error reading partitions: %w", err)
-	}
-
-	return nil
 }
 
 func (client *KafkaClient) Dispose() {
-	client.Consumer.Close()
-	client.reader.Close()
+	client.Reader.Close()
+}
+
+func (client *KafkaClient) getSASLMechanism() (sasl.Mechanism, error) {
+	switch client.SaslMechanisms {
+	case "PLAIN":
+		return plain.Mechanism{
+			Username: client.SaslUsername,
+			Password: client.SaslPassword,
+		}, nil
+	case "SCRAM-SHA-256":
+		return scram.Mechanism(scram.SHA256, client.SaslUsername, client.SaslPassword)
+	case "SCRAM-SHA-512":
+		return scram.Mechanism(scram.SHA512, client.SaslUsername, client.SaslPassword)
+	case "":
+		return nil, nil
+	default:
+		return nil, fmt.Errorf("unsupported mechanism SASL: %s", client.SaslMechanisms)
+	}
 }

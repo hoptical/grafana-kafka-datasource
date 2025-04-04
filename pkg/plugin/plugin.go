@@ -4,13 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/instancemgmt"
-	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 	"github.com/grafana/grafana-plugin-sdk-go/data"
 	"github.com/grafana/grafana-plugin-sdk-go/live"
 
@@ -121,7 +121,6 @@ func (d *KafkaDatasource) CheckHealth(_ context.Context, req *backend.CheckHealt
 	var message = "Data source is working"
 
 	err := d.client.HealthCheck()
-
 	if err != nil {
 		status = backend.HealthStatusError
 		message = "Cannot connect to the brokers!"
@@ -153,6 +152,8 @@ func (d *KafkaDatasource) SubscribeStream(_ context.Context, req *backend.Subscr
 
 func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamRequest, sender *backend.StreamSender) error {
 	log.DefaultLogger.Info("RunStream called", "request", req)
+	log.DefaultLogger.Info("ILYA DEBUG", "Dialer", d.client.Dialer)
+	log.DefaultLogger.Info("ILYA DEBUG", "Reader", d.client.Reader)
 
 	for {
 		select {
@@ -160,7 +161,7 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 			log.DefaultLogger.Info("Context done, finish streaming", "path", req.Path)
 			return nil
 		default:
-			msg, err := d.client.ConsumerPull2()
+			msg, err := d.client.ConsumerPull()
 			if err != nil {
 				return err
 			}
