@@ -28,7 +28,7 @@ type Options struct {
 	SaslUsername       string `json:"saslUsername"`
 	SaslPassword       string `json:"saslPassword"`
 	HealthcheckTimeout int32  `json:"healthcheckTimeout"`
-	Debug              string `json:"debug"`
+	LogLevel           string `json:"logLevel"`
 }
 
 type KafkaClient struct {
@@ -40,7 +40,7 @@ type KafkaClient struct {
 	SaslMechanisms     string
 	SaslUsername       string
 	SaslPassword       string
-	Debug              string
+	LogLevel           string
 	HealthcheckTimeout int32
 }
 
@@ -57,20 +57,20 @@ func NewKafkaClient(options Options) KafkaClient {
 		SaslMechanisms:     options.SaslMechanisms,
 		SaslUsername:       options.SaslUsername,
 		SaslPassword:       options.SaslPassword,
-		Debug:              options.Debug,
+		LogLevel:           options.LogLevel,
 		HealthcheckTimeout: options.HealthcheckTimeout,
 	}
 	return client
 }
 
-func (client *KafkaClient) consumerInitialize() {
+func (client *KafkaClient) consumerInitialize() error {
 	var err error
 	var mechanism sasl.Mechanism
 
 	if client.SaslMechanisms != "" {
 		mechanism, err = client.getSASLMechanism()
 		if err != nil {
-			panic(err)
+			return fmt.Errorf("unable to get sasl mechanism: %w", err)
 		}
 	}
 
@@ -87,76 +87,57 @@ func (client *KafkaClient) consumerInitialize() {
 	}
 
 	client.Dialer = dialer
+
+	return nil
 }
 
 func (client *KafkaClient) newReader(topic string, partition int, offset int64) *kafka.Reader {
-	var logger kafka.LoggerFunc
-	var errorLogger kafka.LoggerFunc
+	logger, errorLogger := getKafkaLogger(client.LogLevel)
 
-	if client.Debug == debugLogLevel {
-		logger = func(msg string, args ...interface{}) {
-			log.Printf("[KAFKA DEBUG] "+msg, args...)
-		}
-	}
-
-	if client.Debug == errorLogLevel {
-		errorLogger = func(msg string, args ...interface{}) {
-			log.Printf("[KAFKA ERROR] "+msg, args...)
-		}
-	}
-
-	return kafka.NewReader(kafka.ReaderConfig{
+	reader := kafka.NewReader(kafka.ReaderConfig{
 		Brokers:        strings.Split(client.BootstrapServers, ","),
 		GroupID:        consumerGroupID,
 		Topic:          topic,
 		Partition:      partition,
 		Dialer:         client.Dialer,
 		StartOffset:    offset,
-		CommitInterval: 0, // enable.auto.commit=false
+		CommitInterval: 0,
 		Logger:         logger,
 		ErrorLogger:    errorLogger,
 	})
+
+	return reader
 }
 
 func (client *KafkaClient) TopicAssign(topic string, partition int32, autoOffsetReset string,
-	timestampMode string) {
-	client.consumerInitialize()
+	timestampMode string) error {
 	client.TimestampMode = timestampMode
+	err := client.consumerInitialize()
+	if err != nil {
+		return fmt.Errorf("unable to initialize Kafka client: %w", err)
+	}
+
 	var offset int64
-	var high, low int64
 
 	switch autoOffsetReset {
 	case "latest":
 		offset = kafka.LastOffset
 	case "earliest":
-		// We have to connect to the partition leader to read offsets
-		conn, err := client.Dialer.DialLeader(context.Background(), network, client.BootstrapServers, topic, int(partition))
-		if err != nil {
-			panic(err)
-		}
-		defer conn.Close()
-
-		low, high, err = conn.ReadOffsets()
-		if err != nil {
-			panic(err)
-		}
-
-		if high-low > maxEarliest {
-			offset = high - maxEarliest
-		} else {
-			offset = low
-		}
+		// Directly set the offset to the earliest available message
+		offset = kafka.FirstOffset
 	default:
 		offset = kafka.LastOffset
 	}
-
+	
 	client.Reader = client.newReader(topic, int(partition), offset)
+
+	return nil
 }
 
-func (client *KafkaClient) ConsumerPull() (KafkaMessage, error) {
+func (client *KafkaClient) ConsumerPull(ctx context.Context) (KafkaMessage, error) {
 	var message KafkaMessage
 
-	msg, err := client.Reader.ReadMessage(context.Background())
+	msg, err := client.Reader.ReadMessage(ctx)
 	if err != nil {
 		return message, fmt.Errorf("error reading message from Kafka: %v", err)
 	}
@@ -172,7 +153,9 @@ func (client *KafkaClient) ConsumerPull() (KafkaMessage, error) {
 }
 
 func (client *KafkaClient) HealthCheck() error {
-	client.consumerInitialize()
+	if err := client.consumerInitialize(); err != nil {
+		return fmt.Errorf("unable to initialize Kafka client: %w", err)
+	}
 	var conn *kafka.Conn
 	var err error
 
@@ -218,4 +201,27 @@ func (client *KafkaClient) getSASLMechanism() (sasl.Mechanism, error) {
 	default:
 		return nil, fmt.Errorf("unsupported mechanism SASL: %s", client.SaslMechanisms)
 	}
+}
+
+func getKafkaLogger(level string) (kafka.LoggerFunc, kafka.LoggerFunc) {
+	noop := kafka.LoggerFunc(func(msg string, args ...interface{}) {})
+
+	var logger = noop
+	var errorLogger = noop
+
+	switch strings.ToLower(level) {
+	case debugLogLevel:
+		logger = func(msg string, args ...interface{}) {
+			log.Printf("[KAFKA DEBUG] "+msg, args...)
+		}
+		errorLogger = func(msg string, args ...interface{}) {
+			log.Printf("[KAFKA ERROR] "+msg, args...)
+		}
+	case errorLogLevel:
+		errorLogger = func(msg string, args ...interface{}) {
+			log.Printf("[KAFKA ERROR] "+msg, args...)
+		}
+	}
+
+	return logger, errorLogger
 }

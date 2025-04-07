@@ -7,9 +7,9 @@ import { defaultQuery, KafkaDataSourceOptions, KafkaQuery, AutoOffsetReset, Time
 
 const autoResetOffsets = [
   {
-    label: 'From the last 100',
+    label: 'Earliest',
     value: AutoOffsetReset.EARLIEST,
-    description: 'Consume from the last 100 offset',
+    description: 'Consume from the earliest offset',
   },
   {
     label: 'Latest',

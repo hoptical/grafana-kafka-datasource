@@ -133,27 +133,53 @@ func (d *KafkaDatasource) CheckHealth(_ context.Context, req *backend.CheckHealt
 }
 
 func (d *KafkaDatasource) SubscribeStream(_ context.Context, req *backend.SubscribeStreamRequest) (*backend.SubscribeStreamResponse, error) {
-	log.DefaultLogger.Info("SubscribeStream called", "request", req)
-	// Extract the query parameters
-	var path []string = strings.Split(req.Path, "_")
+	log.DefaultLogger.Info("SubscribeStream called", "path", req.Path)
+
+	path := strings.Split(req.Path, "_")
+	if len(path) < 4 {
+		err := fmt.Errorf("invalid stream path format: %q", req.Path)
+		log.DefaultLogger.Error("SubscribeStream path parse error", "error", err)
+		return &backend.SubscribeStreamResponse{
+			Status: backend.SubscribeStreamStatusPermissionDenied,
+		}, err
+	}
+
 	topic := path[0]
-	partition, _ := strconv.Atoi(path[1])
+	partitionStr := path[1]
 	autoOffsetReset := path[2]
 	timestampMode := path[3]
-	// Initialize Consumer and Assign the topic
-	d.client.TopicAssign(topic, int32(partition), autoOffsetReset, timestampMode)
-	status := backend.SubscribeStreamStatusPermissionDenied
-	status = backend.SubscribeStreamStatusOK
 
+	if topic == "" {
+		err := fmt.Errorf("empty topic in stream path: %q", req.Path)
+		log.DefaultLogger.Error("SubscribeStream topic error", "error", err)
+		return &backend.SubscribeStreamResponse{
+			Status: backend.SubscribeStreamStatusPermissionDenied,
+		}, err
+	}
+
+	partition, err := strconv.Atoi(partitionStr)
+	if err != nil {
+		log.DefaultLogger.Error("SubscribeStream partition parse error", "partition", partitionStr, "error", err)
+		return &backend.SubscribeStreamResponse{
+			Status: backend.SubscribeStreamStatusPermissionDenied,
+		}, fmt.Errorf("invalid partition value: %q", partitionStr)
+	}
+
+	if err := d.client.TopicAssign(topic, int32(partition), autoOffsetReset, timestampMode); err != nil {
+		log.DefaultLogger.Error("SubscribeStream topic assign error", "topic", topic, "partition", partition, "error", err)
+		return &backend.SubscribeStreamResponse{
+			Status: backend.SubscribeStreamStatusPermissionDenied,
+		}, err
+	}
+
+	log.DefaultLogger.Info("SubscribeStream success", "topic", topic, "partition", partition)
 	return &backend.SubscribeStreamResponse{
-		Status: status,
+		Status: backend.SubscribeStreamStatusOK,
 	}, nil
 }
 
 func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamRequest, sender *backend.StreamSender) error {
 	log.DefaultLogger.Info("RunStream called", "request", req)
-	log.DefaultLogger.Info("ILYA DEBUG", "Dialer", d.client.Dialer)
-	log.DefaultLogger.Info("ILYA DEBUG", "Reader", d.client.Reader)
 
 	for {
 		select {
@@ -161,7 +187,7 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 			log.DefaultLogger.Info("Context done, finish streaming", "path", req.Path)
 			return nil
 		default:
-			msg, err := d.client.ConsumerPull()
+			msg, err := d.client.ConsumerPull(ctx)
 			if err != nil {
 				return err
 			}

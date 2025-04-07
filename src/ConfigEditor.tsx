@@ -72,11 +72,11 @@ export class ConfigEditor extends PureComponent<Props, State> {
     });
   };
 
-  onDebugChange = (event: ChangeEvent<HTMLInputElement>) => {
+  onLogLevelChange = (event: ChangeEvent<HTMLInputElement>) => {
     const { onOptionsChange, options } = this.props;
     const jsonData = {
       ...options.jsonData,
-      debug: event.target.value,
+      logLevel: event.target.value,
     };
     onOptionsChange({ ...options, jsonData });
   };
@@ -156,10 +156,10 @@ export class ConfigEditor extends PureComponent<Props, State> {
 
         <div className="gf-form">
           <FormField
-            label="Debug"
+            label="Log Level"
             labelWidth={11}
-            onChange={this.onDebugChange}
-            value={jsonData.debug}
+            onChange={this.onLogLevelChange}
+            value={jsonData.logLevel}
             placeholder="<debug|error>"
           />
         </div>
