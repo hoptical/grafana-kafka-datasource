@@ -1,7 +1,7 @@
 services:
   grafana:
     user: root
-    container_name: 'hamedkarbasi93-kafka-datasource'
+    container_name: 'grafana'
 
     build:
       context: ./.config
@@ -53,3 +53,41 @@ services:
       KAFKA_LOG4J_LOGGERS: "kafka.controller=INFO,kafka.producer.async.DefaultEventHandler=INFO,state.change.logger=INFO"
     volumes:
       - ./data/kafka:/var/lib/kafka/data
+
+  # Redpanda Console to have a UI for Kafka topics and messages
+  console:
+    container_name: redpanda-console
+    image: docker.redpanda.com/redpandadata/console:v2.8.5
+    entrypoint: /bin/sh
+    command: -c 'echo "$$CONSOLE_CONFIG_FILE" > /tmp/config.yml && echo "$$CONSOLE_ROLEBINDINGS_CONFIG_FILE" > /tmp/role-bindings.yml && /app/console'
+    volumes:
+      - ./config:/tmp/config/
+    environment:
+      CONFIG_FILEPATH: ${CONFIG_FILEPATH:-/tmp/config.yml}
+      CONSOLE_CONFIG_FILE: |
+        # Configure a connection to the Redpanda cluster
+        # See https://docs.redpanda.com/current/console/config/connect-to-redpanda/
+        kafka:
+          brokers: ["kafka:29092"]
+          # sasl:
+          #   enabled: true
+          #   username: superuser
+          #   password: secretpassword
+          #   mechanism: SCRAM-SHA-256
+        console:
+          # Configures Redpanda Console to fetch topic documentation from GitHub and display it in the UI.
+          # See https://docs.redpanda.com/current/console/config/topic-documentation/
+          topicDocumentation:
+            enabled: true
+            git:
+              enabled: true
+              repository:
+                url: https://github.com/redpanda-data/docs
+                branch: main
+                baseDirectory: tests/docker-compose
+        login:
+          enabled: false
+    ports:
+      - 8080:8080
+    depends_on:
+      - kafka
