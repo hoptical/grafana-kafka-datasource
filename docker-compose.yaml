@@ -58,6 +58,7 @@ services:
   console:
     container_name: redpanda-console
     image: docker.redpanda.com/redpandadata/console:v2.8.5
+    restart: always
     entrypoint: /bin/sh
     command: -c 'echo "$$CONSOLE_CONFIG_FILE" > /tmp/config.yml && echo "$$CONSOLE_ROLEBINDINGS_CONFIG_FILE" > /tmp/role-bindings.yml && /app/console'
     volumes:
@@ -65,26 +66,8 @@ services:
     environment:
       CONFIG_FILEPATH: ${CONFIG_FILEPATH:-/tmp/config.yml}
       CONSOLE_CONFIG_FILE: |
-        # Configure a connection to the Redpanda cluster
-        # See https://docs.redpanda.com/current/console/config/connect-to-redpanda/
         kafka:
           brokers: ["kafka:29092"]
-          # sasl:
-          #   enabled: true
-          #   username: superuser
-          #   password: secretpassword
-          #   mechanism: SCRAM-SHA-256
-        console:
-          # Configures Redpanda Console to fetch topic documentation from GitHub and display it in the UI.
-          # See https://docs.redpanda.com/current/console/config/topic-documentation/
-          topicDocumentation:
-            enabled: true
-            git:
-              enabled: true
-              repository:
-                url: https://github.com/redpanda-data/docs
-                branch: main
-                baseDirectory: tests/docker-compose
         login:
           enabled: false
     ports:
