@@ -82,7 +82,9 @@ func (client *KafkaClient) newConnection() error {
 	}
 
 	if client.SecurityProtocol == "SASL_SSL" {
-		dialer.TLS = &tls.Config{}
+		dialer.TLS = &tls.Config{
+			MinVersion: tls.VersionTLS13,
+		}
 	}
 
 	client.Dialer = dialer

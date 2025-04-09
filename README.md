@@ -150,7 +150,7 @@ In a new terminal tab:
    mage -v build:backend
    ```
 
-2. To build for any other platform GOOS and GOARCH must be specified:
+2. To build for any other platform, GOOS and GOARCH must be specified:
    ```bash
    GOOS=darwin GOARCH=arm64 mage -v build:backend
    ```

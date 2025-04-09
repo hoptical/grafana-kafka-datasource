@@ -114,7 +114,7 @@ export class QueryEditor extends PureComponent<Props> {
           <InlineFieldRow>
             <InlineFormLabel
               className="width-5"
-              tooltip="Starting offset to consume that can be from latest or last 100."
+              tooltip="Starting offset to consume that can be from earliest or latest."
             >
               Auto offset reset
             </InlineFormLabel>
