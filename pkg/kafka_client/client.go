@@ -111,7 +111,7 @@ func (client *KafkaClient) newReader(topic string, partition int, offset int64) 
 func (client *KafkaClient) TopicAssign(topic string, partition int32, autoOffsetReset string,
 	timestampMode string) error {
 	client.TimestampMode = timestampMode
-	
+
 	err := client.newConnection()
 	if err != nil {
 		return fmt.Errorf("unable to initialize Kafka client: %w", err)
@@ -138,7 +138,7 @@ func (client *KafkaClient) ConsumerPull(ctx context.Context) (KafkaMessage, erro
 
 	msg, err := client.Reader.ReadMessage(ctx)
 	if err != nil {
-		return message, fmt.Errorf("error reading message from Kafka: %v", err)
+		return message, fmt.Errorf("error reading message from Kafka: %w", err)
 	}
 
 	if err := json.Unmarshal(msg.Value, &message.Value); err != nil {
