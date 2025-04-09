@@ -15,7 +15,6 @@ import (
 	"github.com/segmentio/kafka-go"
 )
 
-const maxEarliest int64 = 100
 const consumerGroupID = "kafka-datasource"
 const network = "tcp"
 const debugLogLevel = "debug"
@@ -63,12 +62,12 @@ func NewKafkaClient(options Options) KafkaClient {
 	return client
 }
 
-func (client *KafkaClient) consumerInitialize() error {
+func (client *KafkaClient) newConnection() error {
 	var err error
 	var mechanism sasl.Mechanism
 
 	if client.SaslMechanisms != "" {
-		mechanism, err = client.getSASLMechanism()
+		mechanism, err = getSASLMechanism(client)
 		if err != nil {
 			return fmt.Errorf("unable to get sasl mechanism: %w", err)
 		}
@@ -112,7 +111,8 @@ func (client *KafkaClient) newReader(topic string, partition int, offset int64) 
 func (client *KafkaClient) TopicAssign(topic string, partition int32, autoOffsetReset string,
 	timestampMode string) error {
 	client.TimestampMode = timestampMode
-	err := client.consumerInitialize()
+	
+	err := client.newConnection()
 	if err != nil {
 		return fmt.Errorf("unable to initialize Kafka client: %w", err)
 	}
@@ -123,12 +123,11 @@ func (client *KafkaClient) TopicAssign(topic string, partition int32, autoOffset
 	case "latest":
 		offset = kafka.LastOffset
 	case "earliest":
-		// Directly set the offset to the earliest available message
 		offset = kafka.FirstOffset
 	default:
 		offset = kafka.LastOffset
 	}
-	
+
 	client.Reader = client.newReader(topic, int(partition), offset)
 
 	return nil
@@ -153,7 +152,7 @@ func (client *KafkaClient) ConsumerPull(ctx context.Context) (KafkaMessage, erro
 }
 
 func (client *KafkaClient) HealthCheck() error {
-	if err := client.consumerInitialize(); err != nil {
+	if err := client.newConnection(); err != nil {
 		return fmt.Errorf("unable to initialize Kafka client: %w", err)
 	}
 	var conn *kafka.Conn
@@ -185,7 +184,7 @@ func (client *KafkaClient) Dispose() {
 	client.Reader.Close()
 }
 
-func (client *KafkaClient) getSASLMechanism() (sasl.Mechanism, error) {
+func getSASLMechanism(client *KafkaClient) (sasl.Mechanism, error) {
 	switch client.SaslMechanisms {
 	case "PLAIN":
 		return plain.Mechanism{

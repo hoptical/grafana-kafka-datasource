@@ -146,15 +146,14 @@ In a new terminal tab:
 
 ### Build backend
 
-1. If you are using Linux:
+1. Build for Linux:
    ```bash
    mage -v build:backend
    ```
 
-2. If you are using Mac:  
-Install dependencies as described [in this guide](https://stackoverflow.com/a/77295702)
+2. To build for any other platform GOOS and GOARCH must be specified:
    ```bash
-   CGO_ENABLED=1 GOOS=linux GOARCH=amd64 CC=x86_64-unknown-linux-gnu-gcc go build -o dist/gpx_kafka-datasource_linux_amd64 ./pkg/main.go
+   GOOS=darwin GOARCH=arm64 mage -v build:backend
    ```
 
 ### Run Grafana in docker (with plugin installed)
