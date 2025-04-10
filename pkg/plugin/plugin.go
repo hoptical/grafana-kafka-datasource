@@ -24,7 +24,7 @@ var (
 	_ instancemgmt.InstanceDisposer = (*KafkaDatasource)(nil)
 )
 
-func NewKafkaInstance(s backend.DataSourceInstanceSettings) (instancemgmt.Instance, error) {
+func NewKafkaInstance(_ context.Context, s backend.DataSourceInstanceSettings) (instancemgmt.Instance, error) {
 	settings, err := getDatasourceSettings(s)
 
 	if err != nil {
