@@ -57,7 +57,6 @@ To query the Kafka topic, you have to config the below items in the query editor
 
 - The plugin currently does not support any authorization and authentication method.
 - The plugin currently does not support TLS.
-- Plugin is based on [confluent-kafka-go](https://github.com/confluentinc/confluent-kafka-go), hence it only supports Linux-based operating systems (not available on arm64 known as Apple Silicon) as discussed in [#6](https://github.com/hoptical/grafana-kafka-datasource/issues/6). However, we're cosidering changing the base package to support all operating systems.
 
 This plugin supports topics publishing very simple JSON formatted messages. Note that only the following structure is supported as of now:
 
@@ -127,8 +126,19 @@ A data source backend plugin consists of both frontend and backend components.
 2. Build backend plugin binaries for Linux:
 
    ```bash
-   mage build:backend
+   mage build:linux
    ```
+   To build for any other platform, use mage targets:
+   ```bash
+     mage -v build:darwin
+     mage -v build:windows
+     mage -v build:linuxArm
+     mage -v build:linuxArm64
+     mage -v build:darwinArm64
+   ```
+
+   ``mage -v build:backend`` builds for your current platform.  
+   ``mage -v buildAll`` builds for all platforms at once.
 
 ## Running locally in dev mode
 
@@ -146,16 +156,9 @@ In a new terminal tab:
 
 ### Build backend
 
-1. If you are using Linux:
-   ```bash
-   mage -v build:backend
-   ```
-
-2. If you are using Mac:  
-Install dependencies as described [in this guide](https://stackoverflow.com/a/77295702)
-   ```bash
-   CGO_ENABLED=1 GOOS=linux GOARCH=amd64 CC=x86_64-unknown-linux-gnu-gcc go build -o dist/gpx_kafka-datasource_linux_amd64 ./pkg/main.go
-   ```
+```bash
+  mage -v build:linux
+```
 
 ### Run Grafana in docker (with plugin installed)
 
