@@ -206,7 +206,9 @@ func (client *KafkaClient) HealthCheck() error {
 }
 
 func (client *KafkaClient) Dispose() {
-	client.Reader.Close()
+	if client.Reader != nil {
+		client.Reader.Close()
+	}
 }
 
 func getSASLMechanism(client *KafkaClient) (sasl.Mechanism, error) {
