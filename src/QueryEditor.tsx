@@ -7,9 +7,9 @@ import { defaultQuery, KafkaDataSourceOptions, KafkaQuery, AutoOffsetReset, Time
 
 const autoResetOffsets = [
   {
-    label: 'Earliest',
+    label: 'From the last 100',
     value: AutoOffsetReset.EARLIEST,
-    description: 'Consume from the earliest offset',
+    description: 'Consume from the last 100 offset',
   },
   {
     label: 'Latest',
@@ -114,7 +114,7 @@ export class QueryEditor extends PureComponent<Props> {
           <InlineFieldRow>
             <InlineFormLabel
               className="width-5"
-              tooltip="Starting offset to consume that can be from earliest or latest."
+              tooltip="Starting offset to consume that can be from latest or last 100."
             >
               Auto offset reset
             </InlineFormLabel>

@@ -15,10 +15,11 @@ import (
 	"github.com/segmentio/kafka-go"
 )
 
-const consumerGroupID = "kafka-datasource"
+const maxEarliest int64 = 100
 const network = "tcp"
 const debugLogLevel = "debug"
 const errorLogLevel = "error"
+const dialerTimeout = 10 * time.Second
 
 type Options struct {
 	BootstrapServers   string `json:"bootstrapServers"`
@@ -74,7 +75,7 @@ func (client *KafkaClient) newConnection() error {
 	}
 
 	dialer := &kafka.Dialer{
-		Timeout: 10 * time.Second,
+		Timeout: dialerTimeout,
 	}
 
 	if mechanism != nil {
@@ -92,16 +93,14 @@ func (client *KafkaClient) newConnection() error {
 	return nil
 }
 
-func (client *KafkaClient) newReader(topic string, partition int, offset int64) *kafka.Reader {
+func (client *KafkaClient) newReader(topic string, partition int) *kafka.Reader {
 	logger, errorLogger := getKafkaLogger(client.LogLevel)
 
 	reader := kafka.NewReader(kafka.ReaderConfig{
 		Brokers:        strings.Split(client.BootstrapServers, ","),
-		GroupID:        consumerGroupID,
 		Topic:          topic,
 		Partition:      partition,
 		Dialer:         client.Dialer,
-		StartOffset:    offset,
 		CommitInterval: 0,
 		Logger:         logger,
 		ErrorLogger:    errorLogger,
@@ -110,8 +109,12 @@ func (client *KafkaClient) newReader(topic string, partition int, offset int64) 
 	return reader
 }
 
-func (client *KafkaClient) TopicAssign(topic string, partition int32, autoOffsetReset string,
-	timestampMode string) error {
+func (client *KafkaClient) TopicAssign(
+	topic string,
+	partition int32,
+	autoOffsetReset string,
+	timestampMode string,
+) error {
 	client.TimestampMode = timestampMode
 
 	err := client.newConnection()
@@ -120,17 +123,37 @@ func (client *KafkaClient) TopicAssign(topic string, partition int32, autoOffset
 	}
 
 	var offset int64
+	var high, low int64
 
 	switch autoOffsetReset {
 	case "latest":
 		offset = kafka.LastOffset
 	case "earliest":
-		offset = kafka.FirstOffset
+		// We have to connect to the partition leader to read offsets
+		conn, err := client.Dialer.DialLeader(context.Background(), network, client.BootstrapServers, topic, int(partition))
+		if err != nil {
+			return fmt.Errorf("unable to dial leader: %w", err)
+		}
+		defer conn.Close()
+
+		low, high, err = conn.ReadOffsets()
+		if err != nil {
+			return fmt.Errorf("unable to read offsets: %w", err)
+		}
+
+		if high-low > maxEarliest {
+			offset = high - maxEarliest
+		} else {
+			offset = low
+		}
 	default:
 		offset = kafka.LastOffset
 	}
 
-	client.Reader = client.newReader(topic, int(partition), offset)
+	client.Reader = client.newReader(topic, int(partition))
+	if err = client.Reader.SetOffset(offset); err != nil {
+		return fmt.Errorf("unable to set offset: %w", err)
+	}
 
 	return nil
 }

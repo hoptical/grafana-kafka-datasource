@@ -126,8 +126,19 @@ A data source backend plugin consists of both frontend and backend components.
 2. Build backend plugin binaries for Linux:
 
    ```bash
-   mage build:backend
+   mage build:linux
    ```
+   To build for any other platform, use mage targets:
+   ```bash
+     mage -v build:darwin
+     mage -v build:windows
+     mage -v build:linuxArm
+     mage -v build:linuxArm64
+     mage -v build:darwinArm64
+   ```
+
+   ``mage -v build:backend`` builds for your current platform.  
+   ``mage -v buildAll`` builds for all platforms at once.
 
 ## Running locally in dev mode
 
@@ -145,15 +156,9 @@ In a new terminal tab:
 
 ### Build backend
 
-1. Build for Linux:
-   ```bash
-   mage -v build:backend
-   ```
-
-2. To build for any other platform, GOOS and GOARCH must be specified:
-   ```bash
-   GOOS=darwin GOARCH=arm64 mage -v build:backend
-   ```
+```bash
+  mage -v build:linux
+```
 
 ### Run Grafana in docker (with plugin installed)
 
