@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"math/rand"
 	"time"
@@ -16,10 +17,16 @@ type Data struct {
 }
 
 func main() {
+	// Define command line flags with default values
+	brokerURL := flag.String("broker", "localhost:9092", "Kafka broker URL")
+	topic := flag.String("topic", "test", "Kafka topic name")
+	sleepTime := flag.Int("interval", 500, "Sleep interval in milliseconds")
+	flag.Parse()
+
 	// Configure the writer
 	w := &kafka.Writer{
-		Addr:     kafka.TCP("localhost:9092"),
-		Topic:    "test",
+		Addr:     kafka.TCP(*brokerURL),
+		Topic:    *topic,
 		Balancer: &kafka.LeastBytes{},
 	}
 	defer w.Close()
@@ -51,8 +58,8 @@ func main() {
 			continue
 		}
 
-		fmt.Printf("Sample #%d produced!\n", counter)
+		fmt.Printf("Sample #%d produced to topic %s!\n", counter, *topic)
 		counter++
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(time.Duration(*sleepTime) * time.Millisecond)
 	}
 }
