@@ -23,7 +23,7 @@ export interface KafkaDataSourceOptions extends DataSourceJsonData {
   securityProtocol: string;
   saslMechanisms: string;
   saslUsername: string;
-  debug: string;
+  logLevel: string;
   healthcheckTimeout: number;
 }
 
@@ -33,7 +33,7 @@ export const defaultDataSourceOptions: Partial<KafkaDataSourceOptions> = {
   securityProtocol: '',
   saslMechanisms: '',
   saslUsername: '',
-  debug: '',
+  logLevel: '',
   healthcheckTimeout: 2000
 };
 

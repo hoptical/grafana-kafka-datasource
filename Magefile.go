@@ -18,6 +18,6 @@ func Hello() {
 var Default = build.BuildAll
 
 var _ = build.SetBeforeBuildCallback(func(cfg build.Config) (build.Config, error) {
-	cfg.EnableCGo = true
+	fmt.Printf("🔧 Building for OS: %s, Architecture: %s\n", cfg.OS, cfg.Arch)
 	return cfg, nil
 })
