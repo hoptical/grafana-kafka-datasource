@@ -34,6 +34,7 @@ type Options struct {
 type KafkaClient struct {
 	Dialer             *kafka.Dialer
 	Reader             *kafka.Reader
+	Conn               *kafka.Client
 	BootstrapServers   string
 	TimestampMode      string
 	SecurityProtocol   string
@@ -64,22 +65,21 @@ func NewKafkaClient(options Options) KafkaClient {
 }
 
 func (client *KafkaClient) NewConnection() error {
-	var err error
 	var mechanism sasl.Mechanism
+	var err error
 
+	// Set up SASL mechanism if provided
 	if client.SaslMechanisms != "" {
 		mechanism, err = getSASLMechanism(client)
 		if err != nil {
-			return fmt.Errorf("unable to get sasl mechanism: %w", err)
+			return fmt.Errorf("unable to get SASL mechanism: %w", err)
 		}
 	}
 
+	// Configure Dialer
 	dialer := &kafka.Dialer{
-		Timeout: dialerTimeout,
-	}
-
-	if mechanism != nil {
-		dialer.SASLMechanism = mechanism
+		Timeout:       dialerTimeout,
+		SASLMechanism: mechanism,
 	}
 
 	if client.SecurityProtocol == "SASL_SSL" {
@@ -88,7 +88,17 @@ func (client *KafkaClient) NewConnection() error {
 		}
 	}
 
+	// Configure Transport
+	transport := &kafka.Transport{
+		SASL: mechanism,
+	}
+
 	client.Dialer = dialer
+	client.Conn = &kafka.Client{
+		Addr:      kafka.TCP(strings.Split(client.BootstrapServers, ",")...),
+		Timeout:   dialerTimeout,
+		Transport: transport,
+	}
 
 	return nil
 }
@@ -225,41 +235,18 @@ func getSASLMechanism(client *KafkaClient) (sasl.Mechanism, error) {
 }
 
 func (client *KafkaClient) IsTopicExists(ctx context.Context, topicName string) (bool, error) {
-	var mechanism sasl.Mechanism
-	var err error
-
-	conn := kafka.Client{
-		Addr:    kafka.TCP(strings.Split(client.BootstrapServers, ",")...),
-		Timeout: dialerTimeout,
-	}
-
-	if client.SaslMechanisms != "" {
-		mechanism, err = getSASLMechanism(client)
-		if err != nil {
-			return false, fmt.Errorf("unable to get sasl mechanism: %w", err)
-		}
-	}
-
-	if mechanism != nil {
-		conn.Transport = &kafka.Transport{
-			SASL: mechanism,
-		}
-	}
-
-	meta, err := conn.Metadata(ctx, &kafka.MetadataRequest{})
+	meta, err := client.Conn.Metadata(ctx, &kafka.MetadataRequest{
+		Topics: []string{topicName},
+	})
 	if err != nil {
 		return false, fmt.Errorf("unable to get metadata: %w", err)
 	}
 
-	topicExists := false
-	for _, topic := range meta.Topics {
-		if topic.Name == topicName {
-			topicExists = true
-			break
-		}
+	if len(meta.Topics) > 0 && meta.Topics[0].Error == nil {
+		return true, nil
 	}
 
-	return topicExists, nil
+	return false, nil
 }
 
 func getKafkaLogger(level string) (kafka.LoggerFunc, kafka.LoggerFunc) {
