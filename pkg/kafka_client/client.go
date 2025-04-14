@@ -82,15 +82,17 @@ func (client *KafkaClient) NewConnection() error {
 		SASLMechanism: mechanism,
 	}
 
-	if client.SecurityProtocol == "SASL_SSL" {
-		dialer.TLS = &tls.Config{
-			MinVersion: tls.VersionTLS13,
-		}
-	}
-
 	// Configure Transport
 	transport := &kafka.Transport{
 		SASL: mechanism,
+	}
+
+	if client.SecurityProtocol == "SASL_SSL" {
+		tlsConfig := &tls.Config{
+			MinVersion: tls.VersionTLS13,
+		}
+		dialer.TLS = tlsConfig
+		transport.TLS = tlsConfig
 	}
 
 	client.Dialer = dialer
