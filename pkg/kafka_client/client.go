@@ -63,7 +63,7 @@ func NewKafkaClient(options Options) KafkaClient {
 	return client
 }
 
-func (client *KafkaClient) newConnection() error {
+func (client *KafkaClient) NewConnection() error {
 	var err error
 	var mechanism sasl.Mechanism
 
@@ -117,11 +117,6 @@ func (client *KafkaClient) TopicAssign(
 ) error {
 	client.TimestampMode = timestampMode
 
-	err := client.newConnection()
-	if err != nil {
-		return fmt.Errorf("unable to initialize Kafka client: %w", err)
-	}
-
 	var offset int64
 	var high, low int64
 
@@ -151,7 +146,7 @@ func (client *KafkaClient) TopicAssign(
 	}
 
 	client.Reader = client.newReader(topic, int(partition))
-	if err = client.Reader.SetOffset(offset); err != nil {
+	if err := client.Reader.SetOffset(offset); err != nil {
 		return fmt.Errorf("unable to set offset: %w", err)
 	}
 
@@ -177,7 +172,7 @@ func (client *KafkaClient) ConsumerPull(ctx context.Context) (KafkaMessage, erro
 }
 
 func (client *KafkaClient) HealthCheck() error {
-	if err := client.newConnection(); err != nil {
+	if err := client.NewConnection(); err != nil {
 		return fmt.Errorf("unable to initialize Kafka client: %w", err)
 	}
 	var conn *kafka.Conn
@@ -227,6 +222,44 @@ func getSASLMechanism(client *KafkaClient) (sasl.Mechanism, error) {
 	default:
 		return nil, fmt.Errorf("unsupported mechanism SASL: %s", client.SaslMechanisms)
 	}
+}
+
+func (client *KafkaClient) IsTopicExists(ctx context.Context, topicName string) (bool, error) {
+	var mechanism sasl.Mechanism
+	var err error
+
+	conn := kafka.Client{
+		Addr:    kafka.TCP(strings.Split(client.BootstrapServers, ",")...),
+		Timeout: dialerTimeout,
+	}
+
+	if client.SaslMechanisms != "" {
+		mechanism, err = getSASLMechanism(client)
+		if err != nil {
+			return false, fmt.Errorf("unable to get sasl mechanism: %w", err)
+		}
+	}
+
+	if mechanism != nil {
+		conn.Transport = &kafka.Transport{
+			SASL: mechanism,
+		}
+	}
+
+	meta, err := conn.Metadata(ctx, &kafka.MetadataRequest{})
+	if err != nil {
+		return false, fmt.Errorf("unable to get metadata: %w", err)
+	}
+
+	topicExists := false
+	for _, topic := range meta.Topics {
+		if topic.Name == topicName {
+			topicExists = true
+			break
+		}
+	}
+
+	return topicExists, nil
 }
 
 func getKafkaLogger(level string) (kafka.LoggerFunc, kafka.LoggerFunc) {

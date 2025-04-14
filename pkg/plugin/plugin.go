@@ -132,7 +132,7 @@ func (d *KafkaDatasource) CheckHealth(_ context.Context, req *backend.CheckHealt
 	}, nil
 }
 
-func (d *KafkaDatasource) SubscribeStream(_ context.Context, req *backend.SubscribeStreamRequest) (*backend.SubscribeStreamResponse, error) {
+func (d *KafkaDatasource) SubscribeStream(ctx context.Context, req *backend.SubscribeStreamRequest) (*backend.SubscribeStreamResponse, error) {
 	log.DefaultLogger.Info("SubscribeStream called", "path", req.Path)
 
 	path := strings.Split(req.Path, "_")
@@ -163,6 +163,28 @@ func (d *KafkaDatasource) SubscribeStream(_ context.Context, req *backend.Subscr
 		return &backend.SubscribeStreamResponse{
 			Status: backend.SubscribeStreamStatusPermissionDenied,
 		}, fmt.Errorf("invalid partition value: %q", partitionStr)
+	}
+
+	if err := d.client.NewConnection(); err != nil {
+		log.DefaultLogger.Error("Creating new Kafka connection error", "error", err)
+		return &backend.SubscribeStreamResponse{
+			Status: backend.SubscribeStreamStatusPermissionDenied,
+		}, err
+	}
+
+	exists, err := d.client.IsTopicExists(ctx, topic)
+	if err != nil {
+		log.DefaultLogger.Error("Checking kafka topic error", "error", err)
+		return &backend.SubscribeStreamResponse{
+			Status: backend.SubscribeStreamStatusPermissionDenied,
+		}, err
+	}
+
+	if !exists {
+		log.DefaultLogger.Info("Topic not found", "topic", topic)
+		return &backend.SubscribeStreamResponse{
+			Status: backend.SubscribeStreamStatusNotFound,
+		}, nil
 	}
 
 	if err := d.client.TopicAssign(topic, int32(partition), autoOffsetReset, timestampMode); err != nil {
