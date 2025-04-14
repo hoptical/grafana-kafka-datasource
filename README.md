@@ -71,6 +71,11 @@ This plugin supports topics publishing very simple JSON formatted messages. Note
 ```
 
 We plan to support more complex JSON data structures, Protobuf and AVRO in the upcoming releases. Contributions are highly encouraged!
+
+## Example producers
+
+In the [example folder](./example/), there are simple producers for different langaues that generate json sample values in Kafka. For more details on how to run them, please check the [`README.md`](./example/README.md).
+
 ## Compiling the data source by yourself
 
 Note: there are build issues with Node v16.  Use Node v14.  Known working dev environments:
