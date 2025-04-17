@@ -106,7 +106,7 @@ export class QueryEditor extends PureComponent<Props> {
               Enable streaming <small>(v8+)</small>
             </InlineFormLabel>
             <div className="add-data-source-item-badge">
-              <Switch css checked={withStreaming || false} onChange={this.onWithStreamingChange} />
+              <Switch css value={withStreaming} onChange={this.onWithStreamingChange} />
             </div>
           </InlineFieldRow>
         </div>
