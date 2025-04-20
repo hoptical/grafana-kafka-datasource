@@ -5,7 +5,7 @@ In this folder, there are simple producers for different langaues that generate 
 ## Go
 
 ### Requirements
-- Go 1.16 or later
+- Go 1.17 or later
 - [kafka-go](github.com/segmentio/kafka-go) v0.4.47 or later
 
 ### Usage
