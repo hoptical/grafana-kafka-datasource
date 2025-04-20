@@ -9,7 +9,6 @@ import (
 	"net"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/segmentio/kafka-go"
@@ -48,10 +47,7 @@ func createTopicIfNotExists(brokerURL, topic string, partitions int) error {
 
 	err = controllerConn.CreateTopics(topicConfigs...)
 	if err != nil {
-		// Ignore error if topic already exists
-		if !strings.Contains(err.Error(), "already exists") {
-			return fmt.Errorf("failed to create topic: %w", err)
-		}
+		return fmt.Errorf("failed to create topic: %w", err)
 	}
 	return nil
 }
