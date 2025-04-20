@@ -23,18 +23,18 @@ type Data struct {
 func createTopicIfNotExists(brokerURL, topic string, partitions int) error {
 	conn, err := kafka.Dial("tcp", brokerURL)
 	if err != nil {
-		return fmt.Errorf("failed to dial leader: %v", err)
+		return fmt.Errorf("failed to dial leader: %w", err)
 	}
 	defer conn.Close()
 
 	controller, err := conn.Controller()
 	if err != nil {
-		return fmt.Errorf("failed to get controller: %v", err)
+		return fmt.Errorf("failed to get controller: %w", err)
 	}
 
 	controllerConn, err := kafka.Dial("tcp", net.JoinHostPort(controller.Host, strconv.Itoa(controller.Port)))
 	if err != nil {
-		return fmt.Errorf("failed to dial controller: %v", err)
+		return fmt.Errorf("failed to dial controller: %w", err)
 	}
 	defer controllerConn.Close()
 
@@ -50,7 +50,7 @@ func createTopicIfNotExists(brokerURL, topic string, partitions int) error {
 	if err != nil {
 		// Ignore error if topic already exists
 		if !strings.Contains(err.Error(), "already exists") {
-			return fmt.Errorf("failed to create topic: %v", err)
+			return fmt.Errorf("failed to create topic: %w", err)
 		}
 	}
 	return nil
