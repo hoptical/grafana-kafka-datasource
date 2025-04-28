@@ -58,6 +58,7 @@ func main() {
 	topic := flag.String("topic", "test", "Kafka topic name")
 	sleepTime := flag.Int("interval", 500, "Sleep interval in milliseconds")
 	numPartitions := flag.Int("num-partitions", 1, "Number of partitions when creating topic")
+	valuesOffset := flag.Float64("values-offset", 1.0, "Offset for the values")
 	flag.Parse()
 
 	// Create topic if it doesn't exist
@@ -79,8 +80,8 @@ func main() {
 	for {
 		// Create sample data
 		data := Data{
-			Value1: rand.Float64(),
-			Value2: 1.0 + rand.Float64(),
+			Value1: *valuesOffset - rand.Float64(),
+			Value2: *valuesOffset + rand.Float64(),
 		}
 
 		// Convert data to JSON
