@@ -5,12 +5,13 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"github.com/segmentio/kafka-go/sasl"
-	"github.com/segmentio/kafka-go/sasl/plain"
-	"github.com/segmentio/kafka-go/sasl/scram"
 	"log"
 	"strings"
 	"time"
+
+	"github.com/segmentio/kafka-go/sasl"
+	"github.com/segmentio/kafka-go/sasl/plain"
+	"github.com/segmentio/kafka-go/sasl/scram"
 
 	"github.com/segmentio/kafka-go"
 )
@@ -121,31 +122,36 @@ func (client *KafkaClient) newReader(topic string, partition int) *kafka.Reader 
 	return reader
 }
 
-func (client *KafkaClient) TopicAssign(
+func (client *KafkaClient) NewStreamReader(
+	ctx context.Context,
 	topic string,
-	partition int32,
+	partition int,
 	autoOffsetReset string,
-	timestampMode string,
-) error {
-	client.TimestampMode = timestampMode
-
+) (*kafka.Reader, error) {
 	var offset int64
 	var high, low int64
 
+	// Create connection if not exists
+	if client.Dialer == nil {
+		if err := client.NewConnection(); err != nil {
+			return nil, fmt.Errorf("failed to create connection: %w", err)
+		}
+	}
+
+	// Set up offset
 	switch autoOffsetReset {
 	case "latest":
 		offset = kafka.LastOffset
 	case "earliest":
-		// We have to connect to the partition leader to read offsets
-		conn, err := client.Dialer.DialLeader(context.Background(), network, client.BootstrapServers, topic, int(partition))
+		conn, err := client.Dialer.DialLeader(ctx, network, client.BootstrapServers, topic, int(partition))
 		if err != nil {
-			return fmt.Errorf("unable to dial leader: %w", err)
+			return nil, fmt.Errorf("unable to dial leader: %w", err)
 		}
 		defer conn.Close()
 
 		low, high, err = conn.ReadOffsets()
 		if err != nil {
-			return fmt.Errorf("unable to read offsets: %w", err)
+			return nil, fmt.Errorf("unable to read offsets: %w", err)
 		}
 
 		if high-low > maxEarliest {
@@ -157,18 +163,20 @@ func (client *KafkaClient) TopicAssign(
 		offset = kafka.LastOffset
 	}
 
-	client.Reader = client.newReader(topic, int(partition))
-	if err := client.Reader.SetOffset(offset); err != nil {
-		return fmt.Errorf("unable to set offset: %w", err)
+	// Create new reader
+	reader := client.newReader(topic, int(partition))
+	if err := reader.SetOffset(offset); err != nil {
+		reader.Close()
+		return nil, fmt.Errorf("unable to set offset: %w", err)
 	}
 
-	return nil
+	return reader, nil
 }
 
-func (client *KafkaClient) ConsumerPull(ctx context.Context) (KafkaMessage, error) {
+func (client *KafkaClient) ConsumerPull(ctx context.Context, reader *kafka.Reader) (KafkaMessage, error) {
 	var message KafkaMessage
 
-	msg, err := client.Reader.ReadMessage(ctx)
+	msg, err := reader.ReadMessage(ctx)
 	if err != nil {
 		return message, fmt.Errorf("error reading message from Kafka: %w", err)
 	}

@@ -147,8 +147,6 @@ func (d *KafkaDatasource) SubscribeStream(ctx context.Context, req *backend.Subs
 
 	topic := path[0]
 	partitionStr := path[1]
-	autoOffsetReset := path[2]
-	timestampMode := path[3]
 
 	if topic == "" {
 		err := fmt.Errorf("empty topic in stream path: %q", req.Path)
@@ -188,13 +186,6 @@ func (d *KafkaDatasource) SubscribeStream(ctx context.Context, req *backend.Subs
 		}, nil
 	}
 
-	if err := d.client.TopicAssign(topic, int32(partition), autoOffsetReset, timestampMode); err != nil {
-		log.DefaultLogger.Error("SubscribeStream topic assign error", "topic", topic, "partition", partition, "error", err)
-		return &backend.SubscribeStreamResponse{
-			Status: backend.SubscribeStreamStatusPermissionDenied,
-		}, err
-	}
-
 	log.DefaultLogger.Info("SubscribeStream success", "topic", topic, "partition", partition)
 	return &backend.SubscribeStreamResponse{
 		Status: backend.SubscribeStreamStatusOK,
@@ -204,13 +195,26 @@ func (d *KafkaDatasource) SubscribeStream(ctx context.Context, req *backend.Subs
 func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamRequest, sender *backend.StreamSender) error {
 	log.DefaultLogger.Info("RunStream called", "request", req)
 
+	path := strings.Split(req.Path, "_")
+	topic := path[0]
+	partitionStr := path[1]
+	autoOffsetReset := path[2]
+	timestampMode := path[3]
+	partition, _ := strconv.Atoi(partitionStr)
+
+	// Create stream-specific reader
+	reader, err := d.client.NewStreamReader(ctx, topic, partition, autoOffsetReset)
+	if err != nil {
+		return fmt.Errorf("failed to create stream reader: %w", err)
+	}
+	defer reader.Close()
 	for {
 		select {
 		case <-ctx.Done():
 			log.DefaultLogger.Info("Context done, finish streaming", "path", req.Path)
 			return nil
 		default:
-			msg, err := d.client.ConsumerPull(ctx)
+			msg, err := d.client.ConsumerPull(ctx, reader)
 			if err != nil {
 				return err
 			}
@@ -219,7 +223,7 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 				data.NewField("time", nil, make([]time.Time, 1)),
 			)
 			var frame_time time.Time
-			if d.client.TimestampMode == "now" {
+			if timestampMode == "now" {
 				frame_time = time.Now()
 			} else {
 				frame_time = msg.Timestamp
