@@ -125,7 +125,7 @@ func (client *KafkaClient) newReader(topic string, partition int) *kafka.Reader 
 func (client *KafkaClient) NewStreamReader(
 	ctx context.Context,
 	topic string,
-	partition int,
+	partition int32,
 	autoOffsetReset string,
 ) (*kafka.Reader, error) {
 	var offset int64
