@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
@@ -13,7 +11,6 @@ import (
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/instancemgmt"
 	"github.com/grafana/grafana-plugin-sdk-go/data"
-	"github.com/grafana/grafana-plugin-sdk-go/live"
 
 	"github.com/hoptical/grafana-kafka-datasource/pkg/kafka_client"
 )
@@ -97,19 +94,6 @@ func (d *KafkaDatasource) query(_ context.Context, pCtx backend.PluginContext, q
 		data.NewField("values", nil, []int64{0, 0}),
 	)
 
-	topic := qm.Topic
-	partition := qm.Partition
-	autoOffsetReset := qm.AutoOffsetReset
-	timestampMode := qm.TimestampMode
-	if qm.WithStreaming {
-		channel := live.Channel{
-			Scope:     live.ScopeDatasource,
-			Namespace: pCtx.DataSourceInstanceSettings.UID,
-			Path:      fmt.Sprintf("%v_%d_%v_%v", topic, partition, autoOffsetReset, timestampMode),
-		}
-		frame.SetMeta(&data.FrameMeta{Channel: channel.String()})
-	}
-
 	response.Frames = append(response.Frames, frame)
 
 	return response
@@ -136,34 +120,21 @@ func (d *KafkaDatasource) CheckHealth(_ context.Context, req *backend.CheckHealt
 func (d *KafkaDatasource) SubscribeStream(ctx context.Context, req *backend.SubscribeStreamRequest) (*backend.SubscribeStreamResponse, error) {
 	log.DefaultLogger.Info("SubscribeStream called", "path", req.Path)
 
-	path := strings.Split(req.Path, "_")
-	if len(path) < 4 {
-		err := fmt.Errorf("invalid stream path format: %q", req.Path)
-		log.DefaultLogger.Error("SubscribeStream path parse error", "error", err)
+	var qm queryModel
+	err := json.Unmarshal(req.Data, &qm)
+	if err != nil {
+		log.DefaultLogger.Error("SubscribeStream unmarshal error", "error", err)
 		return &backend.SubscribeStreamResponse{
 			Status: backend.SubscribeStreamStatusPermissionDenied,
 		}, err
 	}
 
-	topic := path[0]
-	partitionStr := path[1]
-	autoOffsetReset := path[2]
-	timestampMode := path[3]
-
-	if topic == "" {
+	if qm.Topic == "" {
 		err := fmt.Errorf("empty topic in stream path: %q", req.Path)
 		log.DefaultLogger.Error("SubscribeStream topic error", "error", err)
 		return &backend.SubscribeStreamResponse{
 			Status: backend.SubscribeStreamStatusPermissionDenied,
 		}, err
-	}
-
-	partition, err := strconv.Atoi(partitionStr)
-	if err != nil {
-		log.DefaultLogger.Error("SubscribeStream partition parse error", "partition", partitionStr, "error", err)
-		return &backend.SubscribeStreamResponse{
-			Status: backend.SubscribeStreamStatusPermissionDenied,
-		}, fmt.Errorf("invalid partition value: %q", partitionStr)
 	}
 
 	if err := d.client.NewConnection(); err != nil {
@@ -173,7 +144,7 @@ func (d *KafkaDatasource) SubscribeStream(ctx context.Context, req *backend.Subs
 		}, err
 	}
 
-	exists, err := d.client.IsTopicExists(ctx, topic)
+	exists, err := d.client.IsTopicExists(ctx, qm.Topic)
 	if err != nil {
 		log.DefaultLogger.Error("Checking kafka topic error", "error", err)
 		return &backend.SubscribeStreamResponse{
@@ -182,20 +153,13 @@ func (d *KafkaDatasource) SubscribeStream(ctx context.Context, req *backend.Subs
 	}
 
 	if !exists {
-		log.DefaultLogger.Info("Topic not found", "topic", topic)
+		log.DefaultLogger.Info("Topic not found", "topic", qm.Topic)
 		return &backend.SubscribeStreamResponse{
 			Status: backend.SubscribeStreamStatusNotFound,
 		}, nil
 	}
 
-	if err := d.client.TopicAssign(topic, int32(partition), autoOffsetReset, timestampMode); err != nil {
-		log.DefaultLogger.Error("SubscribeStream topic assign error", "topic", topic, "partition", partition, "error", err)
-		return &backend.SubscribeStreamResponse{
-			Status: backend.SubscribeStreamStatusPermissionDenied,
-		}, err
-	}
-
-	log.DefaultLogger.Info("SubscribeStream success", "topic", topic, "partition", partition)
+	log.DefaultLogger.Info("SubscribeStream success", "topic", qm.Topic, "partition", qm.Partition)
 	return &backend.SubscribeStreamResponse{
 		Status: backend.SubscribeStreamStatusOK,
 	}, nil
@@ -203,14 +167,25 @@ func (d *KafkaDatasource) SubscribeStream(ctx context.Context, req *backend.Subs
 
 func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamRequest, sender *backend.StreamSender) error {
 	log.DefaultLogger.Info("RunStream called", "request", req)
+	var qm queryModel
+	err := json.Unmarshal(req.Data, &qm)
+	if err != nil {
+		log.DefaultLogger.Error("RunStream unmarshal error", "error", err)
+	}
 
+	// Create stream-specific reader
+	reader, err := d.client.NewStreamReader(ctx, qm.Topic, qm.Partition, qm.AutoOffsetReset)
+	if err != nil {
+		return fmt.Errorf("failed to create stream reader: %w", err)
+	}
+	defer reader.Close()
 	for {
 		select {
 		case <-ctx.Done():
 			log.DefaultLogger.Info("Context done, finish streaming", "path", req.Path)
 			return nil
 		default:
-			msg, err := d.client.ConsumerPull(ctx)
+			msg, err := d.client.ConsumerPull(ctx, reader)
 			if err != nil {
 				return err
 			}
@@ -219,13 +194,13 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 				data.NewField("time", nil, make([]time.Time, 1)),
 			)
 			var frame_time time.Time
-			if d.client.TimestampMode == "now" {
+			if qm.TimestampMode == "now" {
 				frame_time = time.Now()
 			} else {
 				frame_time = msg.Timestamp
 			}
-			log.DefaultLogger.Info("Offset", msg.Offset)
-			log.DefaultLogger.Info("timestamp", frame_time)
+			log.DefaultLogger.Debug("Offset", msg.Offset)
+			log.DefaultLogger.Debug("timestamp", frame_time)
 			frame.Fields[0].Set(0, frame_time)
 
 			cnt := 1
