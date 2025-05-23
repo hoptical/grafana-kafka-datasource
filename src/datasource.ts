@@ -27,7 +27,10 @@ export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourc
     return {
       ...query,
       topicName: templateSrv.replace(query.topicName, scopedVars),
-      partition: parseInt(templateSrv.replace(query.partition.toString(), scopedVars), 10),
+      partition: Number.parseInt(
+        templateSrv.replace(query.partition.toString(), scopedVars),
+        10,
+      ) || 0,
     };
   }
 
