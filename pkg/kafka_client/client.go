@@ -143,7 +143,9 @@ func (client *KafkaClient) NewStreamReader(
 	case "latest":
 		offset = kafka.LastOffset
 	case "earliest":
-		conn, err := client.Dialer.DialLeader(ctx, network, client.BootstrapServers, topic, int(partition))
+		// Use first bootstrap server as seed broker for leader discovery
+		firstBroker := strings.Split(client.BootstrapServers, ",")[0]
+		conn, err := client.Dialer.DialLeader(ctx, network, firstBroker, topic, int(partition))
 		if err != nil {
 			return nil, fmt.Errorf("unable to dial leader: %w", err)
 		}
