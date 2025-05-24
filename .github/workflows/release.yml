@@ -21,9 +21,8 @@ jobs:
         with:
           # see https://grafana.com/developers/plugin-tools/publish-a-plugin/sign-a-plugin#generate-an-access-policy-token to generate it
           # save the value in your repository secrets
-          grafana_token: ${{ secrets.GRAFANA_ACCESS_POLICY_TOKEN }}
+          policy_token: ${{ secrets.GRAFANA_ACCESS_POLICY_TOKEN }}
           go-version: "1.24.1"
           node-version: "22.x"
-          use_changelog_generator: true
-          # creates a signed build provenance attestation to verify the authenticity of the plugin build
+          use_changelog_generator: false
           attestation: true
