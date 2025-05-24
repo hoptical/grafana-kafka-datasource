@@ -73,23 +73,16 @@ We plan to support more complex JSON data structures, Protobuf and AVRO in the u
 
 ## Example producers
 
-In the [example folder](./example/), there are simple producers for different langaues that generate json sample values in Kafka. For more details on how to run them, please check the [`README.md`](./example/README.md).
+In the [example folder](https://github.com/hoptical/grafana-kafka-datasource/tree/main/example), there are simple producers for different languages that generate json sample values in Kafka. For more details on how to run them, please check the [`README.md`](https://github.com/hoptical/grafana-kafka-datasource/blob/main/example/README.md).
 
 ## Compiling the data source by yourself
 
 Note: there are build issues with Node v16.  Use Node v14.  Known working dev environments:
 
-* Ubuntu 20.04 LTS
-* node v14.19.3 (npm 6.14.17)
-* yarn 1.22.19
-* go 1.18
-
-and
-
-* Ubuntu 22.04 LTS
-* node v14.20.0 (npm 6.14.17)
-* yarn 1.22.19
-* go 1.18.1
+* Ubuntu 24.04 LTS
+* node v22.15
+* yarn 1.22.22
+* go 1.24.1
 
 A data source backend plugin consists of both frontend and backend components.
 
@@ -121,7 +114,7 @@ A data source backend plugin consists of both frontend and backend components.
 
 ### Backend
 
-1. Update [Grafana plugin SDK for Go](https://grafana.com/docs/grafana/latest/developers/plugins/backend/grafana-plugin-sdk-for-go/) dependency to the latest minor version:
+1. Update [Grafana plugin SDK for Go](https://grafana.com/developers/plugin-tools/key-concepts/backend-plugins/grafana-plugin-sdk-for-go) dependency to the latest minor version:
 
    ```bash
    go get -u github.com/grafana/grafana-plugin-sdk-go
@@ -184,6 +177,6 @@ This repository is open-sourced software licensed under the [Apache License 2.0]
 
 ## Learn more
 
-- [Build a data source backend plugin tutorial](https://grafana.com/tutorials/build-a-data-source-backend-plugin)
+- [Build a data source backend plugin tutorial](https://grafana.com/developers/plugin-tools/tutorials/build-a-streaming-data-source-plugin)
 
-- [Grafana plugin SDK for Go](https://grafana.com/docs/grafana/latest/developers/plugins/backend/grafana-plugin-sdk-for-go/)
+- [Grafana plugin SDK for Go](https://grafana.com/developers/plugin-tools/key-concepts/backend-plugins/grafana-plugin-sdk-for-go)
