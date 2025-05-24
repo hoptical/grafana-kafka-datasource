@@ -73,7 +73,7 @@ We plan to support more complex JSON data structures, Protobuf and AVRO in the u
 
 ## Example producers
 
-In the [example folder](https://github.com/hoptical/grafana-kafka-datasource/tree/main/example), there are simple producers for different langaues that generate json sample values in Kafka. For more details on how to run them, please check the [`README.md`](https://github.com/hoptical/grafana-kafka-datasource/blob/main/example/README.md).
+In the [example folder](https://github.com/hoptical/grafana-kafka-datasource/tree/main/example), there are simple producers for different languages that generate json sample values in Kafka. For more details on how to run them, please check the [`README.md`](https://github.com/hoptical/grafana-kafka-datasource/blob/main/example/README.md).
 
 ## Compiling the data source by yourself
 
