@@ -77,11 +77,8 @@ In the [example folder](https://github.com/hoptical/grafana-kafka-datasource/tre
 
 ## Compiling the data source by yourself
 
-Note: there are build issues with Node v16.  Use Node v14.  Known working dev environments:
-
 * Ubuntu 24.04 LTS
 * node v22.15
-* yarn 1.22.22
 * go 1.24.1
 
 A data source backend plugin consists of both frontend and backend components.
