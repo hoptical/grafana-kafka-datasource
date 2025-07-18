@@ -12,6 +12,18 @@ Visualize real-time streaming data from Apache Kafka directly in your Grafana da
 
 For the installation process, please refer to the [plugin installation docs](https://grafana.com/docs/grafana/latest/administration/plugin-management/).
 
+### Configuration
+
+After installation, configure the plugin by adding a new Kafka data source in Grafana and filling out the following fields:
+
+- **Servers**: Comma-separated list of Kafka bootstrap servers (e.g. `broker1:9092, broker2:9092`)
+- **Security Protocol**: Choose the protocol (e.g. `PLAINTEXT`, `SASL_SSL`)
+- **SASL Mechanisms**: Specify SASL mechanism if required (e.g. `PLAIN`, `SCRAM-SHA-512`)
+- **SASL Username/Password**: Provide credentials if SASL authentication is enabled
+- **Log Level**: Set log verbosity (`debug`, `error`)
+- **Healthcheck Timeout**: Timeout for health checks in milliseconds
+- **API Key**: (Deprecated) This field is deprecated and will be removed in future versions. Avoid using it for new configurations.
+
 ## Build The Query
 
 1. Create a new dashboard panel

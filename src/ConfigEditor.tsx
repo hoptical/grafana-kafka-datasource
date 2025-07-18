@@ -1,14 +1,14 @@
 import React, { ChangeEvent, PureComponent } from 'react';
 import { LegacyForms } from '@grafana/ui';
 import { DataSourcePluginOptionsEditorProps } from '@grafana/data';
-import {KafkaDataSourceOptions, KafkaSecureJsonData, defaultDataSourceOptions} from './types';
+import { KafkaDataSourceOptions, KafkaSecureJsonData, defaultDataSourceOptions } from './types';
 import { defaults } from 'lodash';
 
 const { SecretFormField, FormField } = LegacyForms;
 
-interface Props extends DataSourcePluginOptionsEditorProps<KafkaDataSourceOptions> {}
+interface Props extends DataSourcePluginOptionsEditorProps<KafkaDataSourceOptions> { }
 
-interface State {}
+interface State { }
 
 export class ConfigEditor extends PureComponent<Props, State> {
   onBootstrapServersChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -90,6 +90,32 @@ export class ConfigEditor extends PureComponent<Props, State> {
     onOptionsChange({ ...options, jsonData });
   };
 
+  /* apiKey is deprecated and will be removed in future versions */
+  onAPIKeyChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const { onOptionsChange, options } = this.props;
+    onOptionsChange({
+      ...options,
+      secureJsonData: {
+        apiKey: event.target.value,
+      },
+    });
+  };
+
+  onResetAPIKey = () => {
+    const { onOptionsChange, options } = this.props;
+    onOptionsChange({
+      ...options,
+      secureJsonFields: {
+        ...options.secureJsonFields,
+        apiKey: false,
+      },
+      secureJsonData: {
+        ...options.secureJsonData,
+        apiKey: '',
+      },
+    });
+  };
+
   render() {
     const { options } = this.props;
     const { secureJsonFields } = options;
@@ -150,6 +176,21 @@ export class ConfigEditor extends PureComponent<Props, State> {
               inputWidth={20}
               onReset={this.onResetSaslPassword}
               onChange={this.onSaslPasswordChange}
+            />
+          </div>
+        </div>
+        
+        <div className="gf-form-inline">
+          <div className="gf-form">
+            <SecretFormField
+              isConfigured={(secureJsonFields && secureJsonFields.apiKey) as boolean}
+              value={secureJsonData.apiKey || ''}
+              label="API Key (Deprecated)"
+              placeholder="secure json field (backend only)"
+              labelWidth={11}
+              inputWidth={20}
+              onReset={this.onResetAPIKey}
+              onChange={this.onAPIKeyChange}
             />
           </div>
         </div>

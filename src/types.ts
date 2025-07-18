@@ -38,6 +38,7 @@ export const defaultDataSourceOptions: Partial<KafkaDataSourceOptions> = {
 };
 
 export interface KafkaSecureJsonData {
+  apiKey?: string; // Deprecated
   saslPassword?: string;
 }
 
