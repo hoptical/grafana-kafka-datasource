@@ -24,6 +24,10 @@ After installation, configure the plugin by adding a new Kafka data source in Gr
 - **Healthcheck Timeout**: Timeout for health checks in milliseconds (default: 2000ms)
 - **API Key**: (Deprecated) This field is deprecated and will be removed in future versions. Avoid using it for new configurations.
 
+### Provisioning
+
+You can automatically configure the Kafka datasource using Grafana's provisioning feature. Create a YAML file in your Grafana provisioning directory just like example in `provisioning/datasources/datasource.yaml`. This allows you to set up the Kafka data source without manual configuration through the Grafana UI.
+
 ## Build The Query
 
 1. Create a new dashboard panel
