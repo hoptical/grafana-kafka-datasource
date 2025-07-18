@@ -1,28 +1,16 @@
 services:
   grafana:
-    user: root
-    container_name: 'grafana'
-
-    build:
-      context: ./.config
-      args:
-        grafana_image: ${GRAFANA_IMAGE:-grafana-enterprise}
-        grafana_version: ${GRAFANA_VERSION:-11.3.1}
-        development: ${DEVELOPMENT:-false}
-    platform: linux/amd64
+    image: grafana/grafana:12.0.2
+    container_name: grafana
     ports:
-      - 3000:3000/tcp
-      - 2345:2345/tcp # delve
-    security_opt:
-      - "apparmor:unconfined"
-      - "seccomp:unconfined"
-    cap_add:
-      - SYS_PTRACE
+      - '3000:3000'
+
     volumes:
       - ./dist:/var/lib/grafana/plugins/hamedkarbasi93-kafka-datasource
+      - ./data/grafana:/var/lib/grafana
       - ./provisioning:/etc/grafana/provisioning
-      - .:/root/hamedkarbasi93-kafka-datasource
 
+    user: '0'
     environment:
       NODE_ENV: development
       GF_LOG_FILTERS: plugin.hamedkarbasi93-kafka-datasource:debug
