@@ -200,6 +200,11 @@ func (client *KafkaClient) HealthCheck() error {
 	var conn *kafka.Conn
 	var err error
 
+	// Log connection attempt with non-sensitive info
+	brokers := strings.Split(client.BootstrapServers, ",")
+	brokerCount := len(brokers)
+	log.Printf("[KAFKA DEBUG] Attempting health check connection to %d broker(s)", brokerCount)
+
 	// It is better to try several times due to possible network issues
 	timeout := time.After(time.Duration(client.HealthcheckTimeout) * time.Millisecond)
 	ticker := time.NewTicker(200 * time.Millisecond)

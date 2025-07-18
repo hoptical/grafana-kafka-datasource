@@ -57,7 +57,10 @@ func (d *KafkaDatasource) Dispose() {
 }
 
 func (d *KafkaDatasource) QueryData(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
-	log.DefaultLogger.Debug("QueryData called", "request", req)
+	log.DefaultLogger.Debug("QueryData called",
+		"datasourceID", req.PluginContext.DataSourceInstanceSettings.ID,
+		"queryCount", len(req.Queries),
+		"timeRange", fmt.Sprintf("%v to %v", req.Queries[0].TimeRange.From, req.Queries[0].TimeRange.To))
 
 	response := backend.NewQueryDataResponse()
 
@@ -100,7 +103,8 @@ func (d *KafkaDatasource) query(_ context.Context, pCtx backend.PluginContext, q
 }
 
 func (d *KafkaDatasource) CheckHealth(_ context.Context, req *backend.CheckHealthRequest) (*backend.CheckHealthResult, error) {
-	log.DefaultLogger.Debug("CheckHealth called", "request", req)
+	log.DefaultLogger.Debug("CheckHealth called",
+		"datasourceID", req.PluginContext.DataSourceInstanceSettings.ID)
 
 	var status = backend.HealthStatusOk
 	var message = "Data source is working"
@@ -166,7 +170,9 @@ func (d *KafkaDatasource) SubscribeStream(ctx context.Context, req *backend.Subs
 }
 
 func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamRequest, sender *backend.StreamSender) error {
-	log.DefaultLogger.Debug("RunStream called", "request", req)
+	log.DefaultLogger.Debug("RunStream called",
+		"path", req.Path)
+
 	var qm queryModel
 	err := json.Unmarshal(req.Data, &qm)
 	if err != nil {
@@ -199,8 +205,13 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 			} else {
 				frame_time = msg.Timestamp
 			}
-			log.DefaultLogger.Debug("Offset", msg.Offset)
-			log.DefaultLogger.Debug("timestamp", frame_time)
+			log.DefaultLogger.Debug("Message received",
+				"topic", qm.Topic,
+				"partition", qm.Partition,
+				"offset", msg.Offset,
+				"timestamp", frame_time,
+				"fieldCount", len(msg.Value))
+
 			frame.Fields[0].Set(0, frame_time)
 
 			cnt := 1
@@ -222,7 +233,8 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 }
 
 func (d *KafkaDatasource) PublishStream(_ context.Context, req *backend.PublishStreamRequest) (*backend.PublishStreamResponse, error) {
-	log.DefaultLogger.Debug("PublishStream called", "request", req)
+	log.DefaultLogger.Debug("PublishStream called",
+		"path", req.Path)
 
 	return &backend.PublishStreamResponse{
 		Status: backend.PublishStreamStatusPermissionDenied,
