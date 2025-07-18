@@ -7,10 +7,9 @@ services:
 
     volumes:
       - ./dist:/var/lib/grafana/plugins/hamedkarbasi93-kafka-datasource
-      - ./data/grafana:/var/lib/grafana
       - ./provisioning:/etc/grafana/provisioning
 
-    user: '0'
+    user: root
     environment:
       NODE_ENV: development
       GF_LOG_FILTERS: plugin.hamedkarbasi93-kafka-datasource:debug

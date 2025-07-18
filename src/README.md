@@ -21,7 +21,7 @@ After installation, configure the plugin by adding a new Kafka data source in Gr
 - **SASL Mechanisms**: Specify SASL mechanism if required (e.g. `PLAIN`, `SCRAM-SHA-512`)
 - **SASL Username/Password**: Provide credentials if SASL authentication is enabled
 - **Log Level**: Set log verbosity (`debug`, `error`)
-- **Healthcheck Timeout**: Timeout for health checks in milliseconds
+- **Healthcheck Timeout**: Timeout for health checks in milliseconds (default: 2000ms)
 - **API Key**: (Deprecated) This field is deprecated and will be removed in future versions. Avoid using it for new configurations.
 
 ## Build The Query
