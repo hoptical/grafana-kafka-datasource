@@ -21,6 +21,7 @@ const network = "tcp"
 const debugLogLevel = "debug"
 const errorLogLevel = "error"
 const dialerTimeout = 10 * time.Second
+const defaultHealthcheckTimeout = 2000 // 2 seconds in milliseconds
 
 type Options struct {
 	BootstrapServers   string `json:"bootstrapServers"`
@@ -53,6 +54,11 @@ type KafkaMessage struct {
 }
 
 func NewKafkaClient(options Options) KafkaClient {
+	healthcheckTimeout := options.HealthcheckTimeout
+	if healthcheckTimeout <= 0 {
+		healthcheckTimeout = defaultHealthcheckTimeout
+	}
+
 	client := KafkaClient{
 		BootstrapServers:   options.BootstrapServers,
 		SecurityProtocol:   options.SecurityProtocol,
@@ -60,7 +66,7 @@ func NewKafkaClient(options Options) KafkaClient {
 		SaslUsername:       options.SaslUsername,
 		SaslPassword:       options.SaslPassword,
 		LogLevel:           options.LogLevel,
-		HealthcheckTimeout: options.HealthcheckTimeout,
+		HealthcheckTimeout: healthcheckTimeout,
 	}
 	return client
 }

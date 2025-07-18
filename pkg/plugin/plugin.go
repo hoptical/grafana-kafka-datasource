@@ -112,7 +112,8 @@ func (d *KafkaDatasource) CheckHealth(_ context.Context, req *backend.CheckHealt
 	err := d.client.HealthCheck()
 	if err != nil {
 		status = backend.HealthStatusError
-		message = "Cannot connect to the brokers!"
+		message = err.Error()
+		log.DefaultLogger.Error("Plugin health check failed.", "error", err)
 	}
 
 	return &backend.CheckHealthResult{
