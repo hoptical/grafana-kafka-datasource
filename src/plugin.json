@@ -30,6 +30,10 @@
       {
         "name": "License",
         "url": "https://github.com/hoptical/grafana-kafka-datasource/blob/main/LICENSE"
+      },
+      {
+        "name": "Sponsor",
+        "url": "https://github.com/sponsors/hoptical"
       }
     ],
     "screenshots": [
