@@ -37,7 +37,6 @@ You can automatically configure the Kafka datasource using Grafana's provisionin
    - **Partition**: Partition number (usually 0)
    - **Auto offset reset**: Choose "latest" for new data or "last 100" for recent history
    - **Timestamp Mode**: Use "Now" for real-time or "Message Timestamp" for event time
-4. **Important**: Enable the **Streaming** toggle for live updates
 
 ## Supported Data Format
 

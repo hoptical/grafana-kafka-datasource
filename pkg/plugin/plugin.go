@@ -76,7 +76,6 @@ func (d *KafkaDatasource) QueryData(ctx context.Context, req *backend.QueryDataR
 type queryModel struct {
 	Topic           string `json:"topicName"`
 	Partition       int32  `json:"partition"`
-	WithStreaming   bool   `json:"withStreaming"`
 	AutoOffsetReset string `json:"autoOffsetReset"`
 	TimestampMode   string `json:"timestampMode"`
 }

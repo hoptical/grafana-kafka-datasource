@@ -49,7 +49,6 @@ To query the Kafka topic, you have to config the below items in the query editor
 | Partition  | Partition Number |
 | Auto offset reset | Starting offset to consume that can be from latest or last 100. |
 | Timestamp Mode | Timestamp of the message value to visualize; It can be Now or Message Timestamp
-> **Note**: Make sure to enable the `streaming` toggle.
 
 ![kafka dashboard](https://raw.githubusercontent.com/hoptical/grafana-kafka-datasource/86ea8d360bfd67cfed41004f80adc39219983210/src/img/graph.gif)
 

@@ -12,7 +12,6 @@ export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourc
     return {
       topicName: '',
       partition: 0,
-      withStreaming: true,
       autoOffsetReset: AutoOffsetReset.LATEST,
       timestampMode: TimestampMode.Now
     };
