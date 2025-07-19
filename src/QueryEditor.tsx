@@ -1,6 +1,6 @@
 import { defaults } from 'lodash';
-import React, { ChangeEvent, PureComponent, SyntheticEvent } from 'react';
-import { InlineFormLabel, InlineFieldRow, Select, Switch } from '@grafana/ui';
+import React, { ChangeEvent, PureComponent } from 'react';
+import { InlineFormLabel, InlineFieldRow, Select } from '@grafana/ui';
 import { QueryEditorProps, SelectableValue } from '@grafana/data';
 import { DataSource } from './datasource';
 import { defaultQuery, KafkaDataSourceOptions, KafkaQuery, AutoOffsetReset, TimestampMode } from './types';
@@ -46,12 +46,6 @@ export class QueryEditor extends PureComponent<Props> {
     onRunQuery();
   };
 
-  onWithStreamingChange = (event: SyntheticEvent<HTMLInputElement>) => {
-    const { onChange, query, onRunQuery } = this.props;
-    onChange({ ...query, withStreaming: event.currentTarget.checked });
-    onRunQuery();
-  };
-
   onAutoResetOffsetChanged = (selected: SelectableValue<AutoOffsetReset>) => {
     const { onChange, query, onRunQuery } = this.props;
     onChange({ ...query, autoOffsetReset: selected.value || AutoOffsetReset.LATEST });
@@ -80,7 +74,7 @@ export class QueryEditor extends PureComponent<Props> {
 
   render() {
     const query = defaults(this.props.query, defaultQuery);
-    const { topicName, partition, withStreaming, autoOffsetReset, timestampMode } = query;
+    const { topicName, partition, autoOffsetReset, timestampMode } = query;
 
     return (
       <>
@@ -102,12 +96,6 @@ export class QueryEditor extends PureComponent<Props> {
               step="1"
               min="0"
             />
-            <InlineFormLabel>
-              Enable streaming <small>(v8+)</small>
-            </InlineFormLabel>
-            <div className="add-data-source-item-badge">
-              <Switch css value={withStreaming} onChange={this.onWithStreamingChange} />
-            </div>
           </InlineFieldRow>
         </div>
         <div className="gf-form">

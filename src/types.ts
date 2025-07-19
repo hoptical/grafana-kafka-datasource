@@ -38,20 +38,19 @@ export const defaultDataSourceOptions: Partial<KafkaDataSourceOptions> = {
 };
 
 export interface KafkaSecureJsonData {
+  apiKey?: string; // Deprecated
   saslPassword?: string;
 }
 
 export interface KafkaQuery extends DataQuery {
   topicName: string;
   partition: number;
-  withStreaming: boolean;
   autoOffsetReset: AutoOffsetReset;
   timestampMode: TimestampMode;
 }
 
 export const defaultQuery: Partial<KafkaQuery> = {
   partition: 0,
-  withStreaming: true,
   autoOffsetReset: AutoOffsetReset.LATEST,
   timestampMode: TimestampMode.Now,
 };

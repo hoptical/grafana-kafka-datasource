@@ -57,7 +57,7 @@ func (d *KafkaDatasource) Dispose() {
 }
 
 func (d *KafkaDatasource) QueryData(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
-	log.DefaultLogger.Info("QueryData called", "request", req)
+	log.DefaultLogger.Debug("QueryData called", "request", req)
 
 	response := backend.NewQueryDataResponse()
 
@@ -73,7 +73,6 @@ func (d *KafkaDatasource) QueryData(ctx context.Context, req *backend.QueryDataR
 type queryModel struct {
 	Topic           string `json:"topicName"`
 	Partition       int32  `json:"partition"`
-	WithStreaming   bool   `json:"withStreaming"`
 	AutoOffsetReset string `json:"autoOffsetReset"`
 	TimestampMode   string `json:"timestampMode"`
 }
@@ -100,7 +99,8 @@ func (d *KafkaDatasource) query(_ context.Context, pCtx backend.PluginContext, q
 }
 
 func (d *KafkaDatasource) CheckHealth(_ context.Context, req *backend.CheckHealthRequest) (*backend.CheckHealthResult, error) {
-	log.DefaultLogger.Info("CheckHealth called", "request", req)
+	log.DefaultLogger.Debug("CheckHealth called",
+		"datasourceID", req.PluginContext.DataSourceInstanceSettings.ID)
 
 	var status = backend.HealthStatusOk
 	var message = "Data source is working"
@@ -108,7 +108,8 @@ func (d *KafkaDatasource) CheckHealth(_ context.Context, req *backend.CheckHealt
 	err := d.client.HealthCheck()
 	if err != nil {
 		status = backend.HealthStatusError
-		message = "Cannot connect to the brokers!"
+		message = err.Error()
+		log.DefaultLogger.Error("Plugin health check failed.", "error", err)
 	}
 
 	return &backend.CheckHealthResult{
@@ -118,7 +119,7 @@ func (d *KafkaDatasource) CheckHealth(_ context.Context, req *backend.CheckHealt
 }
 
 func (d *KafkaDatasource) SubscribeStream(ctx context.Context, req *backend.SubscribeStreamRequest) (*backend.SubscribeStreamResponse, error) {
-	log.DefaultLogger.Info("SubscribeStream called", "path", req.Path)
+	log.DefaultLogger.Debug("SubscribeStream called", "path", req.Path)
 
 	var qm queryModel
 	err := json.Unmarshal(req.Data, &qm)
@@ -153,20 +154,22 @@ func (d *KafkaDatasource) SubscribeStream(ctx context.Context, req *backend.Subs
 	}
 
 	if !exists {
-		log.DefaultLogger.Info("Topic not found", "topic", qm.Topic)
+		log.DefaultLogger.Debug("Topic not found", "topic", qm.Topic)
 		return &backend.SubscribeStreamResponse{
 			Status: backend.SubscribeStreamStatusNotFound,
 		}, nil
 	}
 
-	log.DefaultLogger.Info("SubscribeStream success", "topic", qm.Topic, "partition", qm.Partition)
+	log.DefaultLogger.Debug("SubscribeStream success", "topic", qm.Topic, "partition", qm.Partition)
 	return &backend.SubscribeStreamResponse{
 		Status: backend.SubscribeStreamStatusOK,
 	}, nil
 }
 
 func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamRequest, sender *backend.StreamSender) error {
-	log.DefaultLogger.Info("RunStream called", "request", req)
+	log.DefaultLogger.Debug("RunStream called",
+		"path", req.Path)
+
 	var qm queryModel
 	err := json.Unmarshal(req.Data, &qm)
 	if err != nil {
@@ -182,7 +185,7 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 	for {
 		select {
 		case <-ctx.Done():
-			log.DefaultLogger.Info("Context done, finish streaming", "path", req.Path)
+			log.DefaultLogger.Debug("Context done, finish streaming", "path", req.Path)
 			return nil
 		default:
 			msg, err := d.client.ConsumerPull(ctx, reader)
@@ -199,8 +202,13 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 			} else {
 				frame_time = msg.Timestamp
 			}
-			log.DefaultLogger.Debug("Offset", msg.Offset)
-			log.DefaultLogger.Debug("timestamp", frame_time)
+			log.DefaultLogger.Debug("Message received",
+				"topic", qm.Topic,
+				"partition", qm.Partition,
+				"offset", msg.Offset,
+				"timestamp", frame_time,
+				"fieldCount", len(msg.Value))
+
 			frame.Fields[0].Set(0, frame_time)
 
 			cnt := 1
@@ -222,7 +230,8 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 }
 
 func (d *KafkaDatasource) PublishStream(_ context.Context, req *backend.PublishStreamRequest) (*backend.PublishStreamResponse, error) {
-	log.DefaultLogger.Info("PublishStream called", "request", req)
+	log.DefaultLogger.Debug("PublishStream called",
+		"path", req.Path)
 
 	return &backend.PublishStreamResponse{
 		Status: backend.PublishStreamStatusPermissionDenied,

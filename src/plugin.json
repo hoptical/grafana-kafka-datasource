@@ -30,6 +30,10 @@
       {
         "name": "License",
         "url": "https://github.com/hoptical/grafana-kafka-datasource/blob/main/LICENSE"
+      },
+      {
+        "name": "Sponsor",
+        "url": "https://github.com/sponsors/hoptical"
       }
     ],
     "screenshots": [
@@ -42,7 +46,7 @@
     "updated": "%TODAY%"
   },
   "dependencies": {
-    "grafanaDependency": ">=8.0.0",
+    "grafanaDependency": ">=9.0.0",
     "plugins": []
   }
 }

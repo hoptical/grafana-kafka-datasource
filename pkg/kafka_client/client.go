@@ -21,6 +21,7 @@ const network = "tcp"
 const debugLogLevel = "debug"
 const errorLogLevel = "error"
 const dialerTimeout = 10 * time.Second
+const defaultHealthcheckTimeout = 2000 // 2 seconds in milliseconds
 
 type Options struct {
 	BootstrapServers   string `json:"bootstrapServers"`
@@ -53,6 +54,11 @@ type KafkaMessage struct {
 }
 
 func NewKafkaClient(options Options) KafkaClient {
+	healthcheckTimeout := options.HealthcheckTimeout
+	if healthcheckTimeout <= 0 {
+		healthcheckTimeout = defaultHealthcheckTimeout
+	}
+
 	client := KafkaClient{
 		BootstrapServers:   options.BootstrapServers,
 		SecurityProtocol:   options.SecurityProtocol,
@@ -60,7 +66,7 @@ func NewKafkaClient(options Options) KafkaClient {
 		SaslUsername:       options.SaslUsername,
 		SaslPassword:       options.SaslPassword,
 		LogLevel:           options.LogLevel,
-		HealthcheckTimeout: options.HealthcheckTimeout,
+		HealthcheckTimeout: healthcheckTimeout,
 	}
 	return client
 }
@@ -199,6 +205,11 @@ func (client *KafkaClient) HealthCheck() error {
 	}
 	var conn *kafka.Conn
 	var err error
+
+	// Log connection attempt with non-sensitive info
+	brokers := strings.Split(client.BootstrapServers, ",")
+	brokerCount := len(brokers)
+	log.Printf("[KAFKA DEBUG] Attempting health check connection to %d broker(s)", brokerCount)
 
 	// It is better to try several times due to possible network issues
 	timeout := time.After(time.Duration(client.HealthcheckTimeout) * time.Millisecond)

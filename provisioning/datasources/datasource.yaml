@@ -1,0 +1,19 @@
+apiVersion: 1
+
+datasources:
+  - name: kafka-provisioned
+    type: hamedkarbasi93-kafka-datasource
+    access: proxy
+    isDefault: True
+    editable: False
+    jsonData:
+      bootstrapServers: "kafka:29092"
+      # Uncomment the below lines to enable SASL authentication or other configurations
+      # securityProtocol: "PLAINTEXT"
+      # saslMechanisms: "PLAIN"
+      # saslUsername: ""
+      # logLevel: "debug"
+      # healthcheckTimeout: 3000
+    # secureJsonData:
+    #   saslPassword: ""
+    #   apiKey: ""

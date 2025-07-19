@@ -5,10 +5,10 @@
 
 The Kafka data source plugin allows you to visualize streaming Kafka data from within Grafana.
 
-## Reqirements
+## Requirements
 
 - Apache Kafka v0.9+
-- Grafana v8.0+
+- Grafana v9.0+
 
 > Note: This is a backend plugin, so the Grafana server should've access to the Kafka broker.
 
@@ -49,7 +49,6 @@ To query the Kafka topic, you have to config the below items in the query editor
 | Partition  | Partition Number |
 | Auto offset reset | Starting offset to consume that can be from latest or last 100. |
 | Timestamp Mode | Timestamp of the message value to visualize; It can be Now or Message Timestamp
-> **Note**: Make sure to enable the `streaming` toggle.
 
 ![kafka dashboard](https://raw.githubusercontent.com/hoptical/grafana-kafka-datasource/86ea8d360bfd67cfed41004f80adc39219983210/src/img/graph.gif)
 
@@ -77,11 +76,8 @@ In the [example folder](https://github.com/hoptical/grafana-kafka-datasource/tre
 
 ## Compiling the data source by yourself
 
-Note: there are build issues with Node v16.  Use Node v14.  Known working dev environments:
-
 * Ubuntu 24.04 LTS
 * node v22.15
-* yarn 1.22.22
 * go 1.24.1
 
 A data source backend plugin consists of both frontend and backend components.
