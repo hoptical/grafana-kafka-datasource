@@ -1,6 +1,6 @@
 {
   "name": "hamedkarbasi93-kafka-datasource",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Kafka Datasource Plugin",
   "scripts": {
     "build": "webpack -c ./.config/webpack/webpack.config.ts --env production",
