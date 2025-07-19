@@ -57,10 +57,7 @@ func (d *KafkaDatasource) Dispose() {
 }
 
 func (d *KafkaDatasource) QueryData(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
-	log.DefaultLogger.Debug("QueryData called",
-		"datasourceID", req.PluginContext.DataSourceInstanceSettings.ID,
-		"queryCount", len(req.Queries),
-		"timeRange", fmt.Sprintf("%v to %v", req.Queries[0].TimeRange.From, req.Queries[0].TimeRange.To))
+	log.DefaultLogger.Debug("QueryData called", "request", req)
 
 	response := backend.NewQueryDataResponse()
 
