@@ -32,7 +32,7 @@ Alternatively, you can manually download the [latest](https://github.com/hoptica
 
 [Add a data source](https://grafana.com/docs/grafana/latest/datasources/add-a-data-source/) by filling in the following fields:
 
-### Basic fields
+### Basic Fields
 
 | Field | Description                                        |
 | ----- | -------------------------------------------------- |
@@ -70,11 +70,15 @@ This plugin supports topics publishing very simple JSON formatted messages. Note
 
 We plan to support more complex JSON data structures, Protobuf and AVRO in the upcoming releases. Contributions are highly encouraged!
 
-## Example producers
+## Sample producers
 
 In the [example folder](https://github.com/hoptical/grafana-kafka-datasource/tree/main/example), there are simple producers for different languages that generate json sample values in Kafka. For more details on how to run them, please check the [`README.md`](https://github.com/hoptical/grafana-kafka-datasource/blob/main/example/README.md).
 
-## Compiling the data source by yourself
+## Contribution & development 
+
+Thank you for considering contributing! If you find an issue or have a better way to do something, feel free to open an issue or a PR. To setup the development environment, follow these steps:
+
+### Prerequisites
 
 * Ubuntu 24.04 LTS
 * node v22.15
@@ -87,25 +91,58 @@ A data source backend plugin consists of both frontend and backend components.
 1. Install dependencies
 
    ```bash
-   yarn install
+   npm install
    ```
 
-2. Build plugin in development mode or run in watch mode
+2. Build plugin in development mode and run in watch mode
 
    ```bash
-   yarn dev
-   ```
-
-   or
-
-   ```bash
-   yarn watch
+   npm run dev
    ```
 
 3. Build plugin in production mode
 
    ```bash
-   yarn build
+   npm run build
+   ```
+
+4. Run the tests (using Jest)
+
+   ```bash
+   # Runs the tests and watches for changes, requires git init first
+   npm run test
+
+   # Exits after running all the tests
+   npm run test:ci
+   ```
+
+5. Spin up a Grafana instance and run the plugin inside it (using Docker)
+
+   ```bash
+   npm run server
+   ```
+
+6. Run the E2E tests (using Playwright)
+
+   ```bash
+   # Spins up a Grafana instance first that we tests against
+   npm run server
+
+   # If you wish to start a certain Grafana version. If not specified will use latest by default
+   GRAFANA_VERSION=11.3.0 npm run server
+
+   # Starts the tests
+   npm run e2e
+   ```
+
+7. Run the linter
+
+   ```bash
+   npm run lint
+
+   # or
+
+   npm run lint:fix
    ```
 
 ### Backend
@@ -133,46 +170,10 @@ A data source backend plugin consists of both frontend and backend components.
 
    ``mage -v build:backend`` builds for your current platform.  
    ``mage -v buildAll`` builds for all platforms at once.
-
-## Running locally in dev mode
-
-### Install dependencies
-
-   ```bash
-   yarn install
-   ```
-
-### Run frontend  
-In a new terminal tab:
-   ```bash
-   yarn run dev
-   ```
-
-### Build backend
-
-```bash
-  mage -v build:linux
-```
-
-### Run Grafana in docker (with plugin installed)
-
-   ```bash
-   yarn run server
-   ```
-
+   
 Grafana will be available on `localhost:3000` with plugin already installed.  
 Kafka will be available on `localhost:9092` for localhost connections and on `kafka:29092` for docker connections.
-
-## Contributing
-
-Thank you for considering contributing! If you find an issue or have a better way to do something, feel free to open an issue or a PR.
 
 ## License
 
 This repository is open-sourced software licensed under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0).
-
-## Learn more
-
-- [Build a data source backend plugin tutorial](https://grafana.com/developers/plugin-tools/tutorials/build-a-streaming-data-source-plugin)
-
-- [Grafana plugin SDK for Go](https://grafana.com/developers/plugin-tools/key-concepts/backend-plugins/grafana-plugin-sdk-for-go)

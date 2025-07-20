@@ -19,8 +19,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Install Yarn
-        run: npm install -g yarn
       - name: Checkout repository
         uses: actions/checkout@v4
 
