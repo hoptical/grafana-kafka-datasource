@@ -81,9 +81,12 @@ export class ConfigEditor extends PureComponent<Props, State> {
 
   onHealthcheckTimeoutChange = (event: ChangeEvent<HTMLInputElement>) => {
     const { onOptionsChange, options } = this.props;
+    const value = parseFloat(event.target.value);
+    // Ensure non-negative values only
+    const validatedValue = value < 0 ? 0 : value;
     const jsonData = {
       ...options.jsonData,
-      healthcheckTimeout: parseFloat(event.target.value),
+      healthcheckTimeout: validatedValue,
     };
     onOptionsChange({ ...options, jsonData });
   };
@@ -122,15 +125,16 @@ export class ConfigEditor extends PureComponent<Props, State> {
     const secureJsonData = (options.secureJsonData || {}) as KafkaSecureJsonData;
 
     // Define label widths for different sections
-    const kafkaConfigLabelWidth = 25;
-    const pluginConfigLabelWidth = 30;
+    const connectionLabelWidth = 20;
+    const authenticationLabelWidth = 25;
+    const advancedLabelWidth = 30;
 
     return (
       <div className="gf-form-group">
-        {/* Kafka Bootstrap Servers Configuration Section */}
-        <h3 className="page-heading">Kafka Configuration</h3>
-        
-        <InlineField label="Bootstrap Servers" labelWidth={kafkaConfigLabelWidth} tooltip="Kafka bootstrap servers seperated by commas">
+        {/* Connection Configuration Section */}
+        <h3 className="page-heading">Connection</h3>
+
+        <InlineField label="Bootstrap Servers" labelWidth={connectionLabelWidth} tooltip="Kafka bootstrap servers separated by commas">
           <Input
             id="config-editor-servers"
             onChange={this.onBootstrapServersChange}
@@ -140,7 +144,9 @@ export class ConfigEditor extends PureComponent<Props, State> {
           />
         </InlineField>
 
-        <InlineField label="Security Protocol" labelWidth={kafkaConfigLabelWidth} tooltip="Security protocol for Kafka connection">
+        {/* Authentication Section */}
+        <h3 className="page-heading" style={{ marginTop: '32px' }}>Authentication</h3>
+        <InlineField label="Security Protocol" labelWidth={connectionLabelWidth} tooltip="Security protocol for Kafka connection">
           <Input
             id="config-editor-security-protocol"
             onChange={this.onSecurityProtocolChange}
@@ -150,7 +156,7 @@ export class ConfigEditor extends PureComponent<Props, State> {
           />
         </InlineField>
 
-        <InlineField label="SASL Mechanisms" labelWidth={kafkaConfigLabelWidth} tooltip="SASL authentication mechanism">
+        <InlineField label="SASL Mechanisms" labelWidth={authenticationLabelWidth} tooltip="SASL authentication mechanism">
           <Input
             id="config-editor-sasl-mechanisms"
             onChange={this.onSaslMechanismsChange}
@@ -160,7 +166,7 @@ export class ConfigEditor extends PureComponent<Props, State> {
           />
         </InlineField>
 
-        <InlineField label="SASL Username" labelWidth={kafkaConfigLabelWidth} tooltip="SASL username for authentication">
+        <InlineField label="SASL Username" labelWidth={authenticationLabelWidth} tooltip="SASL username for authentication">
           <Input
             id="config-editor-sasl-username"
             onChange={this.onSaslUsernameChange}
@@ -170,7 +176,7 @@ export class ConfigEditor extends PureComponent<Props, State> {
           />
         </InlineField>
 
-        <InlineField label="SASL Password" labelWidth={kafkaConfigLabelWidth} tooltip="SASL password for authentication">
+        <InlineField label="SASL Password" labelWidth={authenticationLabelWidth} tooltip="SASL password for authentication">
           <SecretInput
             id="config-editor-sasl-password"
             isConfigured={(secureJsonFields && secureJsonFields.saslPassword) as boolean}
@@ -181,8 +187,8 @@ export class ConfigEditor extends PureComponent<Props, State> {
             onChange={this.onSaslPasswordChange}
           />
         </InlineField>
-        
-        <InlineField label="API Key (Deprecated)" labelWidth={kafkaConfigLabelWidth} tooltip="Deprecated API key field">
+
+        <InlineField label="API Key (Deprecated)" labelWidth={authenticationLabelWidth} tooltip="Deprecated API key field">
           <SecretInput
             id="config-editor-api-key"
             isConfigured={(secureJsonFields && secureJsonFields.apiKey) as boolean}
@@ -194,10 +200,10 @@ export class ConfigEditor extends PureComponent<Props, State> {
           />
         </InlineField>
 
-        {/* plugin Configuration Section */}
-        <h3 className="page-heading" style={{ marginTop: '32px' }}>Plugin Configuration</h3>
+        {/* Advanced Settings Section */}
+        <h3 className="page-heading" style={{ marginTop: '32px' }}>Advanced Settings</h3>
 
-        <InlineField label="Log Level" labelWidth={pluginConfigLabelWidth} tooltip="Logging level for debugging">
+        <InlineField label="Log Level" labelWidth={advancedLabelWidth} tooltip="Logging level for debugging">
           <Input
             id="config-editor-log-level"
             onChange={this.onLogLevelChange}
@@ -207,7 +213,7 @@ export class ConfigEditor extends PureComponent<Props, State> {
           />
         </InlineField>
 
-        <InlineField label="Healthcheck Timeout (ms)" labelWidth={pluginConfigLabelWidth} tooltip="Timeout for health check in milliseconds">
+        <InlineField label="Healthcheck Timeout (ms)" labelWidth={advancedLabelWidth} tooltip="Timeout for health check in milliseconds (non-negative values only)">
           <Input
             id="config-editor-healthcheck-timeout"
             onChange={this.onHealthcheckTimeoutChange}
