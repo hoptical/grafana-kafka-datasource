@@ -1,35 +1,31 @@
 import { defaults } from 'lodash';
 import React, { ChangeEvent, PureComponent } from 'react';
-import { InlineFormLabel, InlineFieldRow, Select } from '@grafana/ui';
-import { QueryEditorProps, SelectableValue } from '@grafana/data';
+import { InlineField, InlineFieldRow, Input, Combobox, ComboboxOption } from '@grafana/ui';
+import { QueryEditorProps } from '@grafana/data';
 import { DataSource } from './datasource';
 import { defaultQuery, KafkaDataSourceOptions, KafkaQuery, AutoOffsetReset, TimestampMode } from './types';
 
-const autoResetOffsets = [
+const autoResetOffsets: Array<{ label: string; value: AutoOffsetReset }> = [
   {
     label: 'From the last 100',
     value: AutoOffsetReset.EARLIEST,
-    description: 'Consume from the last 100 offset',
   },
   {
     label: 'Latest',
     value: AutoOffsetReset.LATEST,
-    description: 'Consume from the latest offset',
   },
-] as Array<SelectableValue<AutoOffsetReset>>;
+];
 
-const timestampModes = [
+const timestampModes: Array<{ label: string; value: TimestampMode }> = [
   {
     label: 'Now',
     value: TimestampMode.Now,
-    description: 'Current time while consuming the message',
   },
   {
     label: 'Message Timestamp',
     value: TimestampMode.Message,
-    description: 'The message timestamp while producing into topic',
   },
-] as Array<SelectableValue<TimestampMode>>;
+];
 
 type Props = QueryEditorProps<DataSource, KafkaQuery, KafkaDataSourceOptions>;
 
@@ -42,34 +38,35 @@ export class QueryEditor extends PureComponent<Props> {
 
   onPartitionChange = (event: ChangeEvent<HTMLInputElement>) => {
     const { onChange, query, onRunQuery } = this.props;
-    onChange({ ...query, partition: parseFloat(event.target.value) });
+    const value = parseFloat(event.target.value);
+    // Ensure partition is non-negative
+    const partition = value < 0 ? 0 : value;
+    onChange({ ...query, partition });
     onRunQuery();
   };
 
-  onAutoResetOffsetChanged = (selected: SelectableValue<AutoOffsetReset>) => {
+  onAutoResetOffsetChanged = (option: ComboboxOption<AutoOffsetReset> | null) => {
     const { onChange, query, onRunQuery } = this.props;
-    onChange({ ...query, autoOffsetReset: selected.value || AutoOffsetReset.LATEST });
+    const value = option?.value || AutoOffsetReset.LATEST;
+    onChange({ ...query, autoOffsetReset: value });
     onRunQuery();
   };
 
-  resolveAutoResetOffset = (value: string | undefined) => {
-    if (value === AutoOffsetReset.LATEST) {
-      return autoResetOffsets[1];
-    }
-    return autoResetOffsets[0];
+  resolveAutoResetOffset = (value: string | undefined): ComboboxOption<AutoOffsetReset> => {
+    const found = autoResetOffsets.find(option => option.value === value);
+    return found ? { label: found.label, value: found.value } : { label: autoResetOffsets[1].label, value: autoResetOffsets[1].value };
   };
 
-  onTimestampModeChanged = (selected: SelectableValue<TimestampMode>) => {
+  onTimestampModeChanged = (option: ComboboxOption<TimestampMode> | null) => {
     const { onChange, query, onRunQuery } = this.props;
-    onChange({ ...query, timestampMode: selected.value || TimestampMode.Now });
+    const value = option?.value || TimestampMode.Now;
+    onChange({ ...query, timestampMode: value });
     onRunQuery();
   };
 
-  resolveTimestampMode = (value: string | undefined) => {
-    if (value === TimestampMode.Now) {
-      return timestampModes[0];
-    }
-    return timestampModes[1];
+  resolveTimestampMode = (value: string | undefined): ComboboxOption<TimestampMode> => {
+    const found = timestampModes.find(option => option.value === value);
+    return found ? { label: found.label, value: found.value } : { label: timestampModes[0].label, value: timestampModes[0].value };
   };
 
   render() {
@@ -78,55 +75,48 @@ export class QueryEditor extends PureComponent<Props> {
 
     return (
       <>
-        <div className="gf-form">
-          <InlineFieldRow>
-            <InlineFormLabel width={10}>Topic</InlineFormLabel>
-            <input
-              className="gf-form-input width-14"
+        <InlineFieldRow>
+          <InlineField label="Topic" labelWidth={10} tooltip="Kafka topic name">
+            <Input
+              id="query-editor-topic"
               value={topicName || ''}
               onChange={this.onTopicNameChange}
               type="text"
+              width={20}
+              placeholder="Enter topic name"
             />
-            <InlineFormLabel width={10}>Partition</InlineFormLabel>
-            <input
-              className="gf-form-input width-14"
+          </InlineField>
+          <InlineField label="Partition" labelWidth={10} tooltip="Kafka partition number">
+            <Input
+              id="query-editor-partition"
               value={partition}
               onChange={this.onPartitionChange}
               type="number"
-              step="1"
-              min="0"
+              width={10}
+              min={0}
+              step={1}
+              placeholder="0"
             />
-          </InlineFieldRow>
-        </div>
-        <div className="gf-form">
-          <InlineFieldRow>
-            <InlineFormLabel
-              className="width-5"
-              tooltip="Starting offset to consume that can be from latest or last 100."
-            >
-              Auto offset reset
-            </InlineFormLabel>
-            <div className="gf-form--has-input-icon">
-              <Select
-                className="width-14"
-                value={this.resolveAutoResetOffset(autoOffsetReset)}
-                options={autoResetOffsets}
-                defaultValue={autoResetOffsets[0]}
-                onChange={this.onAutoResetOffsetChanged}
-              />
-            </div>
-            <InlineFormLabel tooltip="Timestamp of the kafka value to visualize.">Timestamp Mode</InlineFormLabel>
-            <div className="gf-form--has-input-icon">
-              <Select
-                className="width-14"
-                value={this.resolveTimestampMode(timestampMode)}
-                options={timestampModes}
-                defaultValue={timestampModes[0]}
-                onChange={this.onTimestampModeChanged}
-              />
-            </div>
-          </InlineFieldRow>
-        </div>
+          </InlineField>
+        </InlineFieldRow>
+        <InlineFieldRow>
+          <InlineField label="Auto offset reset" labelWidth={20} tooltip="Starting offset to consume that can be from latest or last 100.">
+            <Combobox
+              width={22}
+              value={this.resolveAutoResetOffset(autoOffsetReset)}
+              options={autoResetOffsets}
+              onChange={this.onAutoResetOffsetChanged}
+            />
+          </InlineField>
+          <InlineField label="Timestamp Mode" labelWidth={20} tooltip="Timestamp of the kafka value to visualize.">
+            <Combobox
+              width={25}
+              value={this.resolveTimestampMode(timestampMode)}
+              options={timestampModes}
+              onChange={this.onTimestampModeChanged}
+            />
+          </InlineField>
+        </InlineFieldRow>
       </>
     );
   }

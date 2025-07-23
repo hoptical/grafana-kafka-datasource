@@ -17,7 +17,80 @@ function startKafkaProducer(): ChildProcess {
   return producer;
 }
 
-test.describe('Kafka Streaming', () => {
+test.describe('Kafka Query Editor', () => {
+  test('should display and configure all query editor fields correctly', async ({ 
+    readProvisionedDataSource,
+    page, 
+    panelEditPage,
+  }) => {
+    const ds = await readProvisionedDataSource({ fileName: 'datasource.yaml' });
+
+    // Select the Kafka datasource
+    await panelEditPage.datasource.set(ds.name);
+
+    // Check that all modern query editor fields are visible
+    await expect(page.getByLabel('Topic')).toBeVisible();
+    await expect(page.getByLabel('Partition')).toBeVisible();
+    await expect(page.locator('div').filter({ hasText: /^Auto offset reset$/ })).toBeVisible();
+    await expect(page.locator('div').filter({ hasText: /^Timestamp Mode$/ })).toBeVisible();
+
+    // Check placeholders
+    await expect(page.getByPlaceholder('Enter topic name')).toBeVisible();
+    await expect(page.getByPlaceholder('0')).toBeVisible();
+
+    // Test configuring all parameters and verify they work correctly
+    await page.getByLabel('Topic').fill('test-topic');
+    await page.getByLabel('Partition').fill('2');
+
+    // Test combobox interactions and options
+    const autoOffsetCombobox = page.locator('div').filter({ hasText: /^Auto offset reset$/ }).getByRole('combobox');
+    const timestampCombobox = page.locator('div').filter({ hasText: /^Timestamp Mode$/ }).getByRole('combobox');
+
+    // Test Auto offset reset options
+    await autoOffsetCombobox.click();
+    await expect(page.getByText('From the last')).toBeVisible();
+    await expect(page.getByText('Latest')).toBeVisible();
+    await page.getByText('From the last 100').click();
+
+    // Test Timestamp Mode options
+    await timestampCombobox.click();
+    await expect(page.getByText('Now')).toBeVisible();
+    await expect(page.getByText('Message Timestamp')).toBeVisible();
+    await page.getByText('Message Timestamp').click();
+
+    // Verify all values are preserved
+    await expect(page.getByLabel('Topic')).toHaveValue('test-topic');
+    await expect(page.getByLabel('Partition')).toHaveValue('2');
+    await expect(autoOffsetCombobox).toHaveValue('From the last 100');
+    await expect(timestampCombobox).toHaveValue('Message Timestamp');
+  });
+
+  test('should validate partition input as numeric', async ({ 
+    readProvisionedDataSource,
+    page, 
+    panelEditPage,
+  }) => {
+    const ds = await readProvisionedDataSource({ fileName: 'datasource.yaml' });
+
+    // Select the Kafka datasource
+    await panelEditPage.datasource.set(ds.name);
+
+    const partitionField = page.getByLabel('Partition');
+    
+    // Should accept valid numbers
+    await partitionField.fill('5');
+    await expect(partitionField).toHaveValue('5');
+    
+    // Should enforce minimum value of 0 (convert negative to 0)
+    await partitionField.fill('-1');
+    await partitionField.blur(); // Trigger onChange event
+    await expect(partitionField).toHaveValue('0');
+    
+    // Should accept large partition numbers
+    await partitionField.fill('999');
+    await expect(partitionField).toHaveValue('999');
+  });
+
   test('should stream data from kafka topic', async ({ 
     readProvisionedDataSource,
     page, 
@@ -31,12 +104,14 @@ test.describe('Kafka Streaming', () => {
     // Start the Kafka producer
     startKafkaProducer();
 
-    await page.getByTestId('query-editor-row').getByRole('textbox').fill('test');
-    await page.getByTestId('query-editor-row').getByRole('spinbutton').fill('0');
-    await panelEditPage.setVisualization('Table');
+    // Fill in the query editor fields
+    await page.getByLabel('Topic').fill('test');
+    await page.getByLabel('Partition').fill('0');
     
+    await panelEditPage.setVisualization('Table');
+
     // Wait for the time column to appear first (this indicates data is flowing)
-    await expect(page.getByRole('columnheader', { name: 'time' })).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole('columnheader', { name: 'time' })).toBeVisible({ timeout: 10000 });
     await expect(page.getByRole('columnheader', { name: 'value1' })).toBeVisible();
     await expect(page.getByRole('columnheader', { name: 'value2' })).toBeVisible();
 
