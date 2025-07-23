@@ -2,7 +2,7 @@ import { test, expect } from '@grafana/plugin-e2e';
 import { exec, ChildProcess } from 'child_process';
 
 function startKafkaProducer(): ChildProcess {
-  const producer = exec('go run example/go/producer.go -broker localhost:9092 -topic test -connect-timeout 500', { encoding: 'utf-8' });
+  const producer = exec('./dist/producer example/go/producer.go -broker localhost:9092 -topic test -connect-timeout 500', { encoding: 'utf-8' });
   producer.stdout?.on('data', (data) => {
     console.log('[Producer stdout]', data);
   });
