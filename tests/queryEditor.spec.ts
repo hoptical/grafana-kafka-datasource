@@ -1,5 +1,21 @@
 import { test, expect } from '@grafana/plugin-e2e';
-import { exec } from 'child_process';
+import { exec, ChildProcess } from 'child_process';
+
+function startKafkaProducer(): ChildProcess {
+  const producer = exec('go run example/go/producer.go -broker localhost:9092 -topic test -connect-timeout 500', { encoding: 'utf-8' });
+  producer.stdout?.on('data', (data) => {
+    console.log('[Producer stdout]', data);
+  });
+  producer.stderr?.on('data', (data) => {
+    console.error('[Producer stderr]', data);
+  });
+  producer.on('exit', (code) => {
+    if (code !== 0) {
+      throw new Error(`Kafka producer exited with code ${code}`);
+    }
+  });
+  return producer;
+}
 
 test.describe('Kafka Streaming', () => {
   test('should stream data from kafka topic', async ({ 
@@ -13,14 +29,11 @@ test.describe('Kafka Streaming', () => {
     await panelEditPage.datasource.set(ds.name);
 
     // Start the Kafka producer
-    const _ = exec('go run example/go/producer.go -broker localhost:9092 -topic test', { encoding: 'utf-8' });
+    startKafkaProducer();
 
     await page.getByTestId('query-editor-row').getByRole('textbox').fill('test');
     await page.getByTestId('query-editor-row').getByRole('spinbutton').fill('0');
     await panelEditPage.setVisualization('Table');
-    
-    // Wait for data to appear in the panel - check individual column headers
-    console.log('Checking for column headers...');
     
     // Wait for the time column to appear first (this indicates data is flowing)
     await expect(page.getByRole('columnheader', { name: 'time' })).toBeVisible({ timeout: 5000 });
