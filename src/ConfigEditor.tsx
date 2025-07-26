@@ -151,7 +151,7 @@ export class ConfigEditor extends PureComponent<Props, State> {
             id="config-editor-security-protocol"
             onChange={this.onSecurityProtocolChange}
             value={jsonData.securityProtocol}
-            placeholder="PLAINTEXT or SASL_SSL"
+            placeholder="PLAINTEXT | SASL_PLAINTEXT"
             width={40}
           />
         </InlineField>
@@ -161,7 +161,7 @@ export class ConfigEditor extends PureComponent<Props, State> {
             id="config-editor-sasl-mechanisms"
             onChange={this.onSaslMechanismsChange}
             value={jsonData.saslMechanisms}
-            placeholder="PLAIN or SCRAM-SHA-512"
+            placeholder="PLAIN | SCRAM-SHA-512"
             width={40}
           />
         </InlineField>
@@ -208,7 +208,7 @@ export class ConfigEditor extends PureComponent<Props, State> {
             id="config-editor-log-level"
             onChange={this.onLogLevelChange}
             value={jsonData.logLevel}
-            placeholder="debug or error"
+            placeholder="debug | error"
             width={40}
           />
         </InlineField>

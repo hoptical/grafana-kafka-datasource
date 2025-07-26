@@ -28,33 +28,16 @@ The plugin will be installed into your grafana plugins directory; the default is
 
 Alternatively, you can manually download the [latest](https://github.com/hoptical/grafana-kafka-datasource/releases/latest) release .zip file and unpack it into your grafana plugins directory; the default is `/var/lib/grafana/plugins`.
 
-## Configure the data source
+## Configure and use the plugin
 
-[Add a data source](https://grafana.com/docs/grafana/latest/datasources/add-a-data-source/) by filling in the following fields:
+For configuration and usage instructions, please refer to the [README.md](src/README.md) file in the `src` directory of this repository.
 
-### Basic Fields
-
-| Field | Description                                        |
-| ----- | -------------------------------------------------- |
-| Name  | A name for this particular AppDynamics data source |
-| Servers  | The URL of the Kafka bootstrap servers separated by comma. E.g. `broker1:9092, broker2:9092`              |
-
-### Query the Data source
-
-To query the Kafka topic, you have to config the below items in the query editor.
-
-| Field | Description                                        |
-| ----- | -------------------------------------------------- |
-| Topic  | Topic Name |
-| Partition  | Partition Number |
-| Auto offset reset | Starting offset to consume that can be from latest or last 100. |
-| Timestamp Mode | Timestamp of the message value to visualize; It can be Now or Message Timestamp
+## Screenshots
 
 ![kafka dashboard](https://raw.githubusercontent.com/hoptical/grafana-kafka-datasource/86ea8d360bfd67cfed41004f80adc39219983210/src/img/graph.gif)
 
 ## Known limitations
 
-- The plugin currently does not support any authorization and authentication method.
 - The plugin currently does not support TLS.
 
 This plugin supports topics publishing very simple JSON formatted messages. Note that only the following structure is supported as of now:
@@ -172,7 +155,7 @@ A data source backend plugin consists of both frontend and backend components.
    ``mage -v buildAll`` builds for all platforms at once.
    
 Grafana will be available on `localhost:3000` with plugin already installed.  
-Kafka will be available on `localhost:9092` for localhost connections and on `kafka:29092` for docker connections.
+Kafka will be available on `localhost:9094` for localhost connections and on `kafka:9092` for docker connections.
 
 ## License
 
