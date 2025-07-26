@@ -19,8 +19,10 @@ type Data struct {
 	Value2 float64 `json:"value2"`
 }
 
-func createTopicIfNotExists(brokerURL, topic string, partitions int) error {
-	conn, err := kafka.Dial("tcp", brokerURL)
+func createTopicIfNotExists(brokerURL, topic string, partitions int, timeout time.Duration) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	conn, err := kafka.DialContext(ctx, "tcp", brokerURL)
 	if err != nil {
 		return fmt.Errorf("failed to dial leader: %w", err)
 	}
@@ -31,7 +33,10 @@ func createTopicIfNotExists(brokerURL, topic string, partitions int) error {
 		return fmt.Errorf("failed to get controller: %w", err)
 	}
 
-	controllerConn, err := kafka.Dial("tcp", net.JoinHostPort(controller.Host, strconv.Itoa(controller.Port)))
+	controllerAddr := net.JoinHostPort(controller.Host, strconv.Itoa(controller.Port))
+	ctx2, cancel2 := context.WithTimeout(context.Background(), timeout)
+	defer cancel2()
+	controllerConn, err := kafka.DialContext(ctx2, "tcp", controllerAddr)
 	if err != nil {
 		return fmt.Errorf("failed to dial controller: %w", err)
 	}
@@ -54,15 +59,17 @@ func createTopicIfNotExists(brokerURL, topic string, partitions int) error {
 
 func main() {
 	// Define command line flags with default values
-	brokerURL := flag.String("broker", "localhost:9092", "Kafka broker URL")
+	brokerURL := flag.String("broker", "localhost:9094", "Kafka broker URL")
 	topic := flag.String("topic", "test", "Kafka topic name")
 	sleepTime := flag.Int("interval", 500, "Sleep interval in milliseconds")
 	numPartitions := flag.Int("num-partitions", 1, "Number of partitions when creating topic")
 	valuesOffset := flag.Float64("values-offset", 1.0, "Offset for the values")
+	connectTimeout := flag.Int("connect-timeout", 5000, "Broker connect timeout in milliseconds")
 	flag.Parse()
 
 	// Create topic if it doesn't exist
-	if err := createTopicIfNotExists(*brokerURL, *topic, *numPartitions); err != nil {
+	timeout := time.Duration(*connectTimeout) * time.Millisecond
+	if err := createTopicIfNotExists(*brokerURL, *topic, *numPartitions, timeout); err != nil {
 		fmt.Printf("Error: Failed to create/verify topic: %v\n", err)
 		os.Exit(1)
 	}

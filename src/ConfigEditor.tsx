@@ -1,10 +1,8 @@
 import React, { ChangeEvent, PureComponent } from 'react';
-import { LegacyForms } from '@grafana/ui';
+import { InlineField, Input, SecretInput } from '@grafana/ui';
 import { DataSourcePluginOptionsEditorProps } from '@grafana/data';
 import { KafkaDataSourceOptions, KafkaSecureJsonData, defaultDataSourceOptions } from './types';
 import { defaults } from 'lodash';
-
-const { SecretFormField, FormField } = LegacyForms;
 
 interface Props extends DataSourcePluginOptionsEditorProps<KafkaDataSourceOptions> { }
 
@@ -83,9 +81,12 @@ export class ConfigEditor extends PureComponent<Props, State> {
 
   onHealthcheckTimeoutChange = (event: ChangeEvent<HTMLInputElement>) => {
     const { onOptionsChange, options } = this.props;
+    const value = parseFloat(event.target.value);
+    // Ensure non-negative values only
+    const validatedValue = value < 0 ? 0 : value;
     const jsonData = {
       ...options.jsonData,
-      healthcheckTimeout: parseFloat(event.target.value),
+      healthcheckTimeout: validatedValue,
     };
     onOptionsChange({ ...options, jsonData });
   };
@@ -123,100 +124,106 @@ export class ConfigEditor extends PureComponent<Props, State> {
     const jsonData = defaults(options.jsonData, defaultDataSourceOptions);
     const secureJsonData = (options.secureJsonData || {}) as KafkaSecureJsonData;
 
+    // Define label widths for different sections
+    const connectionLabelWidth = 20;
+    const authenticationLabelWidth = 25;
+    const advancedLabelWidth = 30;
+
     return (
       <div className="gf-form-group">
-        <div className="gf-form">
-          <FormField
-            label="Servers"
-            labelWidth={11}
+        {/* Connection Configuration Section */}
+        <h3 className="page-heading">Connection</h3>
+
+        <InlineField label="Bootstrap Servers" labelWidth={connectionLabelWidth} tooltip="Kafka bootstrap servers separated by commas">
+          <Input
+            id="config-editor-servers"
             onChange={this.onBootstrapServersChange}
             value={jsonData.bootstrapServers}
             placeholder="broker1:9092, broker2:9092"
-            inputWidth={30}
+            width={40}
           />
-        </div>
+        </InlineField>
 
-        <div className="gf-form">
-          <FormField
-            label="Security Protocol"
-            labelWidth={11}
+        {/* Authentication Section */}
+        <h3 className="page-heading" style={{ marginTop: '32px' }}>Authentication</h3>
+        <InlineField label="Security Protocol" labelWidth={connectionLabelWidth} tooltip="Security protocol for Kafka connection">
+          <Input
+            id="config-editor-security-protocol"
             onChange={this.onSecurityProtocolChange}
             value={jsonData.securityProtocol}
-            placeholder="<PLAINTEXT|SASL_SSL>"
+            placeholder="PLAINTEXT | SASL_PLAINTEXT"
+            width={40}
           />
-        </div>
+        </InlineField>
 
-        <div className="gf-form">
-          <FormField
-            label="SASL Mechanisms"
-            labelWidth={11}
+        <InlineField label="SASL Mechanisms" labelWidth={authenticationLabelWidth} tooltip="SASL authentication mechanism">
+          <Input
+            id="config-editor-sasl-mechanisms"
             onChange={this.onSaslMechanismsChange}
             value={jsonData.saslMechanisms}
-            placeholder="<PLAIN|SCRAM-SHA-512>"
+            placeholder="PLAIN | SCRAM-SHA-512"
+            width={40}
           />
-        </div>
+        </InlineField>
 
-        <div className="gf-form">
-          <FormField
-            label="SASL Username"
-            labelWidth={11}
+        <InlineField label="SASL Username" labelWidth={authenticationLabelWidth} tooltip="SASL username for authentication">
+          <Input
+            id="config-editor-sasl-username"
             onChange={this.onSaslUsernameChange}
             value={jsonData.saslUsername}
-            placeholder="<SASL Username>"
+            placeholder="SASL Username"
+            width={40}
           />
-        </div>
+        </InlineField>
 
-        <div className="gf-form-inline">
-          <div className="gf-form">
-            <SecretFormField
-              isConfigured={(secureJsonFields && secureJsonFields.saslPassword) as boolean}
-              value={secureJsonData.saslPassword || ''}
-              label="SASL Password"
-              placeholder="<SASL Password>"
-              labelWidth={11}
-              inputWidth={20}
-              onReset={this.onResetSaslPassword}
-              onChange={this.onSaslPasswordChange}
-            />
-          </div>
-        </div>
-        
-        <div className="gf-form-inline">
-          <div className="gf-form">
-            <SecretFormField
-              isConfigured={(secureJsonFields && secureJsonFields.apiKey) as boolean}
-              value={secureJsonData.apiKey || ''}
-              label="API Key (Deprecated)"
-              placeholder="secure json field (backend only)"
-              labelWidth={11}
-              inputWidth={20}
-              onReset={this.onResetAPIKey}
-              onChange={this.onAPIKeyChange}
-            />
-          </div>
-        </div>
+        <InlineField label="SASL Password" labelWidth={authenticationLabelWidth} tooltip="SASL password for authentication">
+          <SecretInput
+            id="config-editor-sasl-password"
+            isConfigured={(secureJsonFields && secureJsonFields.saslPassword) as boolean}
+            value={secureJsonData.saslPassword || ''}
+            placeholder="SASL Password"
+            width={40}
+            onReset={this.onResetSaslPassword}
+            onChange={this.onSaslPasswordChange}
+          />
+        </InlineField>
 
-        <div className="gf-form">
-          <FormField
-            label="Log Level"
-            labelWidth={11}
+        <InlineField label="API Key (Deprecated)" labelWidth={authenticationLabelWidth} tooltip="Deprecated API key field">
+          <SecretInput
+            id="config-editor-api-key"
+            isConfigured={(secureJsonFields && secureJsonFields.apiKey) as boolean}
+            value={secureJsonData.apiKey || ''}
+            placeholder="secure json field (backend only)"
+            width={40}
+            onReset={this.onResetAPIKey}
+            onChange={this.onAPIKeyChange}
+          />
+        </InlineField>
+
+        {/* Advanced Settings Section */}
+        <h3 className="page-heading" style={{ marginTop: '32px' }}>Advanced Settings</h3>
+
+        <InlineField label="Log Level" labelWidth={advancedLabelWidth} tooltip="Logging level for debugging">
+          <Input
+            id="config-editor-log-level"
             onChange={this.onLogLevelChange}
             value={jsonData.logLevel}
-            placeholder="<debug|error>"
+            placeholder="debug | error"
+            width={40}
           />
-        </div>
+        </InlineField>
 
-        <div className="gf-form">
-          <FormField
-            label="Healthcheck Timeout (ms)"
-            labelWidth={11}
+        <InlineField label="Healthcheck Timeout (ms)" labelWidth={advancedLabelWidth} tooltip="Timeout for health check in milliseconds (non-negative values only)">
+          <Input
+            id="config-editor-healthcheck-timeout"
             onChange={this.onHealthcheckTimeoutChange}
             value={jsonData.healthcheckTimeout}
             type="number"
-            step="1"
-            min="0"
+            step={1}
+            min={0}
+            width={40}
           />
-        </div>
+        </InlineField>
       </div>
     );
   }

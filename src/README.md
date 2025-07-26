@@ -16,8 +16,8 @@ For the installation process, please refer to the [plugin installation docs](htt
 
 After installation, configure the plugin by adding a new Kafka data source in Grafana and filling out the following fields:
 
-- **Servers**: Comma-separated list of Kafka bootstrap servers (e.g. `broker1:9092, broker2:9092`)
-- **Security Protocol**: Choose the protocol (e.g. `PLAINTEXT`, `SASL_SSL`)
+- **Bootstrap Servers**: Comma-separated list of Kafka bootstrap servers (e.g. `broker1:9092, broker2:9092`)
+- **Security Protocol**: Choose the protocol (e.g. `PLAINTEXT`, `SASL_PLAINTEXT`)
 - **SASL Mechanisms**: Specify SASL mechanism if required (e.g. `PLAIN`, `SCRAM-SHA-512`)
 - **SASL Username/Password**: Provide credentials if SASL authentication is enabled
 - **Log Level**: Set log verbosity (`debug`, `error`)
