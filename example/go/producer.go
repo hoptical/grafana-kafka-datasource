@@ -59,7 +59,7 @@ func createTopicIfNotExists(brokerURL, topic string, partitions int, timeout tim
 
 func main() {
 	// Define command line flags with default values
-	brokerURL := flag.String("broker", "localhost:9092", "Kafka broker URL")
+	brokerURL := flag.String("broker", "localhost:9094", "Kafka broker URL")
 	topic := flag.String("topic", "test", "Kafka topic name")
 	sleepTime := flag.Int("interval", 500, "Sleep interval in milliseconds")
 	numPartitions := flag.Int("num-partitions", 1, "Number of partitions when creating topic")
