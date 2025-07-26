@@ -10,7 +10,7 @@ test.describe('Kafka Config Editor', () => {
     const configPage = await createDataSourceConfigPage({ type: ds.type });
 
     // Fill in the required fields
-    await page.getByRole('textbox', { name: 'Bootstrap Servers' }).fill('kafka:29092');
+    await page.getByRole('textbox', { name: 'Bootstrap Servers' }).fill('kafka:9092');
     await page.getByRole('textbox', { name: 'Log Level' }).fill('error');
     await page.getByRole('spinbutton', { name: 'Healthcheck Timeout (ms)' }).fill('2000');
 
@@ -103,7 +103,7 @@ test.describe('Kafka Config Editor', () => {
     const configPage = await createDataSourceConfigPage({ type: ds.type });
 
     // Fill in all configuration fields
-    const bootstrapServers = 'kafka:29092';
+    const bootstrapServers = 'kafka:9092';
     const securityProtocol = 'SASL_SSL';
     const saslMechanisms = 'PLAIN';
     const saslUsername = 'testuser';
@@ -128,4 +128,47 @@ test.describe('Kafka Config Editor', () => {
     await expect(page.getByRole('textbox', { name: 'Log Level' })).toHaveValue(logLevel);
     await expect(page.getByRole('spinbutton', { name: 'Healthcheck Timeout (ms)' })).toHaveValue(healthcheckTimeout);
   });
+
+  test('should allow configuring datasource with SASL_PLAINTEXT and SCRAM-SHA-512', async ({
+    createDataSourceConfigPage,
+    readProvisionedDataSource,
+    page
+  }) => {
+    const ds = await readProvisionedDataSource({ fileName: 'datasource.yaml' });
+    const configPage = await createDataSourceConfigPage({ type: ds.type });
+
+    // Fill in the required fields for SASL_PLAINTEXT with SCRAM-SHA-512
+    await page.getByRole('textbox', { name: 'Bootstrap Servers' }).fill('kafka:29092');
+    await page.getByRole('textbox', { name: 'Security Protocol' }).fill('SASL_PLAINTEXT');
+    await page.getByRole('textbox', { name: 'SASL Mechanisms' }).fill('SCRAM-SHA-512');
+    await page.getByRole('textbox', { name: 'SASL Username' }).fill('testuser');
+    await page.getByPlaceholder('SASL Password').fill('testpass');
+    await page.getByRole('textbox', { name: 'Log Level' }).fill('info');
+    await page.getByRole('spinbutton', { name: 'Healthcheck Timeout (ms)' }).fill('2000');
+
+    // Save & test the data source
+    await expect(configPage.saveAndTest()).toBeOK();
+  });
+
+  test('Must not allow configuring datasource with SASL_PLAINTEXT with wrong credentials', async ({
+    createDataSourceConfigPage,
+    readProvisionedDataSource,
+    page
+  }) => {
+    const ds = await readProvisionedDataSource({ fileName: 'datasource.yaml' });
+    const configPage = await createDataSourceConfigPage({ type: ds.type });
+
+    // Fill in the required fields for SASL_PLAINTEXT with SCRAM-SHA-512
+    await page.getByRole('textbox', { name: 'Bootstrap Servers' }).fill('kafka:29092');
+    await page.getByRole('textbox', { name: 'Security Protocol' }).fill('SASL_PLAINTEXT');
+    await page.getByRole('textbox', { name: 'SASL Mechanisms' }).fill('SCRAM-SHA-512');
+    await page.getByRole('textbox', { name: 'SASL Username' }).fill('testuser');
+    await page.getByPlaceholder('SASL Password').fill('wrongpass');
+    await page.getByRole('textbox', { name: 'Log Level' }).fill('info');
+    await page.getByRole('spinbutton', { name: 'Healthcheck Timeout (ms)' }).fill('2000');
+
+    // Save & test the data source
+    await expect(configPage.saveAndTest()).not.toBeOK();
+  });
+
 });

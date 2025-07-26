@@ -2,7 +2,7 @@ import { test, expect } from '@grafana/plugin-e2e';
 import { exec, ChildProcess } from 'child_process';
 
 function startKafkaProducer(): ChildProcess {
-  const producer = exec('./dist/producer example/go/producer.go -broker localhost:9092 -topic test -connect-timeout 500', { encoding: 'utf-8' });
+  const producer = exec('./dist/producer -broker localhost:9094 -topic test -connect-timeout 500', { encoding: 'utf-8' });
   producer.stdout?.on('data', (data) => {
     console.log('[Producer stdout]', data);
   });
@@ -103,6 +103,8 @@ test.describe('Kafka Query Editor', () => {
 
     // Start the Kafka producer
     startKafkaProducer();
+    // Wait for some data to be produced
+    await new Promise(resolve => setTimeout(resolve, 3000));
 
     // Fill in the query editor fields
     await page.getByLabel('Topic').fill('test');
