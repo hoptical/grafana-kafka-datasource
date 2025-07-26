@@ -22,10 +22,10 @@ go run producer.go -broker <broker> -topic <topic> -interval <interval in millis
 
 > Note: The producer will create the topic if it does not exist.
 
-For example, to produce messages to `test` topic on `localhost:9092` with 3 partitions:
+For example, to produce messages to `test` topic on `localhost:9094` with 3 partitions:
 
 ```bash
-go run producer.go -broker localhost:9092 -topic test -interval 500 -num-partitions 3
+go run producer.go -broker localhost:9094 -topic test -interval 500 -num-partitions 3
 ```
 ## Python
 

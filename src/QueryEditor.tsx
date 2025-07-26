@@ -38,9 +38,9 @@ export class QueryEditor extends PureComponent<Props> {
 
   onPartitionChange = (event: ChangeEvent<HTMLInputElement>) => {
     const { onChange, query, onRunQuery } = this.props;
-    const value = parseFloat(event.target.value);
-    // Ensure partition is non-negative
-    const partition = value < 0 ? 0 : value;
+    const value = parseInt(event.target.value, 10);
+    // Ensure partition is a valid non-negative integer
+    const partition = isNaN(value) || value < 0 ? 0 : value;
     onChange({ ...query, partition });
     onRunQuery();
   };

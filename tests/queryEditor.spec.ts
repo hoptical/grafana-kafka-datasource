@@ -1,8 +1,16 @@
 import { test, expect } from '@grafana/plugin-e2e';
 import { exec, ChildProcess } from 'child_process';
+import { accessSync, constants } from 'fs';
 
 function startKafkaProducer(): ChildProcess {
-  const producer = exec('./dist/producer -broker localhost:9094 -topic test -connect-timeout 500', { encoding: 'utf-8' });
+    const producerPath = './dist/producer';
+  try {
+    accessSync(producerPath, constants.X_OK); // Check if file exists and is executable
+  } catch (err) {
+    throw new Error(`Kafka producer executable not found or not executable at path: ${producerPath}`);
+  }
+  const producer = exec(`${producerPath} -broker localhost:9094 -topic test -connect-timeout 500`, { encoding: 'utf-8' });
+
   producer.stdout?.on('data', (data) => {
     console.log('[Producer stdout]', data);
   });
