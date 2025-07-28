@@ -41,8 +41,64 @@ func getDatasourceSettings(s backend.DataSourceInstanceSettings) (*kafka_client.
 		return nil, err
 	}
 
-	if sasl_password, exists := s.DecryptedSecureJSONData["saslPassword"]; exists {
-		settings.SaslPassword = sasl_password
+	// Handle secure JSON data
+	if saslPassword, exists := s.DecryptedSecureJSONData["saslPassword"]; exists {
+		settings.SaslPassword = saslPassword
+	}
+
+	// TLS certificate fields from secure JSON data
+	if caCert, exists := s.DecryptedSecureJSONData["tlsCACert"]; exists {
+		settings.TLSCACert = caCert
+	}
+	if clientCert, exists := s.DecryptedSecureJSONData["tlsClientCert"]; exists {
+		settings.TLSClientCert = clientCert
+	}
+	if clientKey, exists := s.DecryptedSecureJSONData["tlsClientKey"]; exists {
+		settings.TLSClientKey = clientKey
+	}
+
+	// Parse the JSONData to handle specific field types
+	var jsonData map[string]interface{}
+	if err := json.Unmarshal(s.JSONData, &jsonData); err != nil {
+		return nil, fmt.Errorf("failed to parse JSON data: %w", err)
+	}
+
+	// Handle boolean fields that might come as different types from JSON
+	if val, exists := jsonData["tlsSkipVerify"]; exists {
+		if b, ok := val.(bool); ok {
+			settings.TLSSkipVerify = b
+		} else if str, ok := val.(string); ok && str == "true" {
+			settings.TLSSkipVerify = true
+		}
+	}
+
+	if val, exists := jsonData["tlsAuthWithCACert"]; exists {
+		if b, ok := val.(bool); ok {
+			settings.TLSAuthWithCACert = b
+		} else if str, ok := val.(string); ok && str == "true" {
+			settings.TLSAuthWithCACert = true
+		}
+	}
+
+	if val, exists := jsonData["tlsAuth"]; exists {
+		if b, ok := val.(bool); ok {
+			settings.TLSAuth = b
+		} else if str, ok := val.(string); ok && str == "true" {
+			settings.TLSAuth = true
+		}
+	}
+
+	// Handle array fields
+	if val, exists := jsonData["keepCookies"]; exists {
+		if cookiesArr, ok := val.([]interface{}); ok {
+			cookies := make([]string, len(cookiesArr))
+			for i, cookie := range cookiesArr {
+				if str, ok := cookie.(string); ok {
+					cookies[i] = str
+				}
+			}
+			settings.KeepCookies = cookies
+		}
 	}
 
 	return settings, nil
