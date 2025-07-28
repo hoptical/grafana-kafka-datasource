@@ -11,20 +11,28 @@ import (
 
 func TestQueryData(t *testing.T) {
 	ds := plugin.KafkaDatasource{}
-
+	// Simulate a query with TLS and clientId config in JSONData
+	jsonData := map[string]interface{}{
+		"clientId":          "test-client",
+		"tlsAuthWithCACert": true,
+		"tlsAuth":           true,
+		"tlsSkipVerify":     true,
+		"serverName":        "test-server",
+		"keepCookies":       []string{"cookie1", "cookie2"},
+		"timeout":           1234,
+	}
+	jsonBytes, _ := json.Marshal(jsonData)
 	resp, err := ds.QueryData(
 		context.Background(),
 		&backend.QueryDataRequest{
 			Queries: []backend.DataQuery{
-				{RefID: "A"},
+				{RefID: "A", JSON: jsonBytes},
 			},
 		},
 	)
-
 	if err != nil {
 		t.Error(err)
 	}
-
 	if len(resp.Responses) != 1 {
 		t.Fatal("QueryData must return a response")
 	}
@@ -32,9 +40,22 @@ func TestQueryData(t *testing.T) {
 
 func TestCheckHealth_OK(t *testing.T) {
 	ds := plugin.KafkaDatasource{}
+	// Simulate DataSourceInstanceSettings with TLS and clientId config
+	jsonData := map[string]interface{}{
+		"clientId":          "test-client",
+		"tlsAuthWithCACert": true,
+		"tlsAuth":           true,
+		"tlsSkipVerify":     true,
+		"serverName":        "test-server",
+		"keepCookies":       []string{"cookie1", "cookie2"},
+		"timeout":           1234,
+	}
+	jsonBytes, _ := json.Marshal(jsonData)
 	result, err := ds.CheckHealth(context.Background(), &backend.CheckHealthRequest{
 		PluginContext: backend.PluginContext{
-			DataSourceInstanceSettings: &backend.DataSourceInstanceSettings{},
+			DataSourceInstanceSettings: &backend.DataSourceInstanceSettings{
+				JSONData: jsonBytes,
+			},
 		},
 	})
 	if err != nil {

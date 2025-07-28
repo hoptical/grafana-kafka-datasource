@@ -5,10 +5,52 @@ import (
 )
 
 func TestNewKafkaClient_Defaults(t *testing.T) {
-	options := Options{BootstrapServers: "localhost:9092"}
+	options := Options{
+		BootstrapServers:  "localhost:9092",
+		ClientId:          "test-client",
+		TLSAuthWithCACert: true,
+		TLSAuth:           true,
+		TLSSkipVerify:     true,
+		ServerName:        "test-server",
+		TLSCACert:         "test-ca-cert",
+		TLSClientCert:     "test-client-cert",
+		TLSClientKey:      "test-client-key",
+		KeepCookies:       []string{"cookie1", "cookie2"},
+		Timeout:           1234,
+	}
 	client := NewKafkaClient(options)
 	if client.BootstrapServers != "localhost:9092" {
 		t.Errorf("Expected BootstrapServers to be 'localhost:9092', got %s", client.BootstrapServers)
+	}
+	if client.ClientId != "test-client" {
+		t.Errorf("Expected ClientId to be 'test-client', got %s", client.ClientId)
+	}
+	if !client.TLSAuthWithCACert {
+		t.Error("Expected TLSAuthWithCACert to be true")
+	}
+	if !client.TLSAuth {
+		t.Error("Expected TLSAuth to be true")
+	}
+	if !client.TLSSkipVerify {
+		t.Error("Expected TLSSkipVerify to be true")
+	}
+	if client.ServerName != "test-server" {
+		t.Errorf("Expected ServerName to be 'test-server', got %s", client.ServerName)
+	}
+	if client.TLSCACert != "test-ca-cert" {
+		t.Errorf("Expected TLSCACert to be 'test-ca-cert', got %s", client.TLSCACert)
+	}
+	if client.TLSClientCert != "test-client-cert" {
+		t.Errorf("Expected TLSClientCert to be 'test-client-cert', got %s", client.TLSClientCert)
+	}
+	if client.TLSClientKey != "test-client-key" {
+		t.Errorf("Expected TLSClientKey to be 'test-client-key', got %s", client.TLSClientKey)
+	}
+	if len(client.KeepCookies) != 2 || client.KeepCookies[0] != "cookie1" || client.KeepCookies[1] != "cookie2" {
+		t.Errorf("Expected KeepCookies to be ['cookie1','cookie2'], got %v", client.KeepCookies)
+	}
+	if client.Timeout != 1234 {
+		t.Errorf("Expected Timeout to be 1234, got %d", client.Timeout)
 	}
 	if client.HealthcheckTimeout <= 0 {
 		t.Error("Expected HealthcheckTimeout to be set to default if not provided")
