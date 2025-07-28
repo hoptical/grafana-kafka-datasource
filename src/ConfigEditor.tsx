@@ -396,23 +396,25 @@ export const ConfigEditor = (props: Props) => {
             </InlineField>
 
             {jsonData.tlsAuthWithCACert && (
-              <InlineField 
-                label="CA Certificate" 
-                labelWidth={30} 
-                tooltip="Certificate Authority certificate"
-                htmlFor="config-editor-tls-ca-cert"
-                interactive
-                grow
-              >
-                <SecretTextArea
-                  id="config-editor-tls-ca-cert"
-                  isConfigured={(secureJsonFields && secureJsonFields.tlsCACert) as boolean}
-                  onReset={onResetTlsCACert}
-                  onChange={(e) => onTlsCACertChange(e as ChangeEvent<HTMLTextAreaElement>)}
-                  placeholder="Begins with -----BEGIN CERTIFICATE-----"
-                  rows={6}
-                />
-              </InlineField>
+              <div style={{ marginLeft: '40px' }}>
+                <InlineField 
+                  label="CA Certificate" 
+                  labelWidth={30} 
+                  tooltip="Certificate Authority certificate"
+                  htmlFor="config-editor-tls-ca-cert"
+                  interactive
+                  grow
+                >
+                  <SecretTextArea
+                    id="config-editor-tls-ca-cert"
+                    isConfigured={(secureJsonFields && secureJsonFields.tlsCACert) as boolean}
+                    onReset={onResetTlsCACert}
+                    onChange={(e) => onTlsCACertChange(e as ChangeEvent<HTMLTextAreaElement>)}
+                    placeholder="Begins with -----BEGIN CERTIFICATE-----"
+                    rows={6}
+                  />
+                </InlineField>
+              </div>
             )}
 
             <InlineField 
@@ -428,7 +430,7 @@ export const ConfigEditor = (props: Props) => {
             </InlineField>
 
             {jsonData.tlsAuth && (
-              <>
+              <div style={{ marginLeft: '40px' }}>
                 <InlineField 
                   label="Server Name" 
                   labelWidth={30} 
@@ -481,7 +483,7 @@ export const ConfigEditor = (props: Props) => {
                     rows={6}
                   />
                 </InlineField>
-              </>
+              </div>
             )}
           </>
         )}
