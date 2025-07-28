@@ -1,6 +1,6 @@
 import React, { ChangeEvent, useEffect } from 'react';
-import { InlineField, Input, Divider, Select, SecretInput, Checkbox, SecretTextArea } from '@grafana/ui';
-import { DataSourcePluginOptionsEditorProps, SelectableValue } from '@grafana/data';
+import { InlineField, Input, Divider, Combobox, SecretInput, Checkbox, SecretTextArea } from '@grafana/ui';
+import { DataSourcePluginOptionsEditorProps } from '@grafana/data';
 import {
   ConfigSection,
   DataSourceDescription,
@@ -11,7 +11,7 @@ import { defaults } from 'lodash';
 interface Props extends DataSourcePluginOptionsEditorProps<KafkaDataSourceOptions> { }
 
 // Security Protocol options
-const SECURITY_PROTOCOL_OPTIONS: SelectableValue[] = [
+const SECURITY_PROTOCOL_OPTIONS = [
   { label: 'PLAINTEXT', value: 'PLAINTEXT', description: 'No authentication or encryption' },
   { label: 'SSL', value: 'SSL', description: 'SSL encryption without SASL authentication' },
   { label: 'SASL_PLAINTEXT', value: 'SASL_PLAINTEXT', description: 'SASL authentication without encryption' },
@@ -19,7 +19,7 @@ const SECURITY_PROTOCOL_OPTIONS: SelectableValue[] = [
 ];
 
 // SASL Mechanism options
-const SASL_MECHANISM_OPTIONS: SelectableValue[] = [
+const SASL_MECHANISM_OPTIONS = [
   { label: 'PLAIN', value: 'PLAIN', description: 'Simple username/password authentication' },
   { label: 'SCRAM-SHA-256', value: 'SCRAM-SHA-256', description: 'SCRAM with SHA-256' },
   { label: 'SCRAM-SHA-512', value: 'SCRAM-SHA-512', description: 'SCRAM with SHA-512' },
@@ -48,22 +48,6 @@ export const ConfigEditor = (props: Props) => {
     const jsonData = {
       ...options.jsonData,
       clientId: event.target.value,
-    };
-    onOptionsChange({ ...options, jsonData });
-  };
-
-  const onSecurityProtocolChange = (option: SelectableValue) => {
-    const jsonData = {
-      ...options.jsonData,
-      securityProtocol: option.value || 'PLAINTEXT',
-    };
-    onOptionsChange({ ...options, jsonData });
-  };
-
-  const onSaslMechanismChange = (option: SelectableValue) => {
-    const jsonData = {
-      ...options.jsonData,
-      saslMechanisms: option.value || '',
     };
     onOptionsChange({ ...options, jsonData });
   };
@@ -295,10 +279,19 @@ export const ConfigEditor = (props: Props) => {
           grow
           required
         >
-          <Select
+          <Combobox
             options={SECURITY_PROTOCOL_OPTIONS}
-            value={SECURITY_PROTOCOL_OPTIONS.find(option => option.value === jsonData.securityProtocol)}
-            onChange={onSecurityProtocolChange}
+            value={jsonData.securityProtocol}
+            onChange={(value) => {
+              const protocol = typeof value === 'string' ? value : value.value;
+              onOptionsChange({
+                ...options,
+                jsonData: {
+                  ...options.jsonData,
+                  securityProtocol: protocol || 'PLAINTEXT',
+                },
+              });
+            }}
             placeholder="Select security protocol"
             width={40}
           />
@@ -321,10 +314,18 @@ export const ConfigEditor = (props: Props) => {
               grow
               required
             >
-              <Select
+              <Combobox
                 options={SASL_MECHANISM_OPTIONS}
-                value={SASL_MECHANISM_OPTIONS.find(option => option.value === jsonData.saslMechanisms)}
-                onChange={onSaslMechanismChange}
+                value={jsonData.saslMechanisms || 'PLAIN'}
+                onChange={(value) => {
+                  onOptionsChange({
+                    ...options,
+                    jsonData: {
+                      ...options.jsonData,
+                      saslMechanisms: typeof value === 'string' ? value : value.value,
+                    },
+                  });
+                }}
                 placeholder="Select SASL mechanism"
                 width={40}
               />
@@ -371,32 +372,34 @@ export const ConfigEditor = (props: Props) => {
           <>
             <h4 style={{ marginTop: '20px', marginBottom: '10px' }}>TLS Settings</h4>
             
-            <InlineField 
-              label="Skip TLS Verification" 
-              labelWidth={30} 
-              tooltip="Skip TLS certificate validation (not recommended for production)"
-              grow
-            >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
               <Checkbox
                 value={jsonData.tlsSkipVerify || false}
                 onChange={onTlsSkipVerifyChange}
               />
-            </InlineField>
+              <label style={{ fontSize: '13px' }}>
+                Skip TLS Verification
+                <span style={{ color: '#888', marginLeft: '4px' }} title="Skip TLS certificate validation (not recommended for production)">
+                  ⓘ
+                </span>
+              </label>
+            </div>
 
-            <InlineField 
-              label="Self-signed Certificate" 
-              labelWidth={30} 
-              tooltip="Enable if using self-signed certificates"
-              grow
-            >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
               <Checkbox
                 value={jsonData.tlsAuthWithCACert || false}
                 onChange={onTlsAuthWithCACertChange}
               />
-            </InlineField>
+              <label style={{ fontSize: '13px' }}>
+                Self-signed Certificate
+                <span style={{ color: '#888', marginLeft: '4px' }} title="Enable if using self-signed certificates">
+                  ⓘ
+                </span>
+              </label>
+            </div>
 
             {jsonData.tlsAuthWithCACert && (
-              <div style={{ marginLeft: '40px' }}>
+              <div style={{ marginLeft: '30px' }}>
                 <InlineField 
                   label="CA Certificate" 
                   labelWidth={30} 
@@ -417,20 +420,21 @@ export const ConfigEditor = (props: Props) => {
               </div>
             )}
 
-            <InlineField 
-              label="TLS Client Authentication" 
-              labelWidth={30} 
-              tooltip="Enable TLS client authentication"
-              grow
-            >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
               <Checkbox
                 value={jsonData.tlsAuth || false}
                 onChange={onTlsClientAuthChange}
               />
-            </InlineField>
+              <label style={{ fontSize: '13px' }}>
+                TLS Client Authentication
+                <span style={{ color: '#888', marginLeft: '4px' }} title="Enable TLS client authentication">
+                  ⓘ
+                </span>
+              </label>
+            </div>
 
             {jsonData.tlsAuth && (
-              <div style={{ marginLeft: '40px' }}>
+              <div style={{ marginLeft: '30px' }}>
                 <InlineField 
                   label="Server Name" 
                   labelWidth={30} 
