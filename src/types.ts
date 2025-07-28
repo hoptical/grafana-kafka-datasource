@@ -20,26 +20,46 @@ export type TimestampModeInterface = {
 
 export interface KafkaDataSourceOptions extends DataSourceJsonData {
   bootstrapServers: string;
+  clientId?: string;
   securityProtocol: string;
   saslMechanisms: string;
   saslUsername: string;
   logLevel: string;
   healthcheckTimeout: number;
+  // TLS Configuration
+  tlsAuthWithCACert?: boolean;
+  tlsAuth?: boolean;
+  tlsSkipVerify?: boolean;
+  serverName?: string;
+  // Advanced HTTP settings
+  keepCookies?: string[];
+  timeout?: number;
 }
 
 // Default options used when creating a new Kafka datasource
 export const defaultDataSourceOptions: Partial<KafkaDataSourceOptions> = {
   bootstrapServers: '',
-  securityProtocol: '',
+  clientId: '',
+  securityProtocol: 'PLAINTEXT',
   saslMechanisms: '',
   saslUsername: '',
   logLevel: '',
-  healthcheckTimeout: 2000
+  healthcheckTimeout: 2000,
+  tlsAuthWithCACert: false,
+  tlsAuth: false,
+  tlsSkipVerify: false,
+  serverName: '',
+  keepCookies: [],
+  timeout: 0
 };
 
 export interface KafkaSecureJsonData {
   apiKey?: string; // Deprecated
   saslPassword?: string;
+  // TLS Certificates
+  tlsCACert?: string;
+  tlsClientCert?: string;
+  tlsClientKey?: string;
 }
 
 export interface KafkaQuery extends DataQuery {

@@ -1,16 +1,42 @@
-import React, { ChangeEvent, PureComponent } from 'react';
-import { InlineField, Input, SecretInput } from '@grafana/ui';
-import { DataSourcePluginOptionsEditorProps } from '@grafana/data';
-import { KafkaDataSourceOptions, KafkaSecureJsonData, defaultDataSourceOptions } from './types';
+import React, { ChangeEvent, useEffect } from 'react';
+import { InlineField, Input, Divider, Select, SecretInput, Checkbox, SecretTextArea } from '@grafana/ui';
+import { DataSourcePluginOptionsEditorProps, SelectableValue } from '@grafana/data';
+import {
+  ConfigSection,
+  DataSourceDescription,
+} from '@grafana/plugin-ui';
+import { KafkaDataSourceOptions, defaultDataSourceOptions, KafkaSecureJsonData } from './types';
 import { defaults } from 'lodash';
 
 interface Props extends DataSourcePluginOptionsEditorProps<KafkaDataSourceOptions> { }
 
-interface State { }
+// Security Protocol options
+const SECURITY_PROTOCOL_OPTIONS: SelectableValue[] = [
+  { label: 'PLAINTEXT', value: 'PLAINTEXT', description: 'No authentication or encryption' },
+  { label: 'SSL', value: 'SSL', description: 'SSL encryption without SASL authentication' },
+  { label: 'SASL_PLAINTEXT', value: 'SASL_PLAINTEXT', description: 'SASL authentication without encryption' },
+  { label: 'SASL_SSL', value: 'SASL_SSL', description: 'SASL authentication with SSL encryption' },
+];
 
-export class ConfigEditor extends PureComponent<Props, State> {
-  onBootstrapServersChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const { onOptionsChange, options } = this.props;
+// SASL Mechanism options
+const SASL_MECHANISM_OPTIONS: SelectableValue[] = [
+  { label: 'PLAIN', value: 'PLAIN', description: 'Simple username/password authentication' },
+  { label: 'SCRAM-SHA-256', value: 'SCRAM-SHA-256', description: 'SCRAM with SHA-256' },
+  { label: 'SCRAM-SHA-512', value: 'SCRAM-SHA-512', description: 'SCRAM with SHA-512' },
+];
+
+export const ConfigEditor = (props: Props) => {
+  const { options, onOptionsChange } = props;
+
+  // Ensure default values are set
+  useEffect(() => {
+    const jsonData = defaults(options.jsonData, defaultDataSourceOptions);
+    if (JSON.stringify(options.jsonData) !== JSON.stringify(jsonData)) {
+      onOptionsChange({ ...options, jsonData });
+    }
+  }, [options, onOptionsChange]);
+
+  const onBootstrapServersChange = (event: ChangeEvent<HTMLInputElement>) => {
     const jsonData = {
       ...options.jsonData,
       bootstrapServers: event.target.value,
@@ -18,26 +44,31 @@ export class ConfigEditor extends PureComponent<Props, State> {
     onOptionsChange({ ...options, jsonData });
   };
 
-  onSecurityProtocolChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const { onOptionsChange, options } = this.props;
+  const onClientIdChange = (event: ChangeEvent<HTMLInputElement>) => {
     const jsonData = {
       ...options.jsonData,
-      securityProtocol: event.target.value,
+      clientId: event.target.value,
     };
     onOptionsChange({ ...options, jsonData });
   };
 
-  onSaslMechanismsChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const { onOptionsChange, options } = this.props;
+  const onSecurityProtocolChange = (option: SelectableValue) => {
     const jsonData = {
       ...options.jsonData,
-      saslMechanisms: event.target.value,
+      securityProtocol: option.value || 'PLAINTEXT',
     };
     onOptionsChange({ ...options, jsonData });
   };
 
-  onSaslUsernameChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const { onOptionsChange, options } = this.props;
+  const onSaslMechanismChange = (option: SelectableValue) => {
+    const jsonData = {
+      ...options.jsonData,
+      saslMechanisms: option.value || '',
+    };
+    onOptionsChange({ ...options, jsonData });
+  };
+
+  const onSaslUsernameChange = (event: ChangeEvent<HTMLInputElement>) => {
     const jsonData = {
       ...options.jsonData,
       saslUsername: event.target.value,
@@ -45,18 +76,17 @@ export class ConfigEditor extends PureComponent<Props, State> {
     onOptionsChange({ ...options, jsonData });
   };
 
-  onSaslPasswordChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const { onOptionsChange, options } = this.props;
+  const onSaslPasswordChange = (event: ChangeEvent<HTMLInputElement>) => {
     onOptionsChange({
       ...options,
       secureJsonData: {
+        ...options.secureJsonData,
         saslPassword: event.target.value,
       },
     });
   };
 
-  onResetSaslPassword = () => {
-    const { onOptionsChange, options } = this.props;
+  const onResetSaslPassword = () => {
     onOptionsChange({
       ...options,
       secureJsonFields: {
@@ -70,8 +100,112 @@ export class ConfigEditor extends PureComponent<Props, State> {
     });
   };
 
-  onLogLevelChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const { onOptionsChange, options } = this.props;
+  // TLS Configuration handlers
+  const onTlsSkipVerifyChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const jsonData = {
+      ...options.jsonData,
+      tlsSkipVerify: event.target.checked,
+    };
+    onOptionsChange({ ...options, jsonData });
+  };
+
+  const onTlsAuthWithCACertChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const jsonData = {
+      ...options.jsonData,
+      tlsAuthWithCACert: event.target.checked,
+    };
+    onOptionsChange({ ...options, jsonData });
+  };
+
+  const onTlsClientAuthChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const jsonData = {
+      ...options.jsonData,
+      tlsAuth: event.target.checked,
+    };
+    onOptionsChange({ ...options, jsonData });
+  };
+
+  const onServerNameChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const jsonData = {
+      ...options.jsonData,
+      serverName: event.target.value,
+    };
+    onOptionsChange({ ...options, jsonData });
+  };
+
+  const onTlsCACertChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
+    onOptionsChange({
+      ...options,
+      secureJsonData: {
+        ...options.secureJsonData,
+        tlsCACert: event.target.value,
+      },
+    });
+  };
+
+  const onResetTlsCACert = () => {
+    onOptionsChange({
+      ...options,
+      secureJsonFields: {
+        ...options.secureJsonFields,
+        tlsCACert: false,
+      },
+      secureJsonData: {
+        ...options.secureJsonData,
+        tlsCACert: '',
+      },
+    });
+  };
+
+  const onTlsClientCertChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
+    onOptionsChange({
+      ...options,
+      secureJsonData: {
+        ...options.secureJsonData,
+        tlsClientCert: event.target.value,
+      },
+    });
+  };
+
+  const onResetTlsClientCert = () => {
+    onOptionsChange({
+      ...options,
+      secureJsonFields: {
+        ...options.secureJsonFields,
+        tlsClientCert: false,
+      },
+      secureJsonData: {
+        ...options.secureJsonData,
+        tlsClientCert: '',
+      },
+    });
+  };
+
+  const onTlsClientKeyChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
+    onOptionsChange({
+      ...options,
+      secureJsonData: {
+        ...options.secureJsonData,
+        tlsClientKey: event.target.value,
+      },
+    });
+  };
+
+  const onResetTlsClientKey = () => {
+    onOptionsChange({
+      ...options,
+      secureJsonFields: {
+        ...options.secureJsonFields,
+        tlsClientKey: false,
+      },
+      secureJsonData: {
+        ...options.secureJsonData,
+        tlsClientKey: '',
+      },
+    });
+  };
+
+  const onLogLevelChange = (event: ChangeEvent<HTMLInputElement>) => {
     const jsonData = {
       ...options.jsonData,
       logLevel: event.target.value,
@@ -79,8 +213,7 @@ export class ConfigEditor extends PureComponent<Props, State> {
     onOptionsChange({ ...options, jsonData });
   };
 
-  onHealthcheckTimeoutChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const { onOptionsChange, options } = this.props;
+  const onHealthcheckTimeoutChange = (event: ChangeEvent<HTMLInputElement>) => {
     const value = parseFloat(event.target.value);
     // Ensure non-negative values only
     const validatedValue = value < 0 ? 0 : value;
@@ -91,132 +224,301 @@ export class ConfigEditor extends PureComponent<Props, State> {
     onOptionsChange({ ...options, jsonData });
   };
 
-  /* apiKey is deprecated and will be removed in future versions */
-  onAPIKeyChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const { onOptionsChange, options } = this.props;
-    onOptionsChange({
-      ...options,
-      secureJsonData: {
-        ...options.secureJsonData,
-        apiKey: event.target.value,
-      },
-    });
-  };
+  const jsonData = defaults(options.jsonData, defaultDataSourceOptions);
+  const secureJsonData = (options.secureJsonData || {}) as KafkaSecureJsonData;
+  const { secureJsonFields } = options;
 
-  onResetAPIKey = () => {
-    const { onOptionsChange, options } = this.props;
-    onOptionsChange({
-      ...options,
-      secureJsonFields: {
-        ...options.secureJsonFields,
-        apiKey: false,
-      },
-      secureJsonData: {
-        ...options.secureJsonData,
-        apiKey: '',
-      },
-    });
-  };
+  // Check if SASL authentication is required
+  const isSaslRequired = jsonData.securityProtocol === 'SASL_PLAINTEXT' || jsonData.securityProtocol === 'SASL_SSL';
+  
+  // Check if TLS is required (SSL or SASL_SSL)
+  const isTlsRequired = jsonData.securityProtocol === 'SSL' || jsonData.securityProtocol === 'SASL_SSL';
 
-  render() {
-    const { options } = this.props;
-    const { secureJsonFields } = options;
-    const jsonData = defaults(options.jsonData, defaultDataSourceOptions);
-    const secureJsonData = (options.secureJsonData || {}) as KafkaSecureJsonData;
-
-    // Define label widths for different sections
-    const connectionLabelWidth = 20;
-    const authenticationLabelWidth = 25;
-    const advancedLabelWidth = 30;
-
-    return (
-      <div className="gf-form-group">
-        {/* Connection Configuration Section */}
-        <h3 className="page-heading">Connection</h3>
-
-        <InlineField label="Bootstrap Servers" labelWidth={connectionLabelWidth} tooltip="Kafka bootstrap servers separated by commas">
+  return (
+    <>
+      <DataSourceDescription
+        dataSourceName="Kafka"
+        docsLink="https://github.com/hamedkarbasi93/grafana-kafka-datasource"
+        hasRequiredFields={true}
+      />
+      
+      <Divider spacing={4} />
+      
+      {/* Connection Settings */}
+      <ConfigSection 
+        title="Connection" 
+        description="Configure your Kafka cluster connection settings"
+      >
+        <InlineField 
+          label="Bootstrap Servers" 
+          labelWidth={20} 
+          tooltip="Kafka bootstrap servers as CSV: host1:9092,host2:9092"
+          grow
+          required
+        >
           <Input
-            id="config-editor-servers"
-            onChange={this.onBootstrapServersChange}
+            id="config-editor-bootstrap-servers"
+            onChange={onBootstrapServersChange}
             value={jsonData.bootstrapServers}
-            placeholder="broker1:9092, broker2:9092"
+            placeholder="broker1:9092,broker2:9092"
             width={40}
           />
         </InlineField>
 
-        {/* Authentication Section */}
-        <h3 className="page-heading" style={{ marginTop: '32px' }}>Authentication</h3>
-        <InlineField label="Security Protocol" labelWidth={connectionLabelWidth} tooltip="Security protocol for Kafka connection">
+        <InlineField 
+          label="Client ID" 
+          labelWidth={20} 
+          tooltip="Custom client identifier (optional)"
+          grow
+        >
           <Input
-            id="config-editor-security-protocol"
-            onChange={this.onSecurityProtocolChange}
-            value={jsonData.securityProtocol}
-            placeholder="PLAINTEXT | SASL_PLAINTEXT"
+            id="config-editor-client-id"
+            onChange={onClientIdChange}
+            value={jsonData.clientId || ''}
+            placeholder="my-kafka-client"
             width={40}
           />
         </InlineField>
-
-        <InlineField label="SASL Mechanisms" labelWidth={authenticationLabelWidth} tooltip="SASL authentication mechanism">
-          <Input
-            id="config-editor-sasl-mechanisms"
-            onChange={this.onSaslMechanismsChange}
-            value={jsonData.saslMechanisms}
-            placeholder="PLAIN | SCRAM-SHA-512"
+      </ConfigSection>
+      
+      <Divider spacing={4} />
+      
+      {/* Security Protocol */}
+      <ConfigSection 
+        title="Security Protocol" 
+        description="Select and enable security layers"
+      >
+        <InlineField 
+          label="Security Protocol" 
+          labelWidth={20} 
+          tooltip="Security protocol for Kafka connection"
+          grow
+          required
+        >
+          <Select
+            options={SECURITY_PROTOCOL_OPTIONS}
+            value={SECURITY_PROTOCOL_OPTIONS.find(option => option.value === jsonData.securityProtocol)}
+            onChange={onSecurityProtocolChange}
+            placeholder="Select security protocol"
             width={40}
           />
         </InlineField>
+      </ConfigSection>
+      
+      <Divider spacing={4} />
+      
+      {/* Authentication */}
+      <ConfigSection 
+        title="Authentication" 
+        description="Configure authentication settings"
+      >
+        {isSaslRequired && (
+          <>
+            <InlineField 
+              label="SASL Mechanism" 
+              labelWidth={20} 
+              tooltip="SASL authentication mechanism"
+              grow
+              required
+            >
+              <Select
+                options={SASL_MECHANISM_OPTIONS}
+                value={SASL_MECHANISM_OPTIONS.find(option => option.value === jsonData.saslMechanisms)}
+                onChange={onSaslMechanismChange}
+                placeholder="Select SASL mechanism"
+                width={40}
+              />
+            </InlineField>
 
-        <InlineField label="SASL Username" labelWidth={authenticationLabelWidth} tooltip="SASL username for authentication">
-          <Input
-            id="config-editor-sasl-username"
-            onChange={this.onSaslUsernameChange}
-            value={jsonData.saslUsername}
-            placeholder="SASL Username"
-            width={40}
-          />
-        </InlineField>
+            <InlineField 
+              label="SASL Username" 
+              labelWidth={20} 
+              tooltip="SASL username for authentication"
+              grow
+              required
+            >
+              <Input
+                id="config-editor-sasl-username"
+                onChange={onSaslUsernameChange}
+                value={jsonData.saslUsername}
+                placeholder="SASL Username"
+                width={40}
+              />
+            </InlineField>
 
-        <InlineField label="SASL Password" labelWidth={authenticationLabelWidth} tooltip="SASL password for authentication">
-          <SecretInput
-            id="config-editor-sasl-password"
-            isConfigured={(secureJsonFields && secureJsonFields.saslPassword) as boolean}
-            value={secureJsonData.saslPassword || ''}
-            placeholder="SASL Password"
-            width={40}
-            onReset={this.onResetSaslPassword}
-            onChange={this.onSaslPasswordChange}
-          />
-        </InlineField>
+            <InlineField 
+              label="SASL Password" 
+              labelWidth={20} 
+              tooltip="SASL password for authentication"
+              grow
+              required
+            >
+              <SecretInput
+                id="config-editor-sasl-password"
+                isConfigured={(secureJsonFields && secureJsonFields.saslPassword) as boolean}
+                value={secureJsonData.saslPassword || ''}
+                placeholder="SASL Password"
+                width={40}
+                onReset={onResetSaslPassword}
+                onChange={onSaslPasswordChange}
+              />
+            </InlineField>
+          </>
+        )}
 
-        <InlineField label="API Key (Deprecated)" labelWidth={authenticationLabelWidth} tooltip="Deprecated API key field">
-          <SecretInput
-            id="config-editor-api-key"
-            isConfigured={(secureJsonFields && secureJsonFields.apiKey) as boolean}
-            value={secureJsonData.apiKey || ''}
-            placeholder="secure json field (backend only)"
-            width={40}
-            onReset={this.onResetAPIKey}
-            onChange={this.onAPIKeyChange}
-          />
-        </InlineField>
+        {/* TLS Settings */}
+        {isTlsRequired && (
+          <>
+            <h4 style={{ marginTop: '20px', marginBottom: '10px' }}>TLS Settings</h4>
+            
+            <InlineField 
+              label="Skip TLS Verification" 
+              labelWidth={30} 
+              tooltip="Skip TLS certificate validation (not recommended for production)"
+              grow
+            >
+              <Checkbox
+                value={jsonData.tlsSkipVerify || false}
+                onChange={onTlsSkipVerifyChange}
+              />
+            </InlineField>
 
-        {/* Advanced Settings Section */}
-        <h3 className="page-heading" style={{ marginTop: '32px' }}>Advanced Settings</h3>
+            <InlineField 
+              label="Self-signed Certificate" 
+              labelWidth={30} 
+              tooltip="Enable if using self-signed certificates"
+              grow
+            >
+              <Checkbox
+                value={jsonData.tlsAuthWithCACert || false}
+                onChange={onTlsAuthWithCACertChange}
+              />
+            </InlineField>
 
-        <InlineField label="Log Level" labelWidth={advancedLabelWidth} tooltip="Logging level for debugging">
+            {jsonData.tlsAuthWithCACert && (
+              <InlineField 
+                label="CA Certificate" 
+                labelWidth={30} 
+                tooltip="Certificate Authority certificate"
+                htmlFor="config-editor-tls-ca-cert"
+                interactive
+                grow
+              >
+                <SecretTextArea
+                  id="config-editor-tls-ca-cert"
+                  isConfigured={(secureJsonFields && secureJsonFields.tlsCACert) as boolean}
+                  onReset={onResetTlsCACert}
+                  onChange={(e) => onTlsCACertChange(e as ChangeEvent<HTMLTextAreaElement>)}
+                  placeholder="Begins with -----BEGIN CERTIFICATE-----"
+                  rows={6}
+                />
+              </InlineField>
+            )}
+
+            <InlineField 
+              label="TLS Client Authentication" 
+              labelWidth={30} 
+              tooltip="Enable TLS client authentication"
+              grow
+            >
+              <Checkbox
+                value={jsonData.tlsAuth || false}
+                onChange={onTlsClientAuthChange}
+              />
+            </InlineField>
+
+            {jsonData.tlsAuth && (
+              <>
+                <InlineField 
+                  label="Server Name" 
+                  labelWidth={30} 
+                  tooltip="Server name for TLS validation"
+                  grow
+                  required
+                >
+                  <Input
+                    id="config-editor-server-name"
+                    onChange={onServerNameChange}
+                    value={jsonData.serverName || ''}
+                    placeholder="domain.example.com"
+                    width={40}
+                  />
+                </InlineField>
+
+                <InlineField 
+                  label="Client Certificate" 
+                  labelWidth={30} 
+                  tooltip="TLS client certificate"
+                  htmlFor="client-auth-client-certificate-input"
+                  interactive
+                  grow
+                >
+                  <SecretTextArea
+                    id="client-auth-client-certificate-input"
+                    isConfigured={(secureJsonFields && secureJsonFields.tlsClientCert) as boolean}
+                    onReset={onResetTlsClientCert}
+                    onChange={(e) => onTlsClientCertChange(e as ChangeEvent<HTMLTextAreaElement>)}
+                    placeholder="Begins with -----BEGIN CERTIFICATE-----"
+                    rows={6}
+                  />
+                </InlineField>
+
+                <InlineField 
+                  label="Client Key" 
+                  labelWidth={30} 
+                  tooltip="TLS client private key"
+                  htmlFor="config-editor-tls-client-key"
+                  interactive
+                  grow
+                  required
+                >
+                  <SecretTextArea
+                    id="config-editor-tls-client-key"
+                    isConfigured={(secureJsonFields && secureJsonFields.tlsClientKey) as boolean}
+                    onReset={onResetTlsClientKey}
+                    onChange={(e) => onTlsClientKeyChange(e as ChangeEvent<HTMLTextAreaElement>)}
+                    placeholder="Begins with -----BEGIN PRIVATE KEY-----"
+                    rows={6}
+                  />
+                </InlineField>
+              </>
+            )}
+          </>
+        )}
+      </ConfigSection>
+      
+      <Divider spacing={4} />
+      {/* Advanced Settings */}
+      <ConfigSection
+        title="Advanced Settings"
+        description="Additional settings for debugging and performance tuning."
+        isCollapsible={true}
+        isInitiallyOpen={false}
+      >
+        <InlineField 
+          label="Log Level" 
+          labelWidth={24} 
+          tooltip="Logging level for debugging"
+          grow
+        >
           <Input
             id="config-editor-log-level"
-            onChange={this.onLogLevelChange}
+            onChange={onLogLevelChange}
             value={jsonData.logLevel}
-            placeholder="debug | error"
+            placeholder="debug | info | warn | error"
             width={40}
           />
         </InlineField>
 
-        <InlineField label="Healthcheck Timeout (ms)" labelWidth={advancedLabelWidth} tooltip="Timeout for health check in milliseconds (non-negative values only)">
+        <InlineField 
+          label="Healthcheck Timeout (ms)" 
+          labelWidth={24} 
+          tooltip="Timeout for health check in milliseconds (non-negative values only)"
+          grow
+        >
           <Input
             id="config-editor-healthcheck-timeout"
-            onChange={this.onHealthcheckTimeoutChange}
+            onChange={onHealthcheckTimeoutChange}
             value={jsonData.healthcheckTimeout}
             type="number"
             step={1}
@@ -224,7 +526,7 @@ export class ConfigEditor extends PureComponent<Props, State> {
             width={40}
           />
         </InlineField>
-      </div>
-    );
-  }
-}
+      </ConfigSection>
+    </>
+  );
+};
