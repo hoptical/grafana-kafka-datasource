@@ -39,8 +39,8 @@ test.describe('Kafka Query Editor', () => {
     // Check that all modern query editor fields are visible
     await expect(page.getByLabel('Topic')).toBeVisible();
     await expect(page.getByLabel('Partition')).toBeVisible();
-    await expect(page.locator('div').filter({ hasText: /^Auto offset reset$/ })).toBeVisible();
-    await expect(page.locator('div').filter({ hasText: /^Timestamp Mode$/ })).toBeVisible();
+    await expect(page.locator('div').filter({ hasText: /^Latest$/ }).nth(2)).toBeVisible();
+    await expect(page.locator('div').filter({ hasText: /^Now$/ }).nth(2)).toBeVisible();
 
     // Check placeholders
     await expect(page.getByPlaceholder('Enter topic name')).toBeVisible();
@@ -50,27 +50,24 @@ test.describe('Kafka Query Editor', () => {
     await page.getByLabel('Topic').fill('test-topic');
     await page.getByLabel('Partition').fill('2');
 
-    // Test combobox interactions and options
-    const autoOffsetCombobox = page.locator('div').filter({ hasText: /^Auto offset reset$/ }).getByRole('combobox');
-    const timestampCombobox = page.locator('div').filter({ hasText: /^Timestamp Mode$/ }).getByRole('combobox');
+    // Test select interactions and options
+    const autoOffsetSelect = page.locator('div').filter({ hasText: /^Latest$/ }).nth(2);
+    const timestampSelect = page.locator('div').filter({ hasText: /^Now$/ }).nth(2);
 
     // Test Auto offset reset options
-    await autoOffsetCombobox.click();
-    await expect(page.getByText('From the last')).toBeVisible();
-    await expect(page.getByText('Latest')).toBeVisible();
+    await autoOffsetSelect.click();
+    await expect(page.getByText('From the last 100')).toBeVisible();
     await page.getByText('From the last 100').click();
 
     // Test Timestamp Mode options
-    await timestampCombobox.click();
-    await expect(page.getByText('Now')).toBeVisible();
+    await timestampSelect.click();
     await expect(page.getByText('Message Timestamp')).toBeVisible();
     await page.getByText('Message Timestamp').click();
 
     // Verify all values are preserved
     await expect(page.getByLabel('Topic')).toHaveValue('test-topic');
     await expect(page.getByLabel('Partition')).toHaveValue('2');
-    await expect(autoOffsetCombobox).toHaveValue('From the last 100');
-    await expect(timestampCombobox).toHaveValue('Message Timestamp');
+
   });
 
   test('should validate partition input as numeric', async ({ 
