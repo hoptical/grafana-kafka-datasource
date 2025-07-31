@@ -5,7 +5,7 @@ Visualize real-time streaming data from Apache Kafka directly in your Grafana da
 ## Version Compatibility
 
 - Apache Kafka v0.9 or later
-- Grafana v9.0 or later
+- Grafana v10.2 or later
 - Network access from Grafana server to Kafka brokers
 
 ## Installation

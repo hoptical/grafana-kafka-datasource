@@ -8,7 +8,7 @@ The Kafka data source plugin allows you to visualize streaming Kafka data from w
 ## Requirements
 
 - Apache Kafka v0.9+
-- Grafana v10.0+
+- Grafana v10.2+
 
 > Note: This is a backend plugin, so the Grafana server should've access to the Kafka broker.
 
