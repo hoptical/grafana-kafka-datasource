@@ -1,5 +1,5 @@
 import React, { ChangeEvent, useEffect } from 'react';
-import { InlineField, Input, Divider, Combobox, SecretInput, Checkbox, SecretTextArea } from '@grafana/ui';
+import { InlineField, Input, Divider, SecretInput, Checkbox, SecretTextArea, Select } from '@grafana/ui';
 import { DataSourcePluginOptionsEditorProps } from '@grafana/data';
 import {
   ConfigSection,
@@ -279,16 +279,16 @@ export const ConfigEditor = (props: Props) => {
           grow
           required
         >
-          <Combobox
+          <Select
             options={SECURITY_PROTOCOL_OPTIONS}
-            value={jsonData.securityProtocol}
-            onChange={(value) => {
-              const protocol = typeof value === 'string' ? value : value.value;
+            value={SECURITY_PROTOCOL_OPTIONS.find(opt => opt.value === options.jsonData?.securityProtocol) || SECURITY_PROTOCOL_OPTIONS[0]}
+            onChange={(selected) => {
+              const protocol = selected.value || 'PLAINTEXT';
               onOptionsChange({
                 ...options,
                 jsonData: {
                   ...options.jsonData,
-                  securityProtocol: protocol || 'PLAINTEXT',
+                  securityProtocol: protocol,
                 },
               });
             }}
@@ -314,15 +314,16 @@ export const ConfigEditor = (props: Props) => {
               grow
               required
             >
-              <Combobox
+              <Select
                 options={SASL_MECHANISM_OPTIONS}
-                value={jsonData.saslMechanisms || 'PLAIN'}
-                onChange={(value) => {
+                value={SASL_MECHANISM_OPTIONS.find(opt => opt.value === jsonData.saslMechanisms) || SASL_MECHANISM_OPTIONS[0]}
+                onChange={(selected) => {
+                  const mechanism = selected.value || 'PLAIN';
                   onOptionsChange({
                     ...options,
                     jsonData: {
                       ...options.jsonData,
-                      saslMechanisms: typeof value === 'string' ? value : value.value,
+                      saslMechanisms: mechanism,
                     },
                   });
                 }}
@@ -503,7 +504,7 @@ export const ConfigEditor = (props: Props) => {
       >
         <InlineField 
           label="Log Level" 
-          labelWidth={24} 
+          labelWidth={30} 
           tooltip="Logging level for debugging"
           grow
         >
@@ -518,7 +519,7 @@ export const ConfigEditor = (props: Props) => {
 
         <InlineField 
           label="Healthcheck Timeout (ms)" 
-          labelWidth={24} 
+          labelWidth={30} 
           tooltip="Timeout for health check in milliseconds (non-negative values only)"
           grow
         >
