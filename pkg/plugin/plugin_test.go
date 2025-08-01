@@ -9,19 +9,21 @@ import (
 	"github.com/hoptical/grafana-kafka-datasource/pkg/plugin"
 )
 
+var testTLSConfig = map[string]interface{}{
+	"clientId":          "test-client",
+	"tlsAuthWithCACert": true,
+	"tlsAuth":           true,
+	"tlsSkipVerify":     true,
+	"serverName":        "test-server",
+	"timeout":           1234,
+}
+
 func TestQueryData(t *testing.T) {
 	ds := plugin.KafkaDatasource{}
-	// Simulate a query with TLS and clientId config in JSONData
-	jsonData := map[string]interface{}{
-		"clientId":          "test-client",
-		"tlsAuthWithCACert": true,
-		"tlsAuth":           true,
-		"tlsSkipVerify":     true,
-		"serverName":        "test-server",
-		"keepCookies":       []string{"cookie1", "cookie2"},
-		"timeout":           1234,
+	jsonBytes, err := json.Marshal(testTLSConfig)
+	if err != nil {
+		t.Fatalf("Failed to marshal test config: %v", err)
 	}
-	jsonBytes, _ := json.Marshal(jsonData)
 	resp, err := ds.QueryData(
 		context.Background(),
 		&backend.QueryDataRequest{
@@ -41,16 +43,10 @@ func TestQueryData(t *testing.T) {
 func TestCheckHealth_OK(t *testing.T) {
 	ds := plugin.KafkaDatasource{}
 	// Simulate DataSourceInstanceSettings with TLS and clientId config
-	jsonData := map[string]interface{}{
-		"clientId":          "test-client",
-		"tlsAuthWithCACert": true,
-		"tlsAuth":           true,
-		"tlsSkipVerify":     true,
-		"serverName":        "test-server",
-		"keepCookies":       []string{"cookie1", "cookie2"},
-		"timeout":           1234,
+	jsonBytes, err := json.Marshal(testTLSConfig)
+	if err != nil {
+		t.Fatalf("Failed to marshal test config: %v", err)
 	}
-	jsonBytes, _ := json.Marshal(jsonData)
 	result, err := ds.CheckHealth(context.Background(), &backend.CheckHealthRequest{
 		PluginContext: backend.PluginContext{
 			DataSourceInstanceSettings: &backend.DataSourceInstanceSettings{

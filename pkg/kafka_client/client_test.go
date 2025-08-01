@@ -15,7 +15,6 @@ func TestNewKafkaClient_Defaults(t *testing.T) {
 		TLSCACert:         "test-ca-cert",
 		TLSClientCert:     "test-client-cert",
 		TLSClientKey:      "test-client-key",
-		KeepCookies:       []string{"cookie1", "cookie2"},
 		Timeout:           1234,
 	}
 	client := NewKafkaClient(options)
@@ -45,9 +44,6 @@ func TestNewKafkaClient_Defaults(t *testing.T) {
 	}
 	if client.TLSClientKey != "test-client-key" {
 		t.Errorf("Expected TLSClientKey to be 'test-client-key', got %s", client.TLSClientKey)
-	}
-	if len(client.KeepCookies) != 2 || client.KeepCookies[0] != "cookie1" || client.KeepCookies[1] != "cookie2" {
-		t.Errorf("Expected KeepCookies to be ['cookie1','cookie2'], got %v", client.KeepCookies)
 	}
 	if client.Timeout != 1234 {
 		t.Errorf("Expected Timeout to be 1234, got %d", client.Timeout)
