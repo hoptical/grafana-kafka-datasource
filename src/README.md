@@ -2,6 +2,16 @@
 
 Visualize real-time streaming data from Apache Kafka directly in your Grafana dashboards. This plugin enables you to monitor live Kafka topics with automatic updates and time-series visualizations.
 
+## Features
+
+- Real-time monitoring of Kafka topics
+- Ability to query specific partitions
+- Choose between "latest" or "last 100" messages
+- Timestamp modes: "Now" for real-time or "Message Timestamp" for event time
+- Simple JSON data format support
+- Kafka authentication support (SASL)
+- Encryption support (SSL/TLS)
+
 ## Version Compatibility
 
 - Apache Kafka v0.9 or later

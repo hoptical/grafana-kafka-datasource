@@ -5,6 +5,16 @@
 
 The Kafka data source plugin allows you to visualize streaming Kafka data from within Grafana.
 
+## Features
+
+- Real-time monitoring of Kafka topics
+- Ability to query specific partitions
+- Choose between "latest" or "last 100" messages
+- Timestamp modes: "Now" for real-time or "Message Timestamp" for event time
+- Simple JSON data format support
+- Kafka authentication support (SASL)
+- Encryption support (SSL/TLS)
+
 ## Requirements
 
 - Apache Kafka v0.9+
@@ -37,8 +47,6 @@ For configuration and usage instructions, please refer to the [README.md](src/RE
 ![kafka dashboard](https://raw.githubusercontent.com/hoptical/grafana-kafka-datasource/86ea8d360bfd67cfed41004f80adc39219983210/src/img/graph.gif)
 
 ## Known limitations
-
-- The plugin currently does not support TLS.
 
 This plugin supports topics publishing very simple JSON formatted messages. Note that only the following structure is supported as of now:
 
