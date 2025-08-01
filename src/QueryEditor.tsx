@@ -1,6 +1,6 @@
 import { defaults } from 'lodash';
 import React, { ChangeEvent, PureComponent } from 'react';
-import { InlineField, InlineFieldRow, Input, Combobox, ComboboxOption } from '@grafana/ui';
+import { InlineField, InlineFieldRow, Input, Select } from '@grafana/ui';
 import { QueryEditorProps } from '@grafana/data';
 import { DataSource } from './datasource';
 import { defaultQuery, KafkaDataSourceOptions, KafkaQuery, AutoOffsetReset, TimestampMode } from './types';
@@ -45,28 +45,16 @@ export class QueryEditor extends PureComponent<Props> {
     onRunQuery();
   };
 
-  onAutoResetOffsetChanged = (option: ComboboxOption<AutoOffsetReset> | null) => {
+  onAutoResetOffsetChanged = (value: AutoOffsetReset) => {
     const { onChange, query, onRunQuery } = this.props;
-    const value = option?.value || AutoOffsetReset.LATEST;
     onChange({ ...query, autoOffsetReset: value });
     onRunQuery();
   };
 
-  resolveAutoResetOffset = (value: string | undefined): ComboboxOption<AutoOffsetReset> => {
-    const found = autoResetOffsets.find(option => option.value === value);
-    return found ? { label: found.label, value: found.value } : { label: autoResetOffsets[1].label, value: autoResetOffsets[1].value };
-  };
-
-  onTimestampModeChanged = (option: ComboboxOption<TimestampMode> | null) => {
+  onTimestampModeChanged = (value: TimestampMode) => {
     const { onChange, query, onRunQuery } = this.props;
-    const value = option?.value || TimestampMode.Now;
     onChange({ ...query, timestampMode: value });
     onRunQuery();
-  };
-
-  resolveTimestampMode = (value: string | undefined): ComboboxOption<TimestampMode> => {
-    const found = timestampModes.find(option => option.value === value);
-    return found ? { label: found.label, value: found.value } : { label: timestampModes[0].label, value: timestampModes[0].value };
   };
 
   render() {
@@ -101,19 +89,19 @@ export class QueryEditor extends PureComponent<Props> {
         </InlineFieldRow>
         <InlineFieldRow>
           <InlineField label="Auto offset reset" labelWidth={20} tooltip="Starting offset to consume that can be from latest or last 100.">
-            <Combobox
+            <Select
               width={22}
-              value={this.resolveAutoResetOffset(autoOffsetReset)}
+              value={autoOffsetReset}
               options={autoResetOffsets}
-              onChange={this.onAutoResetOffsetChanged}
+              onChange={(value) => this.onAutoResetOffsetChanged(value.value!)}
             />
           </InlineField>
           <InlineField label="Timestamp Mode" labelWidth={20} tooltip="Timestamp of the kafka value to visualize.">
-            <Combobox
+            <Select
               width={25}
-              value={this.resolveTimestampMode(timestampMode)}
+              value={timestampMode}
               options={timestampModes}
-              onChange={this.onTimestampModeChanged}
+              onChange={(value) => this.onTimestampModeChanged(value.value!)}
             />
           </InlineField>
         </InlineFieldRow>

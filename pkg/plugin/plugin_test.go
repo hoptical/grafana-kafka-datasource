@@ -9,22 +9,32 @@ import (
 	"github.com/hoptical/grafana-kafka-datasource/pkg/plugin"
 )
 
+var testTLSConfig = map[string]interface{}{
+	"clientId":          "test-client",
+	"tlsAuthWithCACert": true,
+	"tlsAuth":           true,
+	"tlsSkipVerify":     true,
+	"serverName":        "test-server",
+	"timeout":           1234,
+}
+
 func TestQueryData(t *testing.T) {
 	ds := plugin.KafkaDatasource{}
-
+	jsonBytes, err := json.Marshal(testTLSConfig)
+	if err != nil {
+		t.Fatalf("Failed to marshal test config: %v", err)
+	}
 	resp, err := ds.QueryData(
 		context.Background(),
 		&backend.QueryDataRequest{
 			Queries: []backend.DataQuery{
-				{RefID: "A"},
+				{RefID: "A", JSON: jsonBytes},
 			},
 		},
 	)
-
 	if err != nil {
 		t.Error(err)
 	}
-
 	if len(resp.Responses) != 1 {
 		t.Fatal("QueryData must return a response")
 	}
@@ -32,9 +42,16 @@ func TestQueryData(t *testing.T) {
 
 func TestCheckHealth_OK(t *testing.T) {
 	ds := plugin.KafkaDatasource{}
+	// Simulate DataSourceInstanceSettings with TLS and clientId config
+	jsonBytes, err := json.Marshal(testTLSConfig)
+	if err != nil {
+		t.Fatalf("Failed to marshal test config: %v", err)
+	}
 	result, err := ds.CheckHealth(context.Background(), &backend.CheckHealthRequest{
 		PluginContext: backend.PluginContext{
-			DataSourceInstanceSettings: &backend.DataSourceInstanceSettings{},
+			DataSourceInstanceSettings: &backend.DataSourceInstanceSettings{
+				JSONData: jsonBytes,
+			},
 		},
 	})
 	if err != nil {
