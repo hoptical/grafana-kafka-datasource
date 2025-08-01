@@ -42,8 +42,7 @@ type Options struct {
 	TLSClientCert     string `json:"tlsClientCert"`
 	TLSClientKey      string `json:"tlsClientKey"`
 	// Advanced HTTP settings
-	KeepCookies []string `json:"keepCookies"`
-	Timeout     int32    `json:"timeout"`
+	Timeout int32 `json:"timeout"`
 }
 
 type KafkaClient struct {
@@ -68,8 +67,7 @@ type KafkaClient struct {
 	TLSClientCert     string
 	TLSClientKey      string
 	// Advanced settings
-	KeepCookies []string
-	Timeout     int32
+	Timeout int32
 }
 
 type KafkaMessage struct {
@@ -102,8 +100,7 @@ func NewKafkaClient(options Options) KafkaClient {
 		TLSClientCert:     options.TLSClientCert,
 		TLSClientKey:      options.TLSClientKey,
 		// Advanced settings
-		KeepCookies: options.KeepCookies,
-		Timeout:     options.Timeout,
+		Timeout: options.Timeout,
 	}
 	return client
 }

@@ -88,19 +88,6 @@ func getDatasourceSettings(s backend.DataSourceInstanceSettings) (*kafka_client.
 		}
 	}
 
-	// Handle array fields
-	if val, exists := jsonData["keepCookies"]; exists {
-		if cookiesArr, ok := val.([]interface{}); ok {
-			cookies := make([]string, len(cookiesArr))
-			for i, cookie := range cookiesArr {
-				if str, ok := cookie.(string); ok {
-					cookies[i] = str
-				}
-			}
-			settings.KeepCookies = cookies
-		}
-	}
-
 	return settings, nil
 }
 

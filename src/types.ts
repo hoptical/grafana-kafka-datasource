@@ -32,7 +32,6 @@ export interface KafkaDataSourceOptions extends DataSourceJsonData {
   tlsSkipVerify?: boolean;
   serverName?: string;
   // Advanced HTTP settings
-  keepCookies?: string[];
   timeout?: number;
 }
 
@@ -49,7 +48,6 @@ export const defaultDataSourceOptions: Partial<KafkaDataSourceOptions> = {
   tlsAuth: false,
   tlsSkipVerify: false,
   serverName: '',
-  keepCookies: [],
   timeout: 0
 };
 
