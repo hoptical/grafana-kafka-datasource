@@ -73,4 +73,9 @@ export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourc
     const response = await this.getResource('partitions', { topic: topicName });
     return response.partitions || [];
   }
+
+  async searchTopics(prefix: string, limit = 5): Promise<string[]> {
+    const response = await this.getResource('topics', { prefix, limit: limit.toString() });
+    return response.topics || [];
+  }
 }

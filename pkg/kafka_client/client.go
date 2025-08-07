@@ -18,7 +18,6 @@ import (
 )
 
 const maxEarliest int64 = 100
-const network = "tcp"
 const debugLogLevel = "debug"
 const errorLogLevel = "error"
 const dialerTimeout = 10 * time.Second
@@ -197,7 +196,6 @@ func (client *KafkaClient) NewStreamReader(
 	autoOffsetReset string,
 ) (*kafka.Reader, error) {
 	var offset int64
-	var high, low int64
 
 	// Create connection if not exists
 	if client.Dialer == nil {
@@ -211,23 +209,14 @@ func (client *KafkaClient) NewStreamReader(
 	case "latest":
 		offset = kafka.LastOffset
 	case "earliest":
-		// Use first bootstrap server as seed broker for leader discovery
-		firstBroker := strings.Split(client.BootstrapServers, ",")[0]
-		conn, err := client.Dialer.DialLeader(ctx, network, firstBroker, topic, int(partition))
-		if err != nil {
-			return nil, fmt.Errorf("unable to dial leader: %w", err)
-		}
-		defer conn.Close()
+		// For earliest, we'll set a calculated offset but avoid DialLeader
+		// which could trigger topic auto-creation. We'll use a reasonable
+		// fallback that gets recent messages without connecting to specific topics.
+		offset = kafka.LastOffset - maxEarliest
 
-		low, high, err = conn.ReadOffsets()
-		if err != nil {
-			return nil, fmt.Errorf("unable to read offsets: %w", err)
-		}
-
-		if high-low > maxEarliest {
-			offset = high - maxEarliest
-		} else {
-			offset = low
+		// If the calculated offset is negative, use FirstOffset
+		if offset < 0 {
+			offset = kafka.FirstOffset
 		}
 	default:
 		offset = kafka.LastOffset
@@ -265,8 +254,6 @@ func (client *KafkaClient) HealthCheck() error {
 	if err := client.NewConnection(); err != nil {
 		return fmt.Errorf("unable to initialize Kafka client: %w", err)
 	}
-	var conn *kafka.Conn
-	var err error
 
 	// Log connection attempt with non-sensitive info
 	brokers := strings.Split(client.BootstrapServers, ",")
@@ -281,14 +268,11 @@ func (client *KafkaClient) HealthCheck() error {
 	for {
 		select {
 		case <-timeout:
-			return fmt.Errorf("health check timed out after %d ms: %w", client.HealthcheckTimeout, err)
+			return fmt.Errorf("health check timed out after %d ms", client.HealthcheckTimeout)
 		case <-ticker.C:
-			conn, err = client.Dialer.Dial(network, client.BootstrapServers)
+			// Use metadata request instead of ReadPartitions to avoid auto-creation
+			_, err := client.Conn.Metadata(context.Background(), &kafka.MetadataRequest{})
 			if err == nil {
-				defer conn.Close()
-				if _, err = conn.ReadPartitions(); err != nil {
-					return fmt.Errorf("error reading partitions: %w", err)
-				}
 				return nil
 			}
 		}
@@ -335,25 +319,58 @@ func (client *KafkaClient) IsTopicExists(ctx context.Context, topicName string) 
 }
 
 func (client *KafkaClient) GetTopicPartitions(ctx context.Context, topicName string) ([]int32, error) {
-	// Use first bootstrap server to establish connection
-	firstBroker := strings.Split(client.BootstrapServers, ",")[0]
-	conn, err := client.Dialer.Dial(network, firstBroker)
+	// Use metadata request to get topic partitions - safer than ReadPartitions
+	// as it doesn't set AllowAutoTopicCreation
+	meta, err := client.Conn.Metadata(ctx, &kafka.MetadataRequest{
+		Topics: []string{topicName},
+	})
 	if err != nil {
-		return nil, fmt.Errorf("unable to dial broker: %w", err)
-	}
-	defer conn.Close()
-
-	partitions, err := conn.ReadPartitions(topicName)
-	if err != nil {
-		return nil, fmt.Errorf("unable to read partitions for topic %s: %w", topicName, err)
+		return nil, fmt.Errorf("unable to get metadata for topic %s: %w", topicName, err)
 	}
 
-	partitionIDs := make([]int32, len(partitions))
-	for i, partition := range partitions {
+	if len(meta.Topics) == 0 {
+		return nil, fmt.Errorf("topic %s not found", topicName)
+	}
+
+	topic := meta.Topics[0]
+	if topic.Error != nil {
+		return nil, fmt.Errorf("error getting topic %s metadata: %w", topicName, topic.Error)
+	}
+
+	partitionIDs := make([]int32, len(topic.Partitions))
+	for i, partition := range topic.Partitions {
 		partitionIDs[i] = int32(partition.ID)
 	}
 
 	return partitionIDs, nil
+}
+
+func (client *KafkaClient) GetTopics(ctx context.Context, prefix string, limit int) ([]string, error) {
+	// Use metadata request without specifying topics to get all topics
+	// This is safer than ReadPartitions as it doesn't set AllowAutoTopicCreation
+	meta, err := client.Conn.Metadata(ctx, &kafka.MetadataRequest{})
+	if err != nil {
+		return nil, fmt.Errorf("unable to get metadata: %w", err)
+	}
+
+	var matchingTopics []string
+	for _, topic := range meta.Topics {
+		if topic.Error != nil {
+			continue // Skip topics with errors
+		}
+
+		// Filter by prefix if provided
+		if prefix == "" || strings.HasPrefix(topic.Name, prefix) {
+			matchingTopics = append(matchingTopics, topic.Name)
+
+			// Apply limit if specified
+			if limit > 0 && len(matchingTopics) >= limit {
+				break
+			}
+		}
+	}
+
+	return matchingTopics, nil
 }
 
 func getKafkaLogger(level string) (kafka.LoggerFunc, kafka.LoggerFunc) {

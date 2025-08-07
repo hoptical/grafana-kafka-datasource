@@ -1,4 +1,4 @@
-import { defaults } from 'lodash';
+import { defaults, debounce } from 'lodash';
 import React, { ChangeEvent, PureComponent } from 'react';
 import { InlineField, InlineFieldRow, Input, Select } from '@grafana/ui';
 import { QueryEditorProps } from '@grafana/data';
@@ -38,14 +38,23 @@ type Props = QueryEditorProps<DataSource, KafkaQuery, KafkaDataSourceOptions>;
 
 interface State {
   availablePartitions: number[];
+  topicSuggestions: string[];
+  showingSuggestions: boolean;
 }
 
 export class QueryEditor extends PureComponent<Props, State> {
+  private debouncedSearchTopics: (input: string) => void;
+
   constructor(props: Props) {
     super(props);
     this.state = {
       availablePartitions: [],
+      topicSuggestions: [],
+      showingSuggestions: false,
     };
+    
+    // Debounce topic search to avoid too many API calls
+    this.debouncedSearchTopics = debounce(this.searchTopics, 300);
   }
 
   componentDidMount() {
@@ -90,10 +99,55 @@ export class QueryEditor extends PureComponent<Props, State> {
 
     return options;
   };
+
+  searchTopics = async (input: string) => {
+    const { datasource } = this.props;
+    if (!input || input.length < 2) {
+      this.setState({ topicSuggestions: [], showingSuggestions: false });
+      return;
+    }
+
+    try {
+      console.log('Searching topics with prefix:', input);
+      const topics = await datasource.searchTopics(input, 10); // Get more topics to filter smartly
+      console.log('Received topics:', topics);
+      
+      // Smart filtering to avoid showing partial topic names
+      const filteredTopics = topics
+        .filter(topic => topic.toLowerCase().startsWith(input.toLowerCase()))
+        .filter(topic => {
+          // Filter out topics that look like partial typing
+          // Keep topics that are:
+          // 1. Exactly the input
+          // 2. Significantly longer than input (likely complete topic names)
+          // 3. Contain separators like -, _, . which indicate structure
+          const hasStructure = /[-_.]/.test(topic);
+          const isSignificantlyLonger = topic.length >= input.length + 3;
+          const isExactMatch = topic.toLowerCase() === input.toLowerCase();
+          
+          return isExactMatch || isSignificantlyLonger || hasStructure;
+        })
+        .slice(0, 5); // Limit to 5 suggestions
+      
+      console.log('Filtered topics:', filteredTopics);
+      
+      this.setState({ 
+        topicSuggestions: filteredTopics,
+        showingSuggestions: filteredTopics.length > 0 
+      });
+    } catch (error) {
+      console.error('Failed to search topics:', error);
+      this.setState({ topicSuggestions: [], showingSuggestions: false });
+    }
+  };
+
   onTopicNameChange = (event: ChangeEvent<HTMLInputElement>) => {
     const { onChange, query, onRunQuery } = this.props;
     onChange({ ...query, topicName: event.target.value });
     onRunQuery();
+    
+    // Trigger topic search for autocomplete
+    this.debouncedSearchTopics(event.target.value);
   };
 
   onPartitionChange = (value: number | 'all') => {
@@ -114,6 +168,26 @@ export class QueryEditor extends PureComponent<Props, State> {
     onRunQuery();
   };
 
+  onTopicSuggestionClick = (topic: string) => {
+    const { onChange, query, onRunQuery } = this.props;
+    onChange({ ...query, topicName: topic });
+    this.setState({ showingSuggestions: false, topicSuggestions: [] });
+    onRunQuery();
+  };
+
+  onTopicInputBlur = () => {
+    // Delay hiding suggestions to allow clicking on them
+    setTimeout(() => {
+      this.setState({ showingSuggestions: false });
+    }, 200);
+  };
+
+  onTopicInputFocus = () => {
+    if (this.state.topicSuggestions.length > 0) {
+      this.setState({ showingSuggestions: true });
+    }
+  };
+
   render() {
     const query = defaults(this.props.query, defaultQuery);
     const { topicName, partition, autoOffsetReset, timestampMode } = query;
@@ -122,14 +196,58 @@ export class QueryEditor extends PureComponent<Props, State> {
       <>
         <InlineFieldRow>
           <InlineField label="Topic" labelWidth={10} tooltip="Kafka topic name">
-            <Input
-              id="query-editor-topic"
-              value={topicName || ''}
-              onChange={this.onTopicNameChange}
-              type="text"
-              width={20}
-              placeholder="Enter topic name"
-            />
+            <div style={{ position: 'relative', width: '20ch' }}>
+              <Input
+                id="query-editor-topic"
+                value={topicName || ''}
+                onChange={this.onTopicNameChange}
+                onBlur={this.onTopicInputBlur}
+                onFocus={this.onTopicInputFocus}
+                type="text"
+                width={20}
+                placeholder="Enter topic name"
+              />
+              {this.state.showingSuggestions && this.state.topicSuggestions.length > 0 && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '100%',
+                    left: 0,
+                    right: 0,
+                    backgroundColor: 'var(--gf-color-background-primary, #1f1f20)',
+                    border: '1px solid var(--gf-color-border-medium, #444)',
+                    borderRadius: '2px',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+                    zIndex: 1000,
+                    maxHeight: '200px',
+                    overflowY: 'auto'
+                  }}
+                >
+                  {this.state.topicSuggestions.map((topic, index) => (
+                    <div
+                      key={index}
+                      style={{
+                        padding: '8px 12px',
+                        cursor: 'pointer',
+                        borderBottom: index < this.state.topicSuggestions.length - 1 ? '1px solid var(--gf-color-border-weak, #333)' : 'none',
+                        fontSize: '13px',
+                        color: 'var(--gf-color-text-primary, #ffffff)',
+                        backgroundColor: 'transparent'
+                      }}
+                      onClick={() => this.onTopicSuggestionClick(topic)}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = 'var(--gf-color-background-secondary, #262628)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                      }}
+                    >
+                      {topic}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </InlineField>
           <InlineField label="Partition" labelWidth={10} tooltip="Kafka partition selection">
             <Select
