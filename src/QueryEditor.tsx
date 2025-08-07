@@ -32,21 +32,64 @@ const partitionOptions: Array<{ label: string; value: number | 'all' }> = [
     label: 'All partitions',
     value: 'all',
   },
-  // We'll add specific partition numbers dynamically if needed
-  // For now, we'll allow manual partition numbers through the input
 ];
-
-// Generate partition options for common cases
-for (let i = 0; i <= 15; i++) {
-  partitionOptions.push({
-    label: `Partition ${i}`,
-    value: i,
-  });
-}
 
 type Props = QueryEditorProps<DataSource, KafkaQuery, KafkaDataSourceOptions>;
 
-export class QueryEditor extends PureComponent<Props> {
+interface State {
+  availablePartitions: number[];
+}
+
+export class QueryEditor extends PureComponent<Props, State> {
+  constructor(props: Props) {
+    super(props);
+    this.state = {
+      availablePartitions: [],
+    };
+  }
+
+  componentDidMount() {
+    this.fetchPartitionsIfNeeded();
+  }
+
+  componentDidUpdate(prevProps: Props) {
+    const currentTopic = this.props.query.topicName;
+    const prevTopic = prevProps.query.topicName;
+    
+    if (currentTopic && currentTopic !== prevTopic) {
+      this.fetchPartitionsIfNeeded();
+    }
+  }
+
+  fetchPartitionsIfNeeded = async () => {
+    const { datasource, query } = this.props;
+    if (!query.topicName) {
+      this.setState({ availablePartitions: [] });
+      return;
+    }
+
+    try {
+      const partitions = await datasource.getTopicPartitions(query.topicName);
+      this.setState({ availablePartitions: partitions });
+    } catch (error) {
+      console.error('Failed to fetch partitions:', error);
+      this.setState({ availablePartitions: [] });
+    }
+  };
+
+  getPartitionOptions = (): Array<{ label: string; value: number | 'all' }> => {
+    const options = [...partitionOptions]; // Start with "All partitions"
+    
+    // Add specific partitions based on available partitions
+    this.state.availablePartitions.forEach((partition) => {
+      options.push({
+        label: `Partition ${partition}`,
+        value: partition,
+      });
+    });
+
+    return options;
+  };
   onTopicNameChange = (event: ChangeEvent<HTMLInputElement>) => {
     const { onChange, query, onRunQuery } = this.props;
     onChange({ ...query, topicName: event.target.value });
@@ -92,7 +135,7 @@ export class QueryEditor extends PureComponent<Props> {
             <Select
               id="query-editor-partition"
               value={partition}
-              options={partitionOptions}
+              options={this.getPartitionOptions()}
               onChange={(value) => this.onPartitionChange(value.value!)}
               width={15}
               placeholder="Select partition"

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"time"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
@@ -19,6 +20,7 @@ var (
 	_ backend.QueryDataHandler      = (*KafkaDatasource)(nil)
 	_ backend.CheckHealthHandler    = (*KafkaDatasource)(nil)
 	_ backend.StreamHandler         = (*KafkaDatasource)(nil)
+	_ backend.CallResourceHandler   = (*KafkaDatasource)(nil)
 	_ instancemgmt.InstanceDisposer = (*KafkaDatasource)(nil)
 )
 
@@ -139,6 +141,91 @@ func (d *KafkaDatasource) query(_ context.Context, pCtx backend.PluginContext, q
 	response.Frames = append(response.Frames, frame)
 
 	return response
+}
+
+func (d *KafkaDatasource) CallResource(ctx context.Context, req *backend.CallResourceRequest, sender backend.CallResourceResponseSender) error {
+	log.DefaultLogger.Debug("CallResource called", "path", req.Path, "method", req.Method)
+
+	if req.Path == "partitions" && req.Method == "GET" {
+		return d.handleGetPartitions(ctx, req, sender)
+	}
+
+	return sender.Send(&backend.CallResourceResponse{
+		Status: 404,
+		Body:   []byte("Not found"),
+	})
+}
+
+func (d *KafkaDatasource) handleGetPartitions(ctx context.Context, req *backend.CallResourceRequest, sender backend.CallResourceResponseSender) error {
+	// Parse URL to get query parameters
+	parsedURL, err := url.Parse(req.URL)
+	if err != nil {
+		return sender.Send(&backend.CallResourceResponse{
+			Status: 400,
+			Body:   []byte(`{"error": "Invalid URL"}`),
+			Headers: map[string][]string{
+				"Content-Type": {"application/json"},
+			},
+		})
+	}
+
+	topicName := parsedURL.Query().Get("topic")
+	if topicName == "" {
+		return sender.Send(&backend.CallResourceResponse{
+			Status: 400,
+			Body:   []byte(`{"error": "topic parameter is required"}`),
+			Headers: map[string][]string{
+				"Content-Type": {"application/json"},
+			},
+		})
+	}
+
+	if err := d.client.NewConnection(); err != nil {
+		log.DefaultLogger.Error("Failed to create connection", "error", err)
+		return sender.Send(&backend.CallResourceResponse{
+			Status: 500,
+			Body:   []byte(fmt.Sprintf(`{"error": "Failed to connect: %s"}`, err.Error())),
+			Headers: map[string][]string{
+				"Content-Type": {"application/json"},
+			},
+		})
+	}
+
+	partitions, err := d.client.GetTopicPartitions(ctx, topicName)
+	if err != nil {
+		log.DefaultLogger.Error("Failed to get partitions", "topic", topicName, "error", err)
+		return sender.Send(&backend.CallResourceResponse{
+			Status: 500,
+			Body:   []byte(fmt.Sprintf(`{"error": "Failed to get partitions: %s"}`, err.Error())),
+			Headers: map[string][]string{
+				"Content-Type": {"application/json"},
+			},
+		})
+	}
+
+	response := map[string]interface{}{
+		"partitions": partitions,
+		"topic":      topicName,
+	}
+
+	responseBody, err := json.Marshal(response)
+	if err != nil {
+		return sender.Send(&backend.CallResourceResponse{
+			Status: 500,
+			Body:   []byte(`{"error": "Failed to marshal response"}`),
+			Headers: map[string][]string{
+				"Content-Type": {"application/json"},
+			},
+		})
+	}
+
+	return sender.Send(&backend.CallResourceResponse{
+		Status: 200,
+		Body:   responseBody,
+		Headers: map[string][]string{
+			"Content-Type": {"application/json"},
+		},
+	})
 }
 
 func (d *KafkaDatasource) CheckHealth(_ context.Context, req *backend.CheckHealthRequest) (*backend.CheckHealthResult, error) {

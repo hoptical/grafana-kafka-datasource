@@ -68,4 +68,9 @@ export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourc
 
     return merge(...observables);
   }
+
+  async getTopicPartitions(topicName: string): Promise<number[]> {
+    const response = await this.getResource('partitions', { topic: topicName });
+    return response.partitions || [];
+  }
 }
