@@ -27,6 +27,23 @@ const timestampModes: Array<{ label: string; value: TimestampMode }> = [
   },
 ];
 
+const partitionOptions: Array<{ label: string; value: number | 'all' }> = [
+  {
+    label: 'All partitions',
+    value: 'all',
+  },
+  // We'll add specific partition numbers dynamically if needed
+  // For now, we'll allow manual partition numbers through the input
+];
+
+// Generate partition options for common cases
+for (let i = 0; i <= 15; i++) {
+  partitionOptions.push({
+    label: `Partition ${i}`,
+    value: i,
+  });
+}
+
 type Props = QueryEditorProps<DataSource, KafkaQuery, KafkaDataSourceOptions>;
 
 export class QueryEditor extends PureComponent<Props> {
@@ -36,12 +53,9 @@ export class QueryEditor extends PureComponent<Props> {
     onRunQuery();
   };
 
-  onPartitionChange = (event: ChangeEvent<HTMLInputElement>) => {
+  onPartitionChange = (value: number | 'all') => {
     const { onChange, query, onRunQuery } = this.props;
-    const value = parseInt(event.target.value, 10);
-    // Ensure partition is a valid non-negative integer
-    const partition = isNaN(value) || value < 0 ? 0 : value;
-    onChange({ ...query, partition });
+    onChange({ ...query, partition: value });
     onRunQuery();
   };
 
@@ -74,16 +88,14 @@ export class QueryEditor extends PureComponent<Props> {
               placeholder="Enter topic name"
             />
           </InlineField>
-          <InlineField label="Partition" labelWidth={10} tooltip="Kafka partition number">
-            <Input
+          <InlineField label="Partition" labelWidth={10} tooltip="Kafka partition selection">
+            <Select
               id="query-editor-partition"
               value={partition}
-              onChange={this.onPartitionChange}
-              type="number"
-              width={10}
-              min={0}
-              step={1}
-              placeholder="0"
+              options={partitionOptions}
+              onChange={(value) => this.onPartitionChange(value.value!)}
+              width={15}
+              placeholder="Select partition"
             />
           </InlineField>
         </InlineFieldRow>

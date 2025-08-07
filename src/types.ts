@@ -62,13 +62,13 @@ export interface KafkaSecureJsonData {
 
 export interface KafkaQuery extends DataQuery {
   topicName: string;
-  partition: number;
+  partition: number | 'all';
   autoOffsetReset: AutoOffsetReset;
   timestampMode: TimestampMode;
 }
 
 export const defaultQuery: Partial<KafkaQuery> = {
-  partition: 0,
+  partition: 'all',
   autoOffsetReset: AutoOffsetReset.LATEST,
   timestampMode: TimestampMode.Now,
 };

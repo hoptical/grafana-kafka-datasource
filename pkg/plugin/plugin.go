@@ -114,10 +114,10 @@ func (d *KafkaDatasource) QueryData(ctx context.Context, req *backend.QueryDataR
 }
 
 type queryModel struct {
-	Topic           string `json:"topicName"`
-	Partition       int32  `json:"partition"`
-	AutoOffsetReset string `json:"autoOffsetReset"`
-	TimestampMode   string `json:"timestampMode"`
+	Topic           string      `json:"topicName"`
+	Partition       interface{} `json:"partition"` // Can be int32 or "all"
+	AutoOffsetReset string      `json:"autoOffsetReset"`
+	TimestampMode   string      `json:"timestampMode"`
 }
 
 func (d *KafkaDatasource) query(_ context.Context, pCtx backend.PluginContext, query backend.DataQuery) backend.DataResponse {
@@ -217,45 +217,104 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 	err := json.Unmarshal(req.Data, &qm)
 	if err != nil {
 		log.DefaultLogger.Error("RunStream unmarshal error", "error", err)
+		return err
 	}
 
-	// Create stream-specific reader
-	reader, err := d.client.NewStreamReader(ctx, qm.Topic, qm.Partition, qm.AutoOffsetReset)
-	if err != nil {
-		return fmt.Errorf("failed to create stream reader: %w", err)
+	// Parse partition field which can be int32 or "all"
+	var partitions []int32
+	switch v := qm.Partition.(type) {
+	case float64: // JSON numbers are parsed as float64
+		partitions = []int32{int32(v)}
+	case string:
+		if v == "all" {
+			// Get all partitions for the topic
+			allPartitions, err := d.client.GetTopicPartitions(ctx, qm.Topic)
+			if err != nil {
+				return fmt.Errorf("failed to get topic partitions: %w", err)
+			}
+			partitions = allPartitions
+		} else {
+			return fmt.Errorf("invalid partition value: %s", v)
+		}
+	default:
+		return fmt.Errorf("invalid partition type: %T", v)
 	}
-	defer reader.Close()
+
+	log.DefaultLogger.Debug("RunStream partitions", "topic", qm.Topic, "partitions", partitions)
+
+	// Create a channel to collect messages from all partitions
+	messagesCh := make(chan messageWithPartition, 100)
+
+	// Start a goroutine for each partition
+	for _, partition := range partitions {
+		go func(p int32) {
+			reader, err := d.client.NewStreamReader(ctx, qm.Topic, p, qm.AutoOffsetReset)
+			if err != nil {
+				log.DefaultLogger.Error("Failed to create stream reader", "partition", p, "error", err)
+				return
+			}
+			defer reader.Close()
+
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+					msg, err := d.client.ConsumerPull(ctx, reader)
+					if err != nil {
+						log.DefaultLogger.Error("Error reading from partition", "partition", p, "error", err)
+						continue
+					}
+
+					select {
+					case messagesCh <- messageWithPartition{msg: msg, partition: p}:
+					case <-ctx.Done():
+						return
+					}
+				}
+			}
+		}(partition)
+	}
+
+	// Main loop to process messages from all partitions
 	for {
 		select {
 		case <-ctx.Done():
 			log.DefaultLogger.Debug("Context done, finish streaming", "path", req.Path)
 			return nil
-		default:
-			msg, err := d.client.ConsumerPull(ctx, reader)
-			if err != nil {
-				return err
-			}
+		case msgWithPartition := <-messagesCh:
+			msg := msgWithPartition.msg
+			partition := msgWithPartition.partition
+
 			frame := data.NewFrame("response")
 			frame.Fields = append(frame.Fields,
 				data.NewField("time", nil, make([]time.Time, 1)),
 			)
+
 			var frame_time time.Time
 			if qm.TimestampMode == "now" {
 				frame_time = time.Now()
 			} else {
 				frame_time = msg.Timestamp
 			}
+
 			log.DefaultLogger.Debug("Message received",
 				"topic", qm.Topic,
-				"partition", qm.Partition,
+				"partition", partition,
 				"offset", msg.Offset,
 				"timestamp", frame_time,
 				"fieldCount", len(msg.Value))
 
 			frame.Fields[0].Set(0, frame_time)
 
-			cnt := 1
+			// Add partition field when consuming from multiple partitions
+			if len(partitions) > 1 {
+				frame.Fields = append(frame.Fields,
+					data.NewField("partition", nil, make([]int32, 1)))
+				frame.Fields[1].Set(0, partition)
+			}
 
+			cnt := len(frame.Fields)
 			for key, value := range msg.Value {
 				frame.Fields = append(frame.Fields,
 					data.NewField(key, nil, make([]float64, 1)))
@@ -270,6 +329,11 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 			}
 		}
 	}
+}
+
+type messageWithPartition struct {
+	msg       kafka_client.KafkaMessage
+	partition int32
 }
 
 func (d *KafkaDatasource) PublishStream(_ context.Context, req *backend.PublishStreamRequest) (*backend.PublishStreamResponse, error) {

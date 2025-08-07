@@ -334,6 +334,28 @@ func (client *KafkaClient) IsTopicExists(ctx context.Context, topicName string) 
 	return false, nil
 }
 
+func (client *KafkaClient) GetTopicPartitions(ctx context.Context, topicName string) ([]int32, error) {
+	// Use first bootstrap server to establish connection
+	firstBroker := strings.Split(client.BootstrapServers, ",")[0]
+	conn, err := client.Dialer.Dial(network, firstBroker)
+	if err != nil {
+		return nil, fmt.Errorf("unable to dial broker: %w", err)
+	}
+	defer conn.Close()
+
+	partitions, err := conn.ReadPartitions(topicName)
+	if err != nil {
+		return nil, fmt.Errorf("unable to read partitions for topic %s: %w", topicName, err)
+	}
+
+	partitionIDs := make([]int32, len(partitions))
+	for i, partition := range partitions {
+		partitionIDs[i] = int32(partition.ID)
+	}
+
+	return partitionIDs, nil
+}
+
 func getKafkaLogger(level string) (kafka.LoggerFunc, kafka.LoggerFunc) {
 	noop := kafka.LoggerFunc(func(msg string, args ...interface{}) {})
 
