@@ -30,7 +30,7 @@ interface State {
 export class QueryEditor extends PureComponent<Props, State> {
   private debouncedSearchTopics: DebouncedFunc<(input: string) => void>;
   private lastCommittedTopic = '';
-  private successTimeout?: ReturnType<typeof setTimeout>;
+  private fetchPartitionsTimeoutId?: ReturnType<typeof setTimeout>;
   private topicBlurTimeout?: ReturnType<typeof setTimeout>;
 
   constructor(props: Props) {
@@ -57,9 +57,9 @@ export class QueryEditor extends PureComponent<Props, State> {
   componentWillUnmount() {
     // Cancel debounced topic search to avoid setState after unmount
     this.debouncedSearchTopics.cancel();
-    if (this.successTimeout) {
-      clearTimeout(this.successTimeout);
-      this.successTimeout = undefined;
+    if (this.fetchPartitionsTimeoutId) {
+      clearTimeout(this.fetchPartitionsTimeoutId);
+      this.fetchPartitionsTimeoutId = undefined;
     }
     if (this.topicBlurTimeout) {
       clearTimeout(this.topicBlurTimeout);
@@ -83,9 +83,16 @@ export class QueryEditor extends PureComponent<Props, State> {
         partitionSuccess: `Fetched ${partCount} partition${partCount === 1 ? '' : 's'}`,
       });
       // Clear success after 5s
-      this.successTimeout = setTimeout(() => {
-        this.setState({ partitionSuccess: undefined });
-        this.successTimeout = undefined;
+      if (this.fetchPartitionsTimeoutId) {
+        clearTimeout(this.fetchPartitionsTimeoutId);
+        this.fetchPartitionsTimeoutId = undefined;
+      }
+      this.fetchPartitionsTimeoutId = setTimeout(() => {
+        // Only clear if still mounted and timeout not replaced
+        if (this.fetchPartitionsTimeoutId) {
+          this.setState({ partitionSuccess: undefined });
+          this.fetchPartitionsTimeoutId = undefined;
+        }
       }, 5000);
     } catch (error) {
       console.error('Failed to fetch partitions:', error);

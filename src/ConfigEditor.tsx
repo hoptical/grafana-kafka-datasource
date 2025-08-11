@@ -31,8 +31,7 @@ export const ConfigEditor = (props: Props) => {
     if (!isEqual(options.jsonData, jsonData)) {
       onOptionsChange({ ...options, jsonData });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [onOptionsChange, options]);
 
   const onBootstrapServersChange = (event: ChangeEvent<HTMLInputElement>) => {
     onOptionsChange({ ...options, jsonData: { ...options.jsonData, bootstrapServers: event.target.value } });
@@ -116,15 +115,15 @@ export const ConfigEditor = (props: Props) => {
   };
 
   const onHealthcheckTimeoutChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const value = parseFloat(event.target.value);
-    const validatedValue = value < 0 ? 0 : value;
-    onOptionsChange({ ...options, jsonData: { ...options.jsonData, healthcheckTimeout: validatedValue } });
+    const n = Number(event.target.value);
+    const validated = Number.isFinite(n) && n >= 0 ? n : 0;
+    onOptionsChange({ ...options, jsonData: { ...options.jsonData, healthcheckTimeout: validated } });
   };
 
   const onRequestTimeoutChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const value = parseFloat(event.target.value);
-    const validatedValue = value < 0 ? 0 : value;
-    onOptionsChange({ ...options, jsonData: { ...options.jsonData, timeout: validatedValue } });
+    const n = Number(event.target.value);
+    const validated = Number.isFinite(n) && n >= 0 ? n : 0;
+    onOptionsChange({ ...options, jsonData: { ...options.jsonData, timeout: validated } });
   };
 
   const jsonData = defaults(options.jsonData, defaultDataSourceOptions);

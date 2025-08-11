@@ -35,20 +35,22 @@ export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourc
   applyTemplateVariables(query: KafkaQuery, scopedVars: ScopedVars) {
     const templateSrv = getTemplateSrv();
     const topicName = templateSrv.replace(query.topicName, scopedVars);
-
     let partition: number | 'all' = query.partition;
-    if (typeof partition === 'number') {
+    // Only apply template replacement if partition is a string that looks like a template variable
+    if (typeof partition === 'string' && partition !== 'all') {
+      const replaced = templateSrv.replace(partition, scopedVars);
+      if (replaced === 'all') {
+        partition = 'all';
+      } else {
+        const parsed = Number.parseInt(replaced, 10);
+        partition = Number.isFinite(parsed) && parsed >= 0 ? parsed : 'all';
+      }
+    } else if (typeof partition === 'number') {
+      // Apply template replacement to numeric partitions (might be from saved queries)
       const replaced = templateSrv.replace(String(partition), scopedVars);
       const parsed = Number.parseInt(replaced, 10);
-      partition = Number.isFinite(parsed) ? parsed : 0;
-    } else {
-      const replaced = templateSrv.replace('all', scopedVars);
-      if (replaced !== 'all') {
-        const parsed = Number.parseInt(replaced, 10);
-        partition = Number.isFinite(parsed) ? parsed : 0;
-      }
+      partition = Number.isFinite(parsed) && parsed >= 0 ? parsed : partition;
     }
-
     return { ...query, topicName, partition };
   }
 

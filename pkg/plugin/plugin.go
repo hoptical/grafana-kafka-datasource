@@ -162,19 +162,13 @@ func (d *KafkaDatasource) query(_ context.Context, pCtx backend.PluginContext, q
 
 func (d *KafkaDatasource) CallResource(ctx context.Context, req *backend.CallResourceRequest, sender backend.CallResourceResponseSender) error {
 	log.DefaultLogger.Debug("CallResource called", "path", req.Path, "method", req.Method)
-
 	if req.Path == "partitions" && req.Method == "GET" {
 		return d.handleGetPartitions(ctx, req, sender)
 	}
-
 	if req.Path == "topics" && req.Method == "GET" {
 		return d.handleSearchTopics(ctx, req, sender)
 	}
-
-	return sender.Send(&backend.CallResourceResponse{
-		Status: 404,
-		Body:   []byte("Not found"),
-	})
+	return sendJSON(sender, 404, map[string]string{"error": "Not found"})
 }
 
 func sendJSON(sender backend.CallResourceResponseSender, status int, body interface{}) error {
@@ -223,73 +217,30 @@ func (d *KafkaDatasource) handleSearchTopics(ctx context.Context, req *backend.C
 	// Parse URL to get query parameters
 	parsedURL, err := url.Parse(req.URL)
 	if err != nil {
-		return sender.Send(&backend.CallResourceResponse{
-			Status: 400,
-			Body:   []byte(`{"error": "Invalid URL"}`),
-			Headers: map[string][]string{
-				"Content-Type": {"application/json"},
-			},
-		})
+		return sendJSON(sender, 400, map[string]string{"error": "Invalid URL"})
 	}
-
 	prefix := parsedURL.Query().Get("prefix")
 	limitStr := parsedURL.Query().Get("limit")
-
 	limit := 5 // Default limit
 	if limitStr != "" {
 		if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit > 0 {
 			limit = parsedLimit
 		}
 	}
-
 	if err := d.client.NewConnection(); err != nil {
 		log.DefaultLogger.Error("Failed to create connection", "error", err)
-		return sender.Send(&backend.CallResourceResponse{
-			Status: 500,
-			Body:   []byte(fmt.Sprintf(`{"error": "Failed to connect: %s"}`, err.Error())),
-			Headers: map[string][]string{
-				"Content-Type": {"application/json"},
-			},
-		})
+		return sendJSON(sender, 500, map[string]string{"error": fmt.Sprintf("Failed to connect: %s", err.Error())})
 	}
-
 	topics, err := d.client.GetTopics(ctx, prefix, limit)
 	if err != nil {
 		log.DefaultLogger.Error("Failed to get topics", "prefix", prefix, "error", err)
-		return sender.Send(&backend.CallResourceResponse{
-			Status: 500,
-			Body:   []byte(fmt.Sprintf(`{"error": "Failed to get topics: %s"}`, err.Error())),
-			Headers: map[string][]string{
-				"Content-Type": {"application/json"},
-			},
-		})
+		return sendJSON(sender, 500, map[string]string{"error": fmt.Sprintf("Failed to get topics: %s", err.Error())})
 	}
-
 	log.DefaultLogger.Debug("Topic search results", "prefix", prefix, "count", len(topics))
-
-	response := map[string]interface{}{
+	return sendJSON(sender, 200, map[string]interface{}{
 		"topics": topics,
 		"prefix": prefix,
 		"limit":  limit,
-	}
-
-	responseBody, err := json.Marshal(response)
-	if err != nil {
-		return sender.Send(&backend.CallResourceResponse{
-			Status: 500,
-			Body:   []byte(`{"error": "Failed to marshal response"}`),
-			Headers: map[string][]string{
-				"Content-Type": {"application/json"},
-			},
-		})
-	}
-
-	return sender.Send(&backend.CallResourceResponse{
-		Status: 200,
-		Body:   responseBody,
-		Headers: map[string][]string{
-			"Content-Type": {"application/json"},
-		},
 	})
 }
 
