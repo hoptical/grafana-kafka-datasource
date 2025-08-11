@@ -17,21 +17,26 @@ import (
 	"github.com/segmentio/kafka-go"
 )
 
-const maxEarliest int64 = 100
 const debugLogLevel = "debug"
 const errorLogLevel = "error"
-const dialerTimeout = 10 * time.Second
-const defaultHealthcheckTimeout = 2000 // 2 seconds in milliseconds
+const dialerTimeout = 10 * time.Second // Fallback dialer timeout when user timeout not set
+const defaultTimeoutMs = 2000          // Fallback general timeout (health check) in ms if user timeout not provided
+const maxEarliest = 100                // retained for offset backfill logic (earliest last N)
 
+// Options holds datasource configuration passed from Grafana.
+// Timeout (ms) is the single user-facing timeout controlling:
+//   - Dialer & client request timeout
+//   - Health check deadline
+//
+// If Timeout <= 0, sensible defaults are used.
 type Options struct {
-	BootstrapServers   string `json:"bootstrapServers"`
-	ClientId           string `json:"clientId"`
-	SecurityProtocol   string `json:"securityProtocol"`
-	SaslMechanisms     string `json:"saslMechanisms"`
-	SaslUsername       string `json:"saslUsername"`
-	SaslPassword       string `json:"saslPassword"`
-	HealthcheckTimeout int32  `json:"healthcheckTimeout"`
-	LogLevel           string `json:"logLevel"`
+	BootstrapServers string `json:"bootstrapServers"`
+	ClientId         string `json:"clientId"`
+	SecurityProtocol string `json:"securityProtocol"`
+	SaslMechanisms   string `json:"saslMechanisms"`
+	SaslUsername     string `json:"saslUsername"`
+	SaslPassword     string `json:"saslPassword"`
+	LogLevel         string `json:"logLevel"`
 	// TLS Configuration
 	TLSAuthWithCACert bool   `json:"tlsAuthWithCACert"`
 	TLSAuth           bool   `json:"tlsAuth"`
@@ -40,23 +45,23 @@ type Options struct {
 	TLSCACert         string `json:"tlsCACert"`
 	TLSClientCert     string `json:"tlsClientCert"`
 	TLSClientKey      string `json:"tlsClientKey"`
-	// Advanced HTTP settings
-	Timeout int32 `json:"timeout"`
+	// Advanced settings
+	Timeout int32 `json:"timeout"` // ms; primary timeout
 }
 
 type KafkaClient struct {
-	Dialer             *kafka.Dialer
-	Reader             *kafka.Reader
-	Conn               *kafka.Client
-	BootstrapServers   string
-	ClientId           string
-	TimestampMode      string
-	SecurityProtocol   string
-	SaslMechanisms     string
-	SaslUsername       string
-	SaslPassword       string
-	LogLevel           string
-	HealthcheckTimeout int32
+	Dialer           *kafka.Dialer
+	Reader           *kafka.Reader
+	Conn             *kafka.Client
+	BootstrapServers string
+	Brokers          []string
+	ClientId         string
+	TimestampMode    string
+	SecurityProtocol string
+	SaslMechanisms   string
+	SaslUsername     string
+	SaslPassword     string
+	LogLevel         string
 	// TLS Configuration
 	TLSAuthWithCACert bool
 	TLSAuth           bool
@@ -66,7 +71,7 @@ type KafkaClient struct {
 	TLSClientCert     string
 	TLSClientKey      string
 	// Advanced settings
-	Timeout int32
+	Timeout int32 // effective timeout (ms)
 }
 
 type KafkaMessage struct {
@@ -76,21 +81,31 @@ type KafkaMessage struct {
 }
 
 func NewKafkaClient(options Options) KafkaClient {
-	healthcheckTimeout := options.HealthcheckTimeout
-	if healthcheckTimeout <= 0 {
-		healthcheckTimeout = defaultHealthcheckTimeout
+	// Build broker slice once
+	raw := strings.Split(options.BootstrapServers, ",")
+	brokers := make([]string, 0, len(raw))
+	for _, b := range raw {
+		bt := strings.TrimSpace(b)
+		if bt != "" {
+			brokers = append(brokers, bt)
+		}
 	}
 
-	client := KafkaClient{
-		BootstrapServers:   options.BootstrapServers,
-		ClientId:           options.ClientId,
-		SecurityProtocol:   options.SecurityProtocol,
-		SaslMechanisms:     options.SaslMechanisms,
-		SaslUsername:       options.SaslUsername,
-		SaslPassword:       options.SaslPassword,
-		LogLevel:           options.LogLevel,
-		HealthcheckTimeout: healthcheckTimeout,
-		// TLS Configuration
+	// Sanitize timeout; store 0 if unset to differentiate
+	effectiveTimeoutMs := options.Timeout
+	if effectiveTimeoutMs < 0 {
+		effectiveTimeoutMs = 0
+	}
+
+	return KafkaClient{
+		BootstrapServers:  options.BootstrapServers,
+		Brokers:           brokers,
+		ClientId:          options.ClientId,
+		SecurityProtocol:  options.SecurityProtocol,
+		SaslMechanisms:    options.SaslMechanisms,
+		SaslUsername:      options.SaslUsername,
+		SaslPassword:      options.SaslPassword,
+		LogLevel:          options.LogLevel,
 		TLSAuthWithCACert: options.TLSAuthWithCACert,
 		TLSAuth:           options.TLSAuth,
 		TLSSkipVerify:     options.TLSSkipVerify,
@@ -98,17 +113,14 @@ func NewKafkaClient(options Options) KafkaClient {
 		TLSCACert:         options.TLSCACert,
 		TLSClientCert:     options.TLSClientCert,
 		TLSClientKey:      options.TLSClientKey,
-		// Advanced settings
-		Timeout: options.Timeout,
+		Timeout:           effectiveTimeoutMs,
 	}
-	return client
 }
 
 func (client *KafkaClient) NewConnection() error {
 	var mechanism sasl.Mechanism
 	var err error
 
-	// Set up SASL mechanism if provided
 	if client.SaslMechanisms != "" {
 		mechanism, err = getSASLMechanism(client)
 		if err != nil {
@@ -116,32 +128,28 @@ func (client *KafkaClient) NewConnection() error {
 		}
 	}
 
-	// Configure Dialer
-	dialer := &kafka.Dialer{
-		Timeout:       dialerTimeout,
-		SASLMechanism: mechanism,
-		ClientID:      client.ClientId, // Add Client ID support
+	// Determine dialer timeout
+	effectiveTimeout := dialerTimeout
+	if client.Timeout > 0 {
+		effectiveTimeout = time.Duration(client.Timeout) * time.Millisecond
 	}
 
-	// Configure Transport
+	dialer := &kafka.Dialer{
+		Timeout:       effectiveTimeout,
+		SASLMechanism: mechanism,
+		ClientID:      client.ClientId,
+	}
+
 	transport := &kafka.Transport{
 		SASL:     mechanism,
-		ClientID: client.ClientId, // Add Client ID support
+		ClientID: client.ClientId,
 	}
 
-	// Configure TLS if SSL or SASL_SSL is used
 	if client.SecurityProtocol == "SASL_SSL" || client.SecurityProtocol == "SSL" {
-		tlsConfig := &tls.Config{
-			MinVersion:         tls.VersionTLS12,
-			InsecureSkipVerify: client.TLSSkipVerify,
-		}
-
-		// Set server name for TLS verification if provided
+		tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12, InsecureSkipVerify: client.TLSSkipVerify}
 		if client.ServerName != "" {
 			tlsConfig.ServerName = client.ServerName
 		}
-
-		// Add CA certificate if self-signed certificate option is enabled
 		if client.TLSAuthWithCACert && client.TLSCACert != "" {
 			roots := x509.NewCertPool()
 			if ok := roots.AppendCertsFromPEM([]byte(client.TLSCACert)); !ok {
@@ -149,8 +157,6 @@ func (client *KafkaClient) NewConnection() error {
 			}
 			tlsConfig.RootCAs = roots
 		}
-
-		// Add client certificate if TLS client authentication is enabled
 		if client.TLSAuth && client.TLSClientCert != "" && client.TLSClientKey != "" {
 			cert, err := tls.X509KeyPair([]byte(client.TLSClientCert), []byte(client.TLSClientKey))
 			if err != nil {
@@ -158,26 +164,19 @@ func (client *KafkaClient) NewConnection() error {
 			}
 			tlsConfig.Certificates = []tls.Certificate{cert}
 		}
-
 		dialer.TLS = tlsConfig
 		transport.TLS = tlsConfig
 	}
 
 	client.Dialer = dialer
-	client.Conn = &kafka.Client{
-		Addr:      kafka.TCP(strings.Split(client.BootstrapServers, ",")...),
-		Timeout:   dialerTimeout,
-		Transport: transport,
-	}
-
+	client.Conn = &kafka.Client{Addr: kafka.TCP(client.Brokers...), Timeout: effectiveTimeout, Transport: transport}
 	return nil
 }
 
 func (client *KafkaClient) newReader(topic string, partition int) *kafka.Reader {
 	logger, errorLogger := getKafkaLogger(client.LogLevel)
-
-	reader := kafka.NewReader(kafka.ReaderConfig{
-		Brokers:        strings.Split(client.BootstrapServers, ","),
+	return kafka.NewReader(kafka.ReaderConfig{
+		Brokers:        client.Brokers,
 		Topic:          topic,
 		Partition:      partition,
 		Dialer:         client.Dialer,
@@ -185,68 +184,63 @@ func (client *KafkaClient) newReader(topic string, partition int) *kafka.Reader 
 		Logger:         logger,
 		ErrorLogger:    errorLogger,
 	})
-
-	return reader
 }
 
-func (client *KafkaClient) NewStreamReader(
-	ctx context.Context,
-	topic string,
-	partition int32,
-	autoOffsetReset string,
-) (*kafka.Reader, error) {
-	var offset int64
+// getTopicMetadata fetches metadata for a single topic.
+// metadataForTopic returns metadata for a specific topic.
+func (client *KafkaClient) metadataForTopic(ctx context.Context, topicName string) (*kafka.Topic, error) {
+	meta, err := client.Conn.Metadata(ctx, &kafka.MetadataRequest{Topics: []string{topicName}})
+	if err != nil {
+		return nil, fmt.Errorf("unable to get metadata: %w", err)
+	}
+	if len(meta.Topics) == 0 {
+		return nil, fmt.Errorf("topic %s not found", topicName)
+	}
+	t := meta.Topics[0]
+	if t.Error != nil {
+		return nil, fmt.Errorf("error getting topic %s metadata: %w", topicName, t.Error)
+	}
+	return &t, nil
+}
 
-	// Create connection if not exists
+func (client *KafkaClient) NewStreamReader(ctx context.Context, topic string, partition int32, autoOffsetReset string) (*kafka.Reader, error) {
+	var offset int64
 	if client.Dialer == nil {
 		if err := client.NewConnection(); err != nil {
 			return nil, fmt.Errorf("failed to create connection: %w", err)
 		}
 	}
-
-	// Set up offset
 	switch autoOffsetReset {
 	case "latest":
 		offset = kafka.LastOffset
 	case "earliest":
-		// For earliest, we'll set a calculated offset but avoid DialLeader
-		// which could trigger topic auto-creation. We'll use a reasonable
-		// fallback that gets recent messages without connecting to specific topics.
+		// retain limited backfill approach (last N) but clamp at first offset
 		offset = kafka.LastOffset - maxEarliest
-
-		// If the calculated offset is negative, use FirstOffset
 		if offset < 0 {
 			offset = kafka.FirstOffset
 		}
 	default:
 		offset = kafka.LastOffset
 	}
-
-	// Create new reader
 	reader := client.newReader(topic, int(partition))
 	if err := reader.SetOffset(offset); err != nil {
 		reader.Close()
 		return nil, fmt.Errorf("unable to set offset: %w", err)
 	}
-
 	return reader, nil
 }
 
 func (client *KafkaClient) ConsumerPull(ctx context.Context, reader *kafka.Reader) (KafkaMessage, error) {
 	var message KafkaMessage
-
 	msg, err := reader.ReadMessage(ctx)
 	if err != nil {
 		return message, fmt.Errorf("error reading message from Kafka: %w", err)
 	}
-
 	if err := json.Unmarshal(msg.Value, &message.Value); err != nil {
 		return message, fmt.Errorf("error unmarshalling message: %w", err)
 	}
-
 	message.Offset = msg.Offset
 	message.Timestamp = msg.Time
-
 	return message, nil
 }
 
@@ -254,23 +248,21 @@ func (client *KafkaClient) HealthCheck() error {
 	if err := client.NewConnection(); err != nil {
 		return fmt.Errorf("unable to initialize Kafka client: %w", err)
 	}
+	brokers := len(client.Brokers)
+	log.Printf("[KAFKA DEBUG] Attempting health check connection to %d broker(s)", brokers)
 
-	// Log connection attempt with non-sensitive info
-	brokers := strings.Split(client.BootstrapServers, ",")
-	brokerCount := len(brokers)
-	log.Printf("[KAFKA DEBUG] Attempting health check connection to %d broker(s)", brokerCount)
-
-	// It is better to try several times due to possible network issues
-	timeout := time.After(time.Duration(client.HealthcheckTimeout) * time.Millisecond)
+	deadlineMs := client.Timeout
+	if deadlineMs <= 0 {
+		deadlineMs = defaultTimeoutMs
+	}
+	deadline := time.After(time.Duration(deadlineMs) * time.Millisecond)
 	ticker := time.NewTicker(200 * time.Millisecond)
 	defer ticker.Stop()
-
 	for {
 		select {
-		case <-timeout:
-			return fmt.Errorf("health check timed out after %d ms", client.HealthcheckTimeout)
+		case <-deadline:
+			return fmt.Errorf("health check timed out after %d ms", deadlineMs)
 		case <-ticker.C:
-			// Use metadata request instead of ReadPartitions to avoid auto-creation
 			_, err := client.Conn.Metadata(context.Background(), &kafka.MetadataRequest{})
 			if err == nil {
 				return nil
@@ -288,10 +280,7 @@ func (client *KafkaClient) Dispose() {
 func getSASLMechanism(client *KafkaClient) (sasl.Mechanism, error) {
 	switch client.SaslMechanisms {
 	case "PLAIN":
-		return plain.Mechanism{
-			Username: client.SaslUsername,
-			Password: client.SaslPassword,
-		}, nil
+		return plain.Mechanism{Username: client.SaslUsername, Password: client.SaslPassword}, nil
 	case "SCRAM-SHA-256":
 		return scram.Mechanism(scram.SHA256, client.SaslUsername, client.SaslPassword)
 	case "SCRAM-SHA-512":
@@ -303,95 +292,48 @@ func getSASLMechanism(client *KafkaClient) (sasl.Mechanism, error) {
 	}
 }
 
-func (client *KafkaClient) IsTopicExists(ctx context.Context, topicName string) (bool, error) {
-	meta, err := client.Conn.Metadata(ctx, &kafka.MetadataRequest{
-		Topics: []string{topicName},
-	})
-	if err != nil {
-		return false, fmt.Errorf("unable to get metadata: %w", err)
-	}
-
-	if len(meta.Topics) > 0 && meta.Topics[0].Error == nil {
-		return true, nil
-	}
-
-	return false, nil
-}
-
 func (client *KafkaClient) GetTopicPartitions(ctx context.Context, topicName string) ([]int32, error) {
-	// Use metadata request to get topic partitions - safer than ReadPartitions
-	// as it doesn't set AllowAutoTopicCreation
-	meta, err := client.Conn.Metadata(ctx, &kafka.MetadataRequest{
-		Topics: []string{topicName},
-	})
+	topic, err := client.metadataForTopic(ctx, topicName)
 	if err != nil {
-		return nil, fmt.Errorf("unable to get metadata for topic %s: %w", topicName, err)
+		return nil, err
 	}
-
-	if len(meta.Topics) == 0 {
-		return nil, fmt.Errorf("topic %s not found", topicName)
+	ids := make([]int32, len(topic.Partitions))
+	for i, p := range topic.Partitions {
+		ids[i] = int32(p.ID)
 	}
-
-	topic := meta.Topics[0]
-	if topic.Error != nil {
-		return nil, fmt.Errorf("error getting topic %s metadata: %w", topicName, topic.Error)
-	}
-
-	partitionIDs := make([]int32, len(topic.Partitions))
-	for i, partition := range topic.Partitions {
-		partitionIDs[i] = int32(partition.ID)
-	}
-
-	return partitionIDs, nil
+	return ids, nil
 }
 
 func (client *KafkaClient) GetTopics(ctx context.Context, prefix string, limit int) ([]string, error) {
-	// Use metadata request without specifying topics to get all topics
-	// This is safer than ReadPartitions as it doesn't set AllowAutoTopicCreation
 	meta, err := client.Conn.Metadata(ctx, &kafka.MetadataRequest{})
 	if err != nil {
 		return nil, fmt.Errorf("unable to get metadata: %w", err)
 	}
-
-	var matchingTopics []string
+	var matching []string
 	for _, topic := range meta.Topics {
 		if topic.Error != nil {
-			continue // Skip topics with errors
+			continue
 		}
-
-		// Filter by prefix if provided
 		if prefix == "" || strings.HasPrefix(topic.Name, prefix) {
-			matchingTopics = append(matchingTopics, topic.Name)
-
-			// Apply limit if specified
-			if limit > 0 && len(matchingTopics) >= limit {
+			matching = append(matching, topic.Name)
+			if limit > 0 && len(matching) >= limit {
 				break
 			}
 		}
 	}
-
-	return matchingTopics, nil
+	return matching, nil
 }
 
 func getKafkaLogger(level string) (kafka.LoggerFunc, kafka.LoggerFunc) {
 	noop := kafka.LoggerFunc(func(msg string, args ...interface{}) {})
-
-	var logger = noop
-	var errorLogger = noop
-
+	logger := noop
+	errorLogger := noop
 	switch strings.ToLower(level) {
 	case debugLogLevel:
-		logger = func(msg string, args ...interface{}) {
-			log.Printf("[KAFKA DEBUG] "+msg, args...)
-		}
-		errorLogger = func(msg string, args ...interface{}) {
-			log.Printf("[KAFKA ERROR] "+msg, args...)
-		}
+		logger = func(msg string, args ...interface{}) { log.Printf("[KAFKA DEBUG] "+msg, args...) }
+		errorLogger = func(msg string, args ...interface{}) { log.Printf("[KAFKA ERROR] "+msg, args...) }
 	case errorLogLevel:
-		errorLogger = func(msg string, args ...interface{}) {
-			log.Printf("[KAFKA ERROR] "+msg, args...)
-		}
+		errorLogger = func(msg string, args ...interface{}) { log.Printf("[KAFKA ERROR] "+msg, args...) }
 	}
-
 	return logger, errorLogger
 }

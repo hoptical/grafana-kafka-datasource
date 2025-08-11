@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
@@ -31,9 +32,9 @@ func NewKafkaInstance(_ context.Context, s backend.DataSourceInstanceSettings) (
 		return nil, err
 	}
 
-	kafka_client := kafka_client.NewKafkaClient(*settings)
+	kc := kafka_client.NewKafkaClient(*settings)
 
-	return &KafkaDatasource{kafka_client}, nil
+	return &KafkaDatasource{kc}, nil
 }
 
 func getDatasourceSettings(s backend.DataSourceInstanceSettings) (*kafka_client.Options, error) {
@@ -99,6 +100,7 @@ type KafkaDatasource struct {
 
 func (d *KafkaDatasource) Dispose() {
 	// Clean up datasource instance resources.
+	d.client.Dispose()
 }
 
 func (d *KafkaDatasource) QueryData(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
@@ -160,76 +162,46 @@ func (d *KafkaDatasource) CallResource(ctx context.Context, req *backend.CallRes
 	})
 }
 
+func sendJSON(sender backend.CallResourceResponseSender, status int, body interface{}) error {
+	b, err := json.Marshal(body)
+	if err != nil {
+		return sender.Send(&backend.CallResourceResponse{
+			Status:  500,
+			Body:    []byte(`{"error": "Failed to marshal response"}`),
+			Headers: map[string][]string{"Content-Type": {"application/json"}},
+		})
+	}
+	return sender.Send(&backend.CallResourceResponse{
+		Status:  status,
+		Body:    b,
+		Headers: map[string][]string{"Content-Type": {"application/json"}},
+	})
+}
+
 func (d *KafkaDatasource) handleGetPartitions(ctx context.Context, req *backend.CallResourceRequest, sender backend.CallResourceResponseSender) error {
 	// Parse URL to get query parameters
 	parsedURL, err := url.Parse(req.URL)
 	if err != nil {
-		return sender.Send(&backend.CallResourceResponse{
-			Status: 400,
-			Body:   []byte(`{"error": "Invalid URL"}`),
-			Headers: map[string][]string{
-				"Content-Type": {"application/json"},
-			},
-		})
+		return sendJSON(sender, 400, map[string]string{"error": "Invalid URL"})
 	}
 
 	topicName := parsedURL.Query().Get("topic")
 	if topicName == "" {
-		return sender.Send(&backend.CallResourceResponse{
-			Status: 400,
-			Body:   []byte(`{"error": "topic parameter is required"}`),
-			Headers: map[string][]string{
-				"Content-Type": {"application/json"},
-			},
-		})
+		return sendJSON(sender, 400, map[string]string{"error": "topic parameter is required"})
 	}
 
 	if err := d.client.NewConnection(); err != nil {
 		log.DefaultLogger.Error("Failed to create connection", "error", err)
-		return sender.Send(&backend.CallResourceResponse{
-			Status: 500,
-			Body:   []byte(fmt.Sprintf(`{"error": "Failed to connect: %s"}`, err.Error())),
-			Headers: map[string][]string{
-				"Content-Type": {"application/json"},
-			},
-		})
+		return sendJSON(sender, 500, map[string]string{"error": fmt.Sprintf("Failed to connect: %s", err.Error())})
 	}
 
 	partitions, err := d.client.GetTopicPartitions(ctx, topicName)
 	if err != nil {
 		log.DefaultLogger.Error("Failed to get partitions", "topic", topicName, "error", err)
-		return sender.Send(&backend.CallResourceResponse{
-			Status: 500,
-			Body:   []byte(fmt.Sprintf(`{"error": "Failed to get partitions: %s"}`, err.Error())),
-			Headers: map[string][]string{
-				"Content-Type": {"application/json"},
-			},
-		})
+		return sendJSON(sender, 500, map[string]string{"error": fmt.Sprintf("Failed to get partitions: %s", err.Error())})
 	}
 
-	response := map[string]interface{}{
-		"partitions": partitions,
-		"topic":      topicName,
-	}
-
-	responseBody, err := json.Marshal(response)
-	if err != nil {
-		return sender.Send(&backend.CallResourceResponse{
-			Status: 500,
-			Body:   []byte(`{"error": "Failed to marshal response"}`),
-			Headers: map[string][]string{
-				"Content-Type": {"application/json"},
-			},
-		})
-	}
-
-	return sender.Send(&backend.CallResourceResponse{
-		Status: 200,
-		Body:   responseBody,
-		Headers: map[string][]string{
-			"Content-Type": {"application/json"},
-		},
-	})
+	return sendJSON(sender, 200, map[string]interface{}{"partitions": partitions, "topic": topicName})
 }
 
 func (d *KafkaDatasource) handleSearchTopics(ctx context.Context, req *backend.CallResourceRequest, sender backend.CallResourceResponseSender) error {
@@ -250,8 +222,8 @@ func (d *KafkaDatasource) handleSearchTopics(ctx context.Context, req *backend.C
 
 	limit := 5 // Default limit
 	if limitStr != "" {
-		if parsedLimit, err := fmt.Sscanf(limitStr, "%d", &limit); err != nil || parsedLimit != 1 {
-			limit = 5
+		if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit > 0 {
+			limit = parsedLimit
 		}
 	}
 
@@ -278,7 +250,7 @@ func (d *KafkaDatasource) handleSearchTopics(ctx context.Context, req *backend.C
 		})
 	}
 
-	log.DefaultLogger.Debug("Topic search results", "prefix", prefix, "topics", topics, "count", len(topics))
+	log.DefaultLogger.Debug("Topic search results", "prefix", prefix, "count", len(topics))
 
 	response := map[string]interface{}{
 		"topics": topics,
@@ -346,32 +318,14 @@ func (d *KafkaDatasource) SubscribeStream(ctx context.Context, req *backend.Subs
 		}, err
 	}
 
+	// Lazily create connection (no proactive topic existence check to avoid latency / auto-create side effects)
 	if err := d.client.NewConnection(); err != nil {
 		log.DefaultLogger.Error("Creating new Kafka connection error", "error", err)
-		return &backend.SubscribeStreamResponse{
-			Status: backend.SubscribeStreamStatusPermissionDenied,
-		}, err
+		return &backend.SubscribeStreamResponse{Status: backend.SubscribeStreamStatusPermissionDenied}, err
 	}
 
-	exists, err := d.client.IsTopicExists(ctx, qm.Topic)
-	if err != nil {
-		log.DefaultLogger.Error("Checking kafka topic error", "error", err)
-		return &backend.SubscribeStreamResponse{
-			Status: backend.SubscribeStreamStatusPermissionDenied,
-		}, err
-	}
-
-	if !exists {
-		log.DefaultLogger.Debug("Topic not found", "topic", qm.Topic)
-		return &backend.SubscribeStreamResponse{
-			Status: backend.SubscribeStreamStatusNotFound,
-		}, nil
-	}
-
-	log.DefaultLogger.Debug("SubscribeStream success", "topic", qm.Topic, "partition", qm.Partition)
-	return &backend.SubscribeStreamResponse{
-		Status: backend.SubscribeStreamStatusOK,
-	}, nil
+	log.DefaultLogger.Debug("SubscribeStream prepared", "topic", qm.Topic, "partition", qm.Partition)
+	return &backend.SubscribeStreamResponse{Status: backend.SubscribeStreamStatusOK}, nil
 }
 
 func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamRequest, sender *backend.StreamSender) error {

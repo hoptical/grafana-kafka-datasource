@@ -1,37 +1,22 @@
 import { defaults, debounce } from 'lodash';
 import React, { ChangeEvent, PureComponent } from 'react';
-import { InlineField, InlineFieldRow, Input, Select } from '@grafana/ui';
+import { InlineField, InlineFieldRow, Input, Select, Button, Spinner } from '@grafana/ui';
 import { QueryEditorProps } from '@grafana/data';
 import { DataSource } from './datasource';
 import { defaultQuery, KafkaDataSourceOptions, KafkaQuery, AutoOffsetReset, TimestampMode } from './types';
 
 const autoResetOffsets: Array<{ label: string; value: AutoOffsetReset }> = [
-  {
-    label: 'From the last 100',
-    value: AutoOffsetReset.EARLIEST,
-  },
-  {
-    label: 'Latest',
-    value: AutoOffsetReset.LATEST,
-  },
+  { label: 'From the last 100', value: AutoOffsetReset.EARLIEST },
+  { label: 'Latest', value: AutoOffsetReset.LATEST },
 ];
 
 const timestampModes: Array<{ label: string; value: TimestampMode }> = [
-  {
-    label: 'Now',
-    value: TimestampMode.Now,
-  },
-  {
-    label: 'Message Timestamp',
-    value: TimestampMode.Message,
-  },
+  { label: 'Now', value: TimestampMode.Now },
+  { label: 'Message Timestamp', value: TimestampMode.Message },
 ];
 
 const partitionOptions: Array<{ label: string; value: number | 'all' }> = [
-  {
-    label: 'All partitions',
-    value: 'all',
-  },
+  { label: 'All partitions', value: 'all' },
 ];
 
 type Props = QueryEditorProps<DataSource, KafkaQuery, KafkaDataSourceOptions>;
@@ -40,10 +25,12 @@ interface State {
   availablePartitions: number[];
   topicSuggestions: string[];
   showingSuggestions: boolean;
+  loadingPartitions: boolean;
 }
 
 export class QueryEditor extends PureComponent<Props, State> {
   private debouncedSearchTopics: (input: string) => void;
+  private lastCommittedTopic = '';
 
   constructor(props: Props) {
     super(props);
@@ -51,90 +38,72 @@ export class QueryEditor extends PureComponent<Props, State> {
       availablePartitions: [],
       topicSuggestions: [],
       showingSuggestions: false,
+  loadingPartitions: false,
     };
-    
-    // Debounce topic search to avoid too many API calls
-    this.debouncedSearchTopics = debounce(this.searchTopics, 300);
+
+  this.debouncedSearchTopics = debounce(this.searchTopics, 300);
   }
 
   componentDidMount() {
-    this.fetchPartitionsIfNeeded();
+    // If a saved panel already has a topic, allow manual fetch via button; do not auto fetch.
   }
 
-  componentDidUpdate(prevProps: Props) {
-    const currentTopic = this.props.query.topicName;
-    const prevTopic = prevProps.query.topicName;
-    
-    if (currentTopic && currentTopic !== prevTopic) {
-      this.fetchPartitionsIfNeeded();
+  componentDidUpdate() {
+    // No automatic partition fetching to avoid noisy errors while typing.
+  }
+
+  componentWillUnmount() {
+    // Cancel debounced topic search to avoid setState after unmount
+    if ((this.debouncedSearchTopics as any)?.cancel) {
+      (this.debouncedSearchTopics as any).cancel();
     }
   }
 
-  fetchPartitionsIfNeeded = async () => {
+  fetchPartitions = async () => {
     const { datasource, query } = this.props;
     if (!query.topicName) {
       this.setState({ availablePartitions: [] });
       return;
     }
-
+    this.setState({ loadingPartitions: true });
     try {
       const partitions = await datasource.getTopicPartitions(query.topicName);
-      this.setState({ availablePartitions: partitions });
+      this.setState({ availablePartitions: partitions || [], loadingPartitions: false });
     } catch (error) {
       console.error('Failed to fetch partitions:', error);
-      this.setState({ availablePartitions: [] });
+      this.setState({ availablePartitions: [], loadingPartitions: false });
     }
   };
 
   getPartitionOptions = (): Array<{ label: string; value: number | 'all' }> => {
-    const options = [...partitionOptions]; // Start with "All partitions"
-    
-    // Add specific partitions based on available partitions
-    this.state.availablePartitions.forEach((partition) => {
-      options.push({
-        label: `Partition ${partition}`,
-        value: partition,
-      });
+    const options = [...partitionOptions];
+    (this.state.availablePartitions || []).forEach((partition) => {
+      options.push({ label: `Partition ${partition}`, value: partition });
     });
-
     return options;
   };
 
   searchTopics = async (input: string) => {
     const { datasource } = this.props;
-    if (!input || input.length < 2) {
+    const trimmed = input.trim();
+    if (trimmed.length < 2) {
       this.setState({ topicSuggestions: [], showingSuggestions: false });
       return;
     }
 
     try {
-      console.log('Searching topics with prefix:', input);
-      const topics = await datasource.searchTopics(input, 10); // Get more topics to filter smartly
-      console.log('Received topics:', topics);
-      
-      // Smart filtering to avoid showing partial topic names
-      const filteredTopics = topics
-        .filter(topic => topic.toLowerCase().startsWith(input.toLowerCase()))
-        .filter(topic => {
-          // Filter out topics that look like partial typing
-          // Keep topics that are:
-          // 1. Exactly the input
-          // 2. Significantly longer than input (likely complete topic names)
-          // 3. Contain separators like -, _, . which indicate structure
+      const topics = await datasource.searchTopics(trimmed, 10);
+      const filteredTopics = (topics || [])
+        .filter((topic) => topic.toLowerCase().startsWith(trimmed.toLowerCase()))
+        .filter((topic) => {
           const hasStructure = /[-_.]/.test(topic);
-          const isSignificantlyLonger = topic.length >= input.length + 3;
-          const isExactMatch = topic.toLowerCase() === input.toLowerCase();
-          
+          const isSignificantlyLonger = topic.length >= trimmed.length + 3;
+          const isExactMatch = topic.toLowerCase() === trimmed.toLowerCase();
           return isExactMatch || isSignificantlyLonger || hasStructure;
         })
-        .slice(0, 5); // Limit to 5 suggestions
-      
-      console.log('Filtered topics:', filteredTopics);
-      
-      this.setState({ 
-        topicSuggestions: filteredTopics,
-        showingSuggestions: filteredTopics.length > 0 
-      });
+        .slice(0, 5);
+
+      this.setState({ topicSuggestions: filteredTopics, showingSuggestions: filteredTopics.length > 0 });
     } catch (error) {
       console.error('Failed to search topics:', error);
       this.setState({ topicSuggestions: [], showingSuggestions: false });
@@ -142,12 +111,19 @@ export class QueryEditor extends PureComponent<Props, State> {
   };
 
   onTopicNameChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const { onChange, query, onRunQuery } = this.props;
-    onChange({ ...query, topicName: event.target.value });
-    onRunQuery();
-    
-    // Trigger topic search for autocomplete
-    this.debouncedSearchTopics(event.target.value);
+  const { onChange, query } = this.props;
+    const value = event.target.value;
+    onChange({ ...query, topicName: value });
+    // Do NOT run query yet; wait for Enter or blur to reduce noisy errors
+    this.debouncedSearchTopics(value);
+  };
+
+  commitTopicIfChanged = () => {
+    const { topicName } = defaults(this.props.query, defaultQuery);
+    if (topicName && topicName !== this.lastCommittedTopic) {
+      this.lastCommittedTopic = topicName;
+      this.props.onRunQuery();
+    }
   };
 
   onPartitionChange = (value: number | 'all') => {
@@ -172,14 +148,16 @@ export class QueryEditor extends PureComponent<Props, State> {
     const { onChange, query, onRunQuery } = this.props;
     onChange({ ...query, topicName: topic });
     this.setState({ showingSuggestions: false, topicSuggestions: [] });
-    onRunQuery();
+  this.lastCommittedTopic = topic;
+  onRunQuery();
   };
 
   onTopicInputBlur = () => {
-    // Delay hiding suggestions to allow clicking on them
+    // Commit the topic after suggestions close (slight delay so click works)
     setTimeout(() => {
       this.setState({ showingSuggestions: false });
-    }, 200);
+      this.commitTopicIfChanged();
+    }, 150);
   };
 
   onTopicInputFocus = () => {
@@ -195,58 +173,80 @@ export class QueryEditor extends PureComponent<Props, State> {
     return (
       <>
         <InlineFieldRow>
-          <InlineField label="Topic" labelWidth={10} tooltip="Kafka topic name">
-            <div style={{ position: 'relative', width: '20ch' }}>
-              <Input
-                id="query-editor-topic"
-                value={topicName || ''}
-                onChange={this.onTopicNameChange}
-                onBlur={this.onTopicInputBlur}
-                onFocus={this.onTopicInputFocus}
-                type="text"
-                width={20}
-                placeholder="Enter topic name"
-              />
-              {this.state.showingSuggestions && this.state.topicSuggestions.length > 0 && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: '100%',
-                    left: 0,
-                    right: 0,
-                    backgroundColor: 'var(--gf-color-background-primary, #1f1f20)',
-                    border: '1px solid var(--gf-color-border-medium, #444)',
-                    borderRadius: '2px',
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
-                    zIndex: 1000,
-                    maxHeight: '200px',
-                    overflowY: 'auto'
+          <InlineField label="Topic" labelWidth={10} tooltip="Kafka topic name + click Fetch to load partitions">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', position: 'relative' }}>
+              <div style={{ position: 'relative' }}>
+                <Input
+                  id="query-editor-topic"
+                  value={topicName || ''}
+                  onChange={this.onTopicNameChange}
+                  onBlur={this.onTopicInputBlur}
+                  onFocus={this.onTopicInputFocus}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      this.commitTopicIfChanged();
+                      this.fetchPartitions();
+                    }
                   }}
-                >
-                  {this.state.topicSuggestions.map((topic, index) => (
-                    <div
-                      key={index}
-                      style={{
-                        padding: '8px 12px',
-                        cursor: 'pointer',
-                        borderBottom: index < this.state.topicSuggestions.length - 1 ? '1px solid var(--gf-color-border-weak, #333)' : 'none',
-                        fontSize: '13px',
-                        color: 'var(--gf-color-text-primary, #ffffff)',
-                        backgroundColor: 'transparent'
-                      }}
-                      onClick={() => this.onTopicSuggestionClick(topic)}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = 'var(--gf-color-background-secondary, #262628)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = 'transparent';
-                      }}
-                    >
-                      {topic}
-                    </div>
-                  ))}
-                </div>
-              )}
+                  type="text"
+                  width={20}
+                  placeholder="Enter topic name"
+                />
+                {this.state.showingSuggestions && this.state.topicSuggestions.length > 0 && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: '100%',
+                      left: 0,
+                      right: 0,
+                      backgroundColor: 'var(--gf-color-background-primary, #1f1f20)',
+                      border: '1px solid var(--gf-color-border-medium, #444)',
+                      borderRadius: '2px',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+                      zIndex: 1000,
+                      maxHeight: '200px',
+                      overflowY: 'auto',
+                    }}
+                  >
+                    {this.state.topicSuggestions.map((topic, index) => (
+                      <div
+                        key={`${topic}-${index}`}
+                        style={{
+                          padding: '8px 12px',
+                          cursor: 'pointer',
+                          borderBottom:
+                            index < this.state.topicSuggestions.length - 1
+                              ? '1px solid var(--gf-color-border-weak, #333)'
+                              : 'none',
+                          fontSize: '13px',
+                          color: 'var(--gf-color-text-primary, #ffffff)',
+                          backgroundColor: 'transparent',
+                        }}
+                        onClick={() => this.onTopicSuggestionClick(topic)}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = 'var(--gf-color-background-secondary, #262628)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = 'transparent';
+                        }}
+                      >
+                        {topic}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  this.commitTopicIfChanged();
+                  this.fetchPartitions();
+                }}
+                disabled={!topicName || this.state.loadingPartitions}
+              >
+                {this.state.loadingPartitions ? <Spinner size={14} /> : 'Fetch'}
+              </Button>
             </div>
           </InlineField>
           <InlineField label="Partition" labelWidth={10} tooltip="Kafka partition selection">
@@ -254,9 +254,10 @@ export class QueryEditor extends PureComponent<Props, State> {
               id="query-editor-partition"
               value={partition}
               options={this.getPartitionOptions()}
-              onChange={(value) => this.onPartitionChange(value.value!)}
+              onChange={(value) => this.onPartitionChange(value.value as number | 'all')}
               width={15}
               placeholder="Select partition"
+              noOptionsMessage="Fetch topic partitions first"
             />
           </InlineField>
         </InlineFieldRow>
@@ -266,7 +267,7 @@ export class QueryEditor extends PureComponent<Props, State> {
               width={22}
               value={autoOffsetReset}
               options={autoResetOffsets}
-              onChange={(value) => this.onAutoResetOffsetChanged(value.value!)}
+              onChange={(value) => this.onAutoResetOffsetChanged(value.value as AutoOffsetReset)}
             />
           </InlineField>
           <InlineField label="Timestamp Mode" labelWidth={20} tooltip="Timestamp of the kafka value to visualize.">
@@ -274,7 +275,7 @@ export class QueryEditor extends PureComponent<Props, State> {
               width={25}
               value={timestampMode}
               options={timestampModes}
-              onChange={(value) => this.onTimestampModeChanged(value.value!)}
+              onChange={(value) => this.onTimestampModeChanged(value.value as TimestampMode)}
             />
           </InlineField>
         </InlineFieldRow>
