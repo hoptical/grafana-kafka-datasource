@@ -1,4 +1,4 @@
-import { defaults, debounce } from 'lodash';
+import { defaults, debounce, type DebouncedFunc } from 'lodash';
 import React, { ChangeEvent, PureComponent } from 'react';
 import { InlineField, InlineFieldRow, Input, Select, Button, Spinner } from '@grafana/ui';
 import { QueryEditorProps } from '@grafana/data';
@@ -28,7 +28,7 @@ interface State {
 }
 
 export class QueryEditor extends PureComponent<Props, State> {
-  private debouncedSearchTopics: (input: string) => void;
+  private debouncedSearchTopics: DebouncedFunc<(input: string) => void>;
   private lastCommittedTopic = '';
 
   constructor(props: Props) {
@@ -54,9 +54,7 @@ export class QueryEditor extends PureComponent<Props, State> {
 
   componentWillUnmount() {
     // Cancel debounced topic search to avoid setState after unmount
-    if ((this.debouncedSearchTopics as any)?.cancel) {
-      (this.debouncedSearchTopics as any).cancel();
-    }
+  this.debouncedSearchTopics.cancel();
   }
 
   fetchPartitions = async () => {
@@ -76,7 +74,7 @@ export class QueryEditor extends PureComponent<Props, State> {
       });
       // Clear success after 5s
       setTimeout(() => {
-        this.setState((s) => (s.partitionSuccess ? { partitionSuccess: undefined } : null));
+        this.setState({ partitionSuccess: undefined });
       }, 5000);
     } catch (error) {
       console.error('Failed to fetch partitions:', error);

@@ -17,6 +17,12 @@ import (
 	"github.com/hoptical/grafana-kafka-datasource/pkg/kafka_client"
 )
 
+// streamMessageBuffer defines the capacity of the buffered channel used to fan-in
+// messages from per-partition goroutines in RunStream. It provides headroom for
+// short bursts (multiple partitions producing at once) without blocking readers,
+// yet remains small to keep memory usage low and latency tight.
+const streamMessageBuffer = 100
+
 // KafkaClientAPI abstracts the kafka client for easier testing.
 type KafkaClientAPI interface {
 	NewConnection() error
@@ -379,8 +385,8 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 
 	log.DefaultLogger.Debug("RunStream partitions", "topic", qm.Topic, "partitions", partitions)
 
-	// Create a channel to collect messages from all partitions
-	messagesCh := make(chan messageWithPartition, 100)
+	// Create a channel to collect messages from all partitions (see streamMessageBuffer doc).
+	messagesCh := make(chan messageWithPartition, streamMessageBuffer)
 
 	// Start a goroutine for each partition
 	for _, partition := range partitions {

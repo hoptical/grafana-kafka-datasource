@@ -182,5 +182,3 @@ test.describe('Kafka Query Editor', () => {
     await expect(page.getByRole('cell').first()).toBeVisible();
   });
 });
-
-// Test if the correct error is returned for entering a wrong topic
