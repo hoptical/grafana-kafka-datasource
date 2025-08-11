@@ -2,6 +2,7 @@ import { test, expect } from '@grafana/plugin-e2e';
 import { exec, ChildProcess } from 'child_process';
 import { accessSync, constants } from 'fs';
 
+const isV10 = (process.env.GRAFANA_VERSION || '').startsWith('10.');
 function startKafkaProducer(): ChildProcess {
   const producerPath = './dist/producer';
   try {
@@ -66,8 +67,11 @@ test.describe('Kafka Query Editor', () => {
       .filter({ hasText: /^All partitions$/ })
       .nth(2)
       .click();
-    await page.getByRole('option', { name: /^All partitions$/ }).click();
-
+    if (isV10) {
+      await page.getByLabel('Select options menu').getByText('All partitions').click();
+    } else {
+      await page.getByRole('option', { name: /^All partitions$/ }).click();
+    }
     // Test select interactions and options
     const autoOffsetSelect = page
       .locator('div')
@@ -78,13 +82,20 @@ test.describe('Kafka Query Editor', () => {
     // Test Auto offset reset options
     await autoOffsetSelect.click();
     await expect(page.getByText('From the last 100')).toBeVisible();
-    // await page.locator('div').filter({ hasText: /^From the last 100$/ }).nth(1).click();
-    await page.getByRole('option', { name: 'Latest' }).click();
+    if (isV10) {
+      await page.getByLabel('Select options menu').getByText('Latest').click();
+    } else {
+      await page.getByRole('option', { name: 'Latest' }).click();
+    }
 
     // Test Timestamp Mode options
     await timestampSelect.click();
     await expect(page.getByText('Message Timestamp')).toBeVisible();
-    await page.getByRole('option', { name: 'Message Timestamp' }).click();
+    if (isV10) {
+      await page.getByLabel('Select options menu').getByText('Message Timestamp').click();
+    } else {
+      await page.getByRole('option', { name: 'Message Timestamp' }).click();
+    }
   });
 
   // Test streaming data from Kafka topic with the right topic
@@ -107,8 +118,12 @@ test.describe('Kafka Query Editor', () => {
       .filter({ hasText: /^All partitions$/ })
       .nth(2)
       .click();
-    await page.getByRole('option', { name: /^All partitions$/ }).click();
 
+    if (isV10) {
+      await page.getByLabel('Select options menu').getByText('All partitions').click();
+    } else {
+      await page.getByRole('option', { name: /^All partitions$/ }).click();
+    }
     await panelEditPage.setVisualization('Table');
 
     // Wait for the time column to appear first (this indicates data is flowing)
@@ -164,14 +179,21 @@ test.describe('Kafka Query Editor', () => {
 
     // Open partition select and ensure options present (All partitions + partition 0,1,2)
     await page.locator('#query-editor-partition').click();
-    await expect(page.getByRole('option', { name: /^All partitions$/ })).toBeVisible();
     // Some themes render options differently; ensure any partition labels appear
-    await expect(page.getByRole('option', { name: /Partition 0/ })).toBeVisible();
-    await expect(page.getByRole('option', { name: /Partition 1/ })).toBeVisible();
-    await expect(page.getByRole('option', { name: /Partition 2/ })).toBeVisible();
+    for (let i = 0; i < 3; i++) {
+      if (isV10) {
+        await expect(page.getByLabel('Select options menu').getByText(`Partition ${i}`)).toBeVisible();
+      } else {
+        await expect(page.getByRole('option', { name: `Partition ${i}` })).toBeVisible();
+      }
+    }
 
     // Pick single partition 1
-    await page.getByRole('option', { name: /Partition 1/ }).click();
+    if (isV10) {
+      await page.getByLabel('Select options menu').getByText(/Partition 1/).click();
+    } else {
+      await page.getByRole('option', { name: /Partition 1/ }).click();
+    }
 
     await panelEditPage.setVisualization('Table');
     // Wait for data columns
