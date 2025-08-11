@@ -204,9 +204,9 @@ export class QueryEditor extends PureComponent<Props, State> {
     return (
       <>
         <InlineFieldRow>
-          <InlineField label="Topic" labelWidth={10} tooltip="Kafka topic name + click Fetch to load partitions">
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', position: 'relative' }}>
-              <div style={{ position: 'relative' }}>
+          <InlineField label="Topic" labelWidth={12} tooltip="Kafka topic name + click Fetch to load partitions" style={{ minWidth: 260 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', position: 'relative', minWidth: 260 }}>
+              <div style={{ position: 'relative', minWidth: 180 }}>
                 <Input
                   id="query-editor-topic"
                   value={topicName || ''}
@@ -220,7 +220,7 @@ export class QueryEditor extends PureComponent<Props, State> {
                     }
                   }}
                   type="text"
-                  width={20}
+                  width={24}
                   placeholder="Enter topic name"
                 />
                 {this.state.showingSuggestions && this.state.topicSuggestions.length > 0 && (
@@ -275,6 +275,7 @@ export class QueryEditor extends PureComponent<Props, State> {
                   this.fetchPartitions();
                 }}
                 disabled={!topicName || this.state.loadingPartitions}
+                style={{ minWidth: 60 }}
               >
                 {this.state.loadingPartitions ? <Spinner size={14} /> : 'Fetch'}
               </Button>
@@ -285,15 +286,16 @@ export class QueryEditor extends PureComponent<Props, State> {
               )}
             </div>
           </InlineField>
-          <InlineField label="Partition" labelWidth={10} tooltip="Kafka partition selection">
+          <InlineField label="Partition" labelWidth={13} tooltip="Kafka partition selection" style={{ minWidth: 200 }}>
             <Select
               id="query-editor-partition"
               value={partition}
               options={this.getPartitionOptions()}
               onChange={(value) => this.onPartitionChange(value.value as number | 'all')}
-              width={15}
+              width={22}
               placeholder="Select partition"
               noOptionsMessage="Fetch topic partitions first"
+              styles={{ container: (base: any) => ({ ...base, minWidth: 140 }) }}
             />
           </InlineField>
         </InlineFieldRow>
