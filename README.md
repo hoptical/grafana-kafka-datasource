@@ -1,4 +1,5 @@
 # Kafka Datasource for Grafana
+
 [![License](https://img.shields.io/github/license/hoptical/grafana-kafka-datasource)](LICENSE)
 [![CI](https://github.com/hoptical/grafana-kafka-datasource/actions/workflows/ci.yml/badge.svg)](https://github.com/hoptical/grafana-kafka-datasource/actions/workflows/ci.yml)
 [![Release](https://github.com/hoptical/grafana-kafka-datasource/actions/workflows/release.yml/badge.svg)](https://github.com/hoptical/grafana-kafka-datasource/actions/workflows/release.yml)
@@ -8,7 +9,7 @@ The Kafka data source plugin allows you to visualize streaming Kafka data from w
 ## Features
 
 - Real-time monitoring of Kafka topics
-- Ability to query specific partitions
+- Query all partitions or specific partitions
 - Choose between "latest" or "last 100" messages
 - Timestamp modes: "Now" for real-time or "Message Timestamp" for event time
 - Simple JSON data format support
@@ -40,7 +41,7 @@ Alternatively, you can manually download the [latest](https://github.com/hoptica
 
 ## Configure and use the plugin
 
-For configuration and usage instructions, please refer to the [README.md](src/README.md) file in the `src` directory of this repository.
+For configuration and usage instructions, see below and the [README.md](src/README.md) file in the `src` directory of this repository.
 
 ## Screenshots
 
@@ -65,15 +66,15 @@ We plan to support more complex JSON data structures, Protobuf and AVRO in the u
 
 In the [example folder](https://github.com/hoptical/grafana-kafka-datasource/tree/main/example), there are simple producers for different languages that generate json sample values in Kafka. For more details on how to run them, please check the [`README.md`](https://github.com/hoptical/grafana-kafka-datasource/blob/main/example/README.md).
 
-## Contribution & development 
+## Contribution & development
 
 Thank you for considering contributing! If you find an issue or have a better way to do something, feel free to open an issue or a PR. To setup the development environment, follow these steps:
 
 ### Prerequisites
 
-* Ubuntu 24.04 LTS
-* node v22.15
-* go 1.24.1
+- Ubuntu 24.04 LTS
+- node v22.15
+- go 1.24.1
 
 A data source backend plugin consists of both frontend and backend components.
 
@@ -150,7 +151,9 @@ A data source backend plugin consists of both frontend and backend components.
    ```bash
    mage build:linux
    ```
+
    To build for any other platform, use mage targets:
+
    ```bash
      mage -v build:darwin
      mage -v build:windows
@@ -159,9 +162,9 @@ A data source backend plugin consists of both frontend and backend components.
      mage -v build:darwinArm64
    ```
 
-   ``mage -v build:backend`` builds for your current platform.  
-   ``mage -v buildAll`` builds for all platforms at once.
-   
+   `mage -v build:backend` builds for your current platform.  
+   `mage -v buildAll` builds for all platforms at once.
+
 Grafana will be available on `localhost:3000` with plugin already installed.  
 Kafka will be available on `localhost:9094` for localhost connections and on `kafka:9092` for docker connections.
 

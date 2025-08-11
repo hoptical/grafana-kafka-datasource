@@ -4,7 +4,6 @@ about: Suggest an idea for this project
 title: ''
 labels: feature
 assignees: ''
-
 ---
 
 **Is your feature request related to a problem? Please describe.**
@@ -17,6 +16,7 @@ A clear and concise description of what you want to happen.
 A clear and concise description of any alternative solutions or features you've considered.
 
 **Which sides should be considered to develop?**
+
 - [ ] Frontend(React)
 - [ ] Backend(Golang)
 

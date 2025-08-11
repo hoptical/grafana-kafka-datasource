@@ -48,7 +48,7 @@ export const defaultDataSourceOptions: Partial<KafkaDataSourceOptions> = {
   tlsAuth: false,
   tlsSkipVerify: false,
   serverName: '',
-  timeout: 0
+  timeout: 0,
 };
 
 export interface KafkaSecureJsonData {
@@ -62,13 +62,13 @@ export interface KafkaSecureJsonData {
 
 export interface KafkaQuery extends DataQuery {
   topicName: string;
-  partition: number;
+  partition: number | 'all';
   autoOffsetReset: AutoOffsetReset;
   timestampMode: TimestampMode;
 }
 
 export const defaultQuery: Partial<KafkaQuery> = {
-  partition: 0,
+  partition: 'all',
   autoOffsetReset: AutoOffsetReset.LATEST,
   timestampMode: TimestampMode.Now,
 };

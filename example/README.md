@@ -5,6 +5,7 @@ In this folder, there are simple producers for different langaues that generate 
 ## Go
 
 ### Requirements
+
 - Go 1.17 or later
 - [kafka-go](github.com/segmentio/kafka-go) v0.4.47 or later
 
@@ -16,6 +17,7 @@ go get github.com/segmentio/kafka-go
 ```
 
 Then, run the producer:
+
 ```bash
 go run producer.go -broker <broker> -topic <topic> -interval <interval in milliseconds between producing messages> -num-partitions <number of partitions when creating the topic>
 ```
@@ -27,6 +29,7 @@ For example, to produce messages to `test` topic on `localhost:9094` with 3 part
 ```bash
 go run producer.go -broker localhost:9094 -topic test -interval 500 -num-partitions 3
 ```
+
 ## Python
 
 The Python code will produces JSON messages to the Kafka topic `test` every 500 milliseconds.
