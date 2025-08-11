@@ -15,9 +15,7 @@ const timestampModes: Array<{ label: string; value: TimestampMode }> = [
   { label: 'Message Timestamp', value: TimestampMode.Message },
 ];
 
-const partitionOptions: Array<{ label: string; value: number | 'all' }> = [
-  { label: 'All partitions', value: 'all' },
-];
+const partitionOptions: Array<{ label: string; value: number | 'all' }> = [{ label: 'All partitions', value: 'all' }];
 
 type Props = QueryEditorProps<DataSource, KafkaQuery, KafkaDataSourceOptions>;
 
@@ -39,11 +37,11 @@ export class QueryEditor extends PureComponent<Props, State> {
       availablePartitions: [],
       topicSuggestions: [],
       showingSuggestions: false,
-  loadingPartitions: false,
-  partitionSuccess: undefined,
+      loadingPartitions: false,
+      partitionSuccess: undefined,
     };
 
-  this.debouncedSearchTopics = debounce(this.searchTopics, 300);
+    this.debouncedSearchTopics = debounce(this.searchTopics, 300);
   }
 
   componentDidMount() {
@@ -123,7 +121,7 @@ export class QueryEditor extends PureComponent<Props, State> {
   };
 
   onTopicNameChange = (event: ChangeEvent<HTMLInputElement>) => {
-  const { onChange, query } = this.props;
+    const { onChange, query } = this.props;
     const value = event.target.value;
     onChange({ ...query, topicName: value });
     // Do NOT run query yet; wait for Enter or blur to reduce noisy errors
@@ -160,8 +158,8 @@ export class QueryEditor extends PureComponent<Props, State> {
     const { onChange, query, onRunQuery } = this.props;
     onChange({ ...query, topicName: topic });
     this.setState({ showingSuggestions: false, topicSuggestions: [] });
-  this.lastCommittedTopic = topic;
-  onRunQuery();
+    this.lastCommittedTopic = topic;
+    onRunQuery();
   };
 
   onTopicInputBlur = () => {
@@ -279,7 +277,11 @@ export class QueryEditor extends PureComponent<Props, State> {
           </InlineField>
         </InlineFieldRow>
         <InlineFieldRow>
-          <InlineField label="Auto offset reset" labelWidth={20} tooltip="Starting offset to consume that can be from latest or last 100.">
+          <InlineField
+            label="Auto offset reset"
+            labelWidth={20}
+            tooltip="Starting offset to consume that can be from latest or last 100."
+          >
             <Select
               width={22}
               value={autoOffsetReset}

@@ -12,12 +12,7 @@
       "name": "Hamed Karbasi",
       "url": "https://github.com/hoptical"
     },
-    "keywords": [
-      "kafka",
-      "datasource",
-      "backend",
-      "streaming"
-    ],
+    "keywords": ["kafka", "datasource", "backend", "streaming"],
     "logos": {
       "small": "img/kafka_logo.svg",
       "large": "img/kafka_logo.svg"

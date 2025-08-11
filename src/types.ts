@@ -48,7 +48,7 @@ export const defaultDataSourceOptions: Partial<KafkaDataSourceOptions> = {
   tlsAuth: false,
   tlsSkipVerify: false,
   serverName: '',
-  timeout: 0
+  timeout: 0,
 };
 
 export interface KafkaSecureJsonData {

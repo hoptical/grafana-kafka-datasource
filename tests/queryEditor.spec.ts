@@ -3,13 +3,16 @@ import { exec, ChildProcess } from 'child_process';
 import { accessSync, constants } from 'fs';
 
 function startKafkaProducer(): ChildProcess {
-    const producerPath = './dist/producer';
+  const producerPath = './dist/producer';
   try {
     accessSync(producerPath, constants.X_OK); // Check if file exists and is executable
   } catch (err) {
     throw new Error(`Kafka producer executable not found or not executable at path: ${producerPath}`);
   }
-  const producer = exec(`${producerPath} -broker localhost:9094 -topic test-topic -connect-timeout 500 -num-partitions 3`, { encoding: 'utf-8' });
+  const producer = exec(
+    `${producerPath} -broker localhost:9094 -topic test-topic -connect-timeout 500 -num-partitions 3`,
+    { encoding: 'utf-8' }
+  );
 
   producer.stdout?.on('data', (data) => {
     console.log('[Producer stdout]', data);
@@ -26,9 +29,9 @@ function startKafkaProducer(): ChildProcess {
 }
 
 test.describe('Kafka Query Editor', () => {
-  test('should display and configure all query editor fields correctly', async ({ 
+  test('should display and configure all query editor fields correctly', async ({
     readProvisionedDataSource,
-    page, 
+    page,
     panelEditPage,
   }) => {
     const ds = await readProvisionedDataSource({ fileName: 'datasource.yaml' });
@@ -40,19 +43,36 @@ test.describe('Kafka Query Editor', () => {
     await expect(page.getByText('Topic')).toBeVisible();
     await expect(page.getByText('Partition', { exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Fetch' })).toBeVisible();
-    await expect(page.locator('div').filter({ hasText: /^Latest$/ }).nth(2)).toBeVisible();
+    await expect(
+      page
+        .locator('div')
+        .filter({ hasText: /^Latest$/ })
+        .nth(2)
+    ).toBeVisible();
     await expect(page.locator('div').filter({ hasText: /^Now$/ }).nth(2)).toBeVisible();
 
     await expect(page.getByRole('textbox', { name: 'Enter topic name' })).toBeVisible();
-    await expect(page.locator('div').filter({ hasText: /^All partitions$/ }).nth(2)).toBeVisible();
+    await expect(
+      page
+        .locator('div')
+        .filter({ hasText: /^All partitions$/ })
+        .nth(2)
+    ).toBeVisible();
 
     // Test configuring all parameters and verify they work correctly
     await page.getByRole('textbox', { name: 'Enter topic name' }).fill('a-topic');
-    await page.locator('div').filter({ hasText: /^All partitions$/ }).nth(2).click();
+    await page
+      .locator('div')
+      .filter({ hasText: /^All partitions$/ })
+      .nth(2)
+      .click();
     await page.getByRole('option', { name: /^All partitions$/ }).click();
 
     // Test select interactions and options
-    const autoOffsetSelect = page.locator('div').filter({ hasText: /^Latest$/ }).nth(2);
+    const autoOffsetSelect = page
+      .locator('div')
+      .filter({ hasText: /^Latest$/ })
+      .nth(2);
     const timestampSelect = page.locator('div').filter({ hasText: /^Now$/ }).nth(2);
 
     // Test Auto offset reset options
@@ -65,15 +85,10 @@ test.describe('Kafka Query Editor', () => {
     await timestampSelect.click();
     await expect(page.getByText('Message Timestamp')).toBeVisible();
     await page.getByRole('option', { name: 'Message Timestamp' }).click();
-
   });
 
   // Test streaming data from Kafka topic with the right topic
-  test('should stream data from kafka topic', async ({ 
-    readProvisionedDataSource,
-    page, 
-    panelEditPage,
-  }) => {
+  test('should stream data from kafka topic', async ({ readProvisionedDataSource, page, panelEditPage }) => {
     const ds = await readProvisionedDataSource({ fileName: 'datasource.yaml' });
 
     // Select the Kafka datasource
@@ -82,15 +97,18 @@ test.describe('Kafka Query Editor', () => {
     // Start the Kafka producer
     startKafkaProducer();
     // Wait for some data to be produced
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    await new Promise((resolve) => setTimeout(resolve, 3000));
 
     // Fill in the query editor fields
     await page.getByRole('textbox', { name: 'Enter topic name' }).fill('test-topic');
     await page.getByRole('button', { name: 'Fetch' }).click();
-    await page.locator('div').filter({ hasText: /^All partitions$/ }).nth(2).click();
+    await page
+      .locator('div')
+      .filter({ hasText: /^All partitions$/ })
+      .nth(2)
+      .click();
     await page.getByRole('option', { name: /^All partitions$/ }).click();
 
-    
     await panelEditPage.setVisualization('Table');
 
     // Wait for the time column to appear first (this indicates data is flowing)
@@ -102,7 +120,12 @@ test.describe('Kafka Query Editor', () => {
     // Check for timestamp format in time column (YYYY-MM-DD HH:MM:SS)
     await expect(page.getByRole('cell').filter({ hasText: /\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/ })).toBeVisible();
     // Check for float numbers in value columns (just verify at least one numeric cell exists)
-    await expect(page.getByRole('cell').filter({ hasText: /^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/ }).first()).toBeVisible();
+    await expect(
+      page
+        .getByRole('cell')
+        .filter({ hasText: /^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/ })
+        .first()
+    ).toBeVisible();
   });
 
   test('shows no success and no partitions for non-existent topic fetch', async ({
@@ -133,7 +156,7 @@ test.describe('Kafka Query Editor', () => {
 
     // Start producer
     startKafkaProducer();
-    await new Promise(r => setTimeout(r, 3000));
+    await new Promise((r) => setTimeout(r, 3000));
 
     // Fetch partitions for existing topic
     await page.getByRole('textbox', { name: 'Enter topic name' }).fill('test-topic');

@@ -34,10 +34,10 @@ services:
       - ALLOW_PLAINTEXT_LISTENER=yes
       - KAFKA_CFG_CLUSTER_ID=VkGbvjMzQNKtC-P_RMzqgg
     ports:
-      - "9092:9092"
-      - "9094:9094"
-      - "29092:29092"
-      - "39092:39092"
+      - '9092:9092'
+      - '9094:9094'
+      - '29092:29092'
+      - '39092:39092'
     volumes:
       - ./tests/certs:/bitnami/kafka/config/certs:ro
 

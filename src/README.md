@@ -54,9 +54,9 @@ Your Kafka messages should contain simple JSON with numeric values:
 
 ```json
 {
-    "temperature": 23.5,
-    "humidity": 65.2,
-    "pressure": 1013.25
+  "temperature": 23.5,
+  "humidity": 65.2,
+  "pressure": 1013.25
 }
 ```
 

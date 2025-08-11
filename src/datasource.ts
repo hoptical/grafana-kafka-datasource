@@ -1,4 +1,11 @@
-import { CoreApp, DataQueryRequest, DataQueryResponse, DataSourceInstanceSettings, LiveChannelScope, ScopedVars } from '@grafana/data';
+import {
+  CoreApp,
+  DataQueryRequest,
+  DataQueryResponse,
+  DataSourceInstanceSettings,
+  LiveChannelScope,
+  ScopedVars,
+} from '@grafana/data';
 import { DataSourceWithBackend, getGrafanaLiveSrv, getTemplateSrv } from '@grafana/runtime';
 import { Observable, merge, throwError, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';

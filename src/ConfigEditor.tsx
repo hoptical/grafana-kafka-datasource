@@ -177,10 +177,19 @@ export const ConfigEditor = (props: Props) => {
 
       {/* Security Protocol */}
       <ConfigSection title="Security Protocol" description="Select and enable security layers">
-        <InlineField label="Security Protocol" labelWidth={20} tooltip="Security protocol for Kafka connection" grow required>
+        <InlineField
+          label="Security Protocol"
+          labelWidth={20}
+          tooltip="Security protocol for Kafka connection"
+          grow
+          required
+        >
           <Select
             options={SECURITY_PROTOCOL_OPTIONS}
-            value={SECURITY_PROTOCOL_OPTIONS.find((opt) => opt.value === options.jsonData?.securityProtocol) || SECURITY_PROTOCOL_OPTIONS[0]}
+            value={
+              SECURITY_PROTOCOL_OPTIONS.find((opt) => opt.value === options.jsonData?.securityProtocol) ||
+              SECURITY_PROTOCOL_OPTIONS[0]
+            }
             onChange={(selected) => {
               const protocol = selected.value || 'PLAINTEXT';
               onOptionsChange({ ...options, jsonData: { ...options.jsonData, securityProtocol: protocol } });
@@ -200,7 +209,10 @@ export const ConfigEditor = (props: Props) => {
             <InlineField label="SASL Mechanism" labelWidth={20} tooltip="SASL authentication mechanism" grow required>
               <Select
                 options={SASL_MECHANISM_OPTIONS}
-                value={SASL_MECHANISM_OPTIONS.find((opt) => opt.value === jsonData.saslMechanisms) || SASL_MECHANISM_OPTIONS[0]}
+                value={
+                  SASL_MECHANISM_OPTIONS.find((opt) => opt.value === jsonData.saslMechanisms) ||
+                  SASL_MECHANISM_OPTIONS[0]
+                }
                 onChange={(selected) => {
                   const mechanism = selected.value || 'PLAIN';
                   onOptionsChange({ ...options, jsonData: { ...options.jsonData, saslMechanisms: mechanism } });
@@ -243,7 +255,10 @@ export const ConfigEditor = (props: Props) => {
               <Checkbox value={jsonData.tlsSkipVerify || false} onChange={onTlsSkipVerifyChange} />
               <label style={{ fontSize: '13px' }}>
                 Skip TLS Verification
-                <span style={{ color: '#888', marginLeft: '4px' }} title="Skip TLS certificate validation (not recommended for production)">
+                <span
+                  style={{ color: '#888', marginLeft: '4px' }}
+                  title="Skip TLS certificate validation (not recommended for production)"
+                >
                   ⓘ
                 </span>
               </label>
@@ -261,7 +276,14 @@ export const ConfigEditor = (props: Props) => {
 
             {jsonData.tlsAuthWithCACert && (
               <div style={{ marginLeft: '30px' }}>
-                <InlineField label="CA Certificate" labelWidth={30} tooltip="Certificate Authority certificate" htmlFor="config-editor-tls-ca-cert" interactive grow>
+                <InlineField
+                  label="CA Certificate"
+                  labelWidth={30}
+                  tooltip="Certificate Authority certificate"
+                  htmlFor="config-editor-tls-ca-cert"
+                  interactive
+                  grow
+                >
                   <SecretTextArea
                     id="config-editor-tls-ca-cert"
                     isConfigured={(secureJsonFields && secureJsonFields.tlsCACert) as boolean}
@@ -296,7 +318,14 @@ export const ConfigEditor = (props: Props) => {
                   />
                 </InlineField>
 
-                <InlineField label="Client Certificate" labelWidth={30} tooltip="TLS client certificate" htmlFor="client-auth-client-certificate-input" interactive grow>
+                <InlineField
+                  label="Client Certificate"
+                  labelWidth={30}
+                  tooltip="TLS client certificate"
+                  htmlFor="client-auth-client-certificate-input"
+                  interactive
+                  grow
+                >
                   <SecretTextArea
                     id="client-auth-client-certificate-input"
                     isConfigured={(secureJsonFields && secureJsonFields.tlsClientCert) as boolean}
@@ -307,7 +336,15 @@ export const ConfigEditor = (props: Props) => {
                   />
                 </InlineField>
 
-                <InlineField label="Client Key" labelWidth={30} tooltip="TLS client private key" htmlFor="config-editor-tls-client-key" interactive grow required>
+                <InlineField
+                  label="Client Key"
+                  labelWidth={30}
+                  tooltip="TLS client private key"
+                  htmlFor="config-editor-tls-client-key"
+                  interactive
+                  grow
+                  required
+                >
                   <SecretTextArea
                     id="config-editor-tls-client-key"
                     isConfigured={(secureJsonFields && secureJsonFields.tlsClientKey) as boolean}
@@ -325,17 +362,54 @@ export const ConfigEditor = (props: Props) => {
 
       <Divider spacing={4} />
       {/* Advanced Settings */}
-      <ConfigSection title="Advanced Settings" description="Additional settings for debugging and performance tuning." isCollapsible={true} isInitiallyOpen={false}>
+      <ConfigSection
+        title="Advanced Settings"
+        description="Additional settings for debugging and performance tuning."
+        isCollapsible={true}
+        isInitiallyOpen={false}
+      >
         <InlineField label="Log Level" labelWidth={30} tooltip="Logging level for debugging" grow>
-          <Input id="config-editor-log-level" onChange={onLogLevelChange} value={jsonData.logLevel} placeholder="debug | info | warn | error" width={40} />
+          <Input
+            id="config-editor-log-level"
+            onChange={onLogLevelChange}
+            value={jsonData.logLevel}
+            placeholder="debug | info | warn | error"
+            width={40}
+          />
         </InlineField>
 
-        <InlineField label="Healthcheck Timeout (ms)" labelWidth={30} tooltip="Timeout for health check in milliseconds (non-negative values only)" grow>
-          <Input id="config-editor-healthcheck-timeout" onChange={onHealthcheckTimeoutChange} value={jsonData.healthcheckTimeout} type="number" step={1} min={0} width={40} />
+        <InlineField
+          label="Healthcheck Timeout (ms)"
+          labelWidth={30}
+          tooltip="Timeout for health check in milliseconds (non-negative values only)"
+          grow
+        >
+          <Input
+            id="config-editor-healthcheck-timeout"
+            onChange={onHealthcheckTimeoutChange}
+            value={jsonData.healthcheckTimeout}
+            type="number"
+            step={1}
+            min={0}
+            width={40}
+          />
         </InlineField>
 
-        <InlineField label="Request Timeout (ms)" labelWidth={30} tooltip="Kafka client dial and request timeout in milliseconds (0 to use default)" grow>
-          <Input id="config-editor-timeout" onChange={onRequestTimeoutChange} value={jsonData.timeout} type="number" step={1} min={0} width={40} />
+        <InlineField
+          label="Request Timeout (ms)"
+          labelWidth={30}
+          tooltip="Kafka client dial and request timeout in milliseconds (0 to use default)"
+          grow
+        >
+          <Input
+            id="config-editor-timeout"
+            onChange={onRequestTimeoutChange}
+            value={jsonData.timeout}
+            type="number"
+            step={1}
+            min={0}
+            width={40}
+          />
         </InlineField>
       </ConfigSection>
     </>
