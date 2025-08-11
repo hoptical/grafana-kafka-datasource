@@ -30,6 +30,8 @@ interface State {
 export class QueryEditor extends PureComponent<Props, State> {
   private debouncedSearchTopics: DebouncedFunc<(input: string) => void>;
   private lastCommittedTopic = '';
+  private successTimeout?: ReturnType<typeof setTimeout>;
+  private topicBlurTimeout?: ReturnType<typeof setTimeout>;
 
   constructor(props: Props) {
     super(props);
@@ -54,7 +56,15 @@ export class QueryEditor extends PureComponent<Props, State> {
 
   componentWillUnmount() {
     // Cancel debounced topic search to avoid setState after unmount
-  this.debouncedSearchTopics.cancel();
+    this.debouncedSearchTopics.cancel();
+    if (this.successTimeout) {
+      clearTimeout(this.successTimeout);
+      this.successTimeout = undefined;
+    }
+    if (this.topicBlurTimeout) {
+      clearTimeout(this.topicBlurTimeout);
+      this.topicBlurTimeout = undefined;
+    }
   }
 
   fetchPartitions = async () => {
@@ -73,8 +83,9 @@ export class QueryEditor extends PureComponent<Props, State> {
         partitionSuccess: `Fetched ${partCount} partition${partCount === 1 ? '' : 's'}`,
       });
       // Clear success after 5s
-      setTimeout(() => {
+      this.successTimeout = setTimeout(() => {
         this.setState({ partitionSuccess: undefined });
+        this.successTimeout = undefined;
       }, 5000);
     } catch (error) {
       console.error('Failed to fetch partitions:', error);
@@ -162,9 +173,14 @@ export class QueryEditor extends PureComponent<Props, State> {
 
   onTopicInputBlur = () => {
     // Commit the topic after suggestions close (slight delay so click works)
-    setTimeout(() => {
+    if (this.topicBlurTimeout) {
+      clearTimeout(this.topicBlurTimeout);
+      this.topicBlurTimeout = undefined;
+    }
+    this.topicBlurTimeout = setTimeout(() => {
       this.setState({ showingSuggestions: false });
       this.commitTopicIfChanged();
+      this.topicBlurTimeout = undefined;
     }, 150);
   };
 
