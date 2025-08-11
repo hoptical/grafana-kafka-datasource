@@ -9,7 +9,7 @@ The Kafka data source plugin allows you to visualize streaming Kafka data from w
 ## Features
 
 - Real-time monitoring of Kafka topics
-- Ability to query specific partitions
+- Query all partitions or specific partitions
 - Choose between "latest" or "last 100" messages
 - Timestamp modes: "Now" for real-time or "Message Timestamp" for event time
 - Simple JSON data format support
@@ -41,7 +41,7 @@ Alternatively, you can manually download the [latest](https://github.com/hoptica
 
 ## Configure and use the plugin
 
-For configuration and usage instructions, please refer to the [README.md](src/README.md) file in the `src` directory of this repository.
+For configuration and usage instructions, see below and the [README.md](src/README.md) file in the `src` directory of this repository.
 
 ## Screenshots
 

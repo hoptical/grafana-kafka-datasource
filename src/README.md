@@ -5,7 +5,7 @@ Visualize real-time streaming data from Apache Kafka directly in your Grafana da
 ## Features
 
 - Real-time monitoring of Kafka topics
-- Ability to query specific partitions
+- Query all partitions or specific partitions
 - Choose between "latest" or "last 100" messages
 - Timestamp modes: "Now" for real-time or "Message Timestamp" for event time
 - Simple JSON data format support
@@ -31,7 +31,6 @@ After installation, configure the plugin by adding a new Kafka data source in Gr
 - **SASL Mechanisms**: Specify SASL mechanism if required (e.g. `PLAIN`, `SCRAM-SHA-512`)
 - **SASL Username/Password**: Provide credentials if SASL authentication is enabled
 - **Log Level**: Set log verbosity (`debug`, `error`)
-- **Healthcheck Timeout**: Timeout for health checks in milliseconds (default: 2000ms)
 - **API Key**: (Deprecated) This field is deprecated and will be removed in future versions. Avoid using it for new configurations.
 
 ### Provisioning
