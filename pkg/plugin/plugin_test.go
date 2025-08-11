@@ -52,8 +52,11 @@ func (m *mockKafkaClient) NewStreamReader(ctx context.Context, topic string, par
 	return nil, m.streamReaderErr
 }
 func (m *mockKafkaClient) ConsumerPull(ctx context.Context, reader *kafka.Reader) (kafka_client.KafkaMessage, error) {
-	if len(m.consumerMessages) == 0 {
+	if m.consumerErr != nil {
 		return kafka_client.KafkaMessage{}, m.consumerErr
+	}
+	if len(m.consumerMessages) == 0 {
+		return kafka_client.KafkaMessage{}, errors.New("no more messages")
 	}
 	msg := m.consumerMessages[0]
 	m.consumerMessages = m.consumerMessages[1:]
