@@ -26,6 +26,7 @@ interface State {
   topicSuggestions: string[];
   showingSuggestions: boolean;
   loadingPartitions: boolean;
+  partitionSuccess?: string;
 }
 
 export class QueryEditor extends PureComponent<Props, State> {
@@ -39,6 +40,7 @@ export class QueryEditor extends PureComponent<Props, State> {
       topicSuggestions: [],
       showingSuggestions: false,
   loadingPartitions: false,
+  partitionSuccess: undefined,
     };
 
   this.debouncedSearchTopics = debounce(this.searchTopics, 300);
@@ -65,12 +67,22 @@ export class QueryEditor extends PureComponent<Props, State> {
       this.setState({ availablePartitions: [] });
       return;
     }
-    this.setState({ loadingPartitions: true });
+    this.setState({ loadingPartitions: true, partitionSuccess: undefined });
     try {
       const partitions = await datasource.getTopicPartitions(query.topicName);
-      this.setState({ availablePartitions: partitions || [], loadingPartitions: false });
+      const partCount = (partitions || []).length;
+      this.setState({
+        availablePartitions: partitions || [],
+        loadingPartitions: false,
+        partitionSuccess: `Fetched ${partCount} partition${partCount === 1 ? '' : 's'}`,
+      });
+      // Clear success after 5s
+      setTimeout(() => {
+        this.setState((s) => (s.partitionSuccess ? { partitionSuccess: undefined } : null));
+      }, 5000);
     } catch (error) {
       console.error('Failed to fetch partitions:', error);
+      // Rely on Grafana global error; do not show a duplicate inline error.
       this.setState({ availablePartitions: [], loadingPartitions: false });
     }
   };
@@ -247,6 +259,11 @@ export class QueryEditor extends PureComponent<Props, State> {
               >
                 {this.state.loadingPartitions ? <Spinner size={14} /> : 'Fetch'}
               </Button>
+              {this.state.partitionSuccess && (
+                <div style={{ color: 'var(--gf-color-success-text, #73BF69)', fontSize: '12px' }}>
+                  {this.state.partitionSuccess}
+                </div>
+              )}
             </div>
           </InlineField>
           <InlineField label="Partition" labelWidth={10} tooltip="Kafka partition selection">
