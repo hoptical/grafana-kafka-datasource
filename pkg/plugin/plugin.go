@@ -8,14 +8,25 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
-
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/instancemgmt"
+	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 	"github.com/grafana/grafana-plugin-sdk-go/data"
+	"github.com/segmentio/kafka-go"
 
 	"github.com/hoptical/grafana-kafka-datasource/pkg/kafka_client"
 )
+
+// KafkaClientAPI abstracts the kafka client for easier testing.
+type KafkaClientAPI interface {
+	NewConnection() error
+	GetTopicPartitions(ctx context.Context, topicName string) ([]int32, error)
+	GetTopics(ctx context.Context, prefix string, limit int) ([]string, error)
+	HealthCheck() error
+	NewStreamReader(ctx context.Context, topic string, partition int32, autoOffsetReset string) (*kafka.Reader, error)
+	ConsumerPull(ctx context.Context, reader *kafka.Reader) (kafka_client.KafkaMessage, error)
+	Dispose()
+}
 
 var (
 	_ backend.QueryDataHandler      = (*KafkaDatasource)(nil)
@@ -34,7 +45,7 @@ func NewKafkaInstance(_ context.Context, s backend.DataSourceInstanceSettings) (
 
 	kc := kafka_client.NewKafkaClient(*settings)
 
-	return &KafkaDatasource{kc}, nil
+	return &KafkaDatasource{client: &kc}, nil
 }
 
 func getDatasourceSettings(s backend.DataSourceInstanceSettings) (*kafka_client.Options, error) {
@@ -94,14 +105,12 @@ func getDatasourceSettings(s backend.DataSourceInstanceSettings) (*kafka_client.
 	return settings, nil
 }
 
-type KafkaDatasource struct {
-	client kafka_client.KafkaClient
-}
+type KafkaDatasource struct{ client KafkaClientAPI }
 
-func (d *KafkaDatasource) Dispose() {
-	// Clean up datasource instance resources.
-	d.client.Dispose()
-}
+func (d *KafkaDatasource) Dispose() { d.client.Dispose() }
+
+// NewWithClient allows injecting a custom KafkaClientAPI (primarily for tests).
+func NewWithClient(c KafkaClientAPI) *KafkaDatasource { return &KafkaDatasource{client: c} }
 
 func (d *KafkaDatasource) QueryData(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
 	log.DefaultLogger.Debug("QueryData called", "request", req)
@@ -284,6 +293,12 @@ func (d *KafkaDatasource) CheckHealth(_ context.Context, req *backend.CheckHealt
 
 	var status = backend.HealthStatusOk
 	var message = "Data source is working"
+
+	if d.client == nil {
+		status = backend.HealthStatusError
+		message = "client not initialized"
+		return &backend.CheckHealthResult{Status: status, Message: message}, nil
+	}
 
 	err := d.client.HealthCheck()
 	if err != nil {
