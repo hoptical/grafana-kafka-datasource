@@ -3,6 +3,7 @@ import { DataQuery, DataSourceJsonData } from '@grafana/data';
 export enum AutoOffsetReset {
   EARLIEST = 'earliest',
   LATEST = 'latest',
+  LAST_N = 'lastN',
 }
 
 export enum TimestampMode {
@@ -65,10 +66,12 @@ export interface KafkaQuery extends DataQuery {
   partition: number | 'all';
   autoOffsetReset: AutoOffsetReset;
   timestampMode: TimestampMode;
+  lastN?: number;
 }
 
 export const defaultQuery: Partial<KafkaQuery> = {
   partition: 'all',
   autoOffsetReset: AutoOffsetReset.LATEST,
   timestampMode: TimestampMode.Now,
+  lastN: 100,
 };

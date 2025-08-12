@@ -1,13 +1,14 @@
 import { defaults, debounce, type DebouncedFunc } from 'lodash';
 import React, { ChangeEvent, PureComponent } from 'react';
-import { InlineField, InlineFieldRow, Input, Select, Button, Spinner } from '@grafana/ui';
+import { InlineField, InlineFieldRow, Input, Select, Button, Spinner, Alert, InlineLabel } from '@grafana/ui';
 import { QueryEditorProps } from '@grafana/data';
 import { DataSource } from './datasource';
 import { defaultQuery, KafkaDataSourceOptions, KafkaQuery, AutoOffsetReset, TimestampMode } from './types';
 
 const autoResetOffsets: Array<{ label: string; value: AutoOffsetReset }> = [
-  { label: 'From the last 100', value: AutoOffsetReset.EARLIEST },
   { label: 'Latest', value: AutoOffsetReset.LATEST },
+  { label: 'Last N messages', value: AutoOffsetReset.LAST_N },
+  { label: 'Earliest', value: AutoOffsetReset.EARLIEST },
 ];
 
 const timestampModes: Array<{ label: string; value: TimestampMode }> = [
@@ -160,8 +161,24 @@ export class QueryEditor extends PureComponent<Props, State> {
 
   onAutoResetOffsetChanged = (value: AutoOffsetReset) => {
     const { onChange, query, onRunQuery } = this.props;
-    onChange({ ...query, autoOffsetReset: value });
+    // If switching to Last N and no lastN set, default to 100
+    const next: KafkaQuery = { ...query, autoOffsetReset: value } as KafkaQuery;
+    if (value === AutoOffsetReset.LAST_N && (!next.lastN || next.lastN <= 0)) {
+      (next as any).lastN = 100;
+    }
+    onChange(next);
     onRunQuery();
+  };
+
+  onLastNChanged = (event: ChangeEvent<HTMLInputElement>) => {
+    const { onChange, query, onRunQuery } = this.props;
+    const value = Number(event.target.value);
+    const n = Number.isFinite(value) ? Math.max(1, Math.min(1000000, Math.round(value))) : 100; // clamp 1..1e6
+    onChange({ ...query, lastN: n });
+    // Don't auto-run on every keystroke if empty; only when valid number present
+    if (!Number.isNaN(n)) {
+      onRunQuery();
+    }
   };
 
   onTimestampModeChanged = (value: TimestampMode) => {
@@ -199,7 +216,7 @@ export class QueryEditor extends PureComponent<Props, State> {
 
   render() {
     const query = defaults(this.props.query, defaultQuery);
-    const { topicName, partition, autoOffsetReset, timestampMode } = query;
+  const { topicName, partition, autoOffsetReset, timestampMode, lastN } = query;
 
     return (
       <>
@@ -300,17 +317,29 @@ export class QueryEditor extends PureComponent<Props, State> {
           </InlineField>
         </InlineFieldRow>
         <InlineFieldRow>
-          <InlineField
-            label="Auto offset reset"
-            labelWidth={20}
-            tooltip="Starting offset to consume that can be from latest or last 100."
-          >
-            <Select
-              width={22}
-              value={autoOffsetReset}
-              options={autoResetOffsets}
-              onChange={(value) => this.onAutoResetOffsetChanged(value.value as AutoOffsetReset)}
-            />
+          <InlineField label="Offset" labelWidth={12} tooltip="Where to start consuming from for this query" style={{ minWidth: 260 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Select
+                width={22}
+                value={autoOffsetReset}
+                options={autoResetOffsets}
+                onChange={(value) => this.onAutoResetOffsetChanged(value.value as AutoOffsetReset)}
+              />
+              {autoOffsetReset === AutoOffsetReset.LAST_N && (
+                <>
+                  <InlineLabel width={12}>N</InlineLabel>
+                  <Input
+                    id="query-editor-last-n"
+                    value={String(lastN ?? 100)}
+                    type="number"
+                    min={1}
+                    step={1}
+                    width={12}
+                    onChange={this.onLastNChanged}
+                  />
+                </>
+              )}
+            </div>
           </InlineField>
           <InlineField label="Timestamp Mode" labelWidth={20} tooltip="Timestamp of the kafka value to visualize.">
             <Select
@@ -321,6 +350,13 @@ export class QueryEditor extends PureComponent<Props, State> {
             />
           </InlineField>
         </InlineFieldRow>
+        {autoOffsetReset !== AutoOffsetReset.LATEST && (
+          <div style={{ marginTop: 8 }}>
+            <Alert severity="warning" title="Potential higher load">
+              Starting from Earliest or reading the last N messages can increase load on Kafka and the backend.
+            </Alert>
+          </div>
+        )}
       </>
     );
   }

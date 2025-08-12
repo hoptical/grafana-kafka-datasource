@@ -58,8 +58,8 @@ export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourc
     const observables = request.targets
       .filter((q): q is KafkaQuery => this.filterQuery(q as KafkaQuery))
       .map((q) => {
-        const interpolatedQuery = this.applyTemplateVariables(q as KafkaQuery, request.scopedVars);
-        const path = `${interpolatedQuery.topicName}-${interpolatedQuery.partition}-${interpolatedQuery.autoOffsetReset}`;
+  const interpolatedQuery = this.applyTemplateVariables(q as KafkaQuery, request.scopedVars);
+  const path = `${interpolatedQuery.topicName}-${interpolatedQuery.partition}-${interpolatedQuery.autoOffsetReset}-${interpolatedQuery.lastN ?? ''}`;
 
         return getGrafanaLiveSrv()
           .getDataStream({

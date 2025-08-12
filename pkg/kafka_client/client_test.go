@@ -95,14 +95,15 @@ func TestGetSASLMechanism_Supported(t *testing.T) {
 	}
 }
 
-func TestNewStreamReader_EarliestOffsetClamp(t *testing.T) {
+func TestNewStreamReader_EarliestAndLastN_NoPanic(t *testing.T) {
 	// Uses negative offset clamp logic indirectly; since we can't connect to real kafka here,
 	// just ensure it doesn't panic and returns error due to missing connection when creating connection.
 	cl := NewKafkaClient(Options{BootstrapServers: "localhost:9092"})
 	ctx := context.Background()
 	// Force NewConnection (will succeed with fake bootstrap but no real broker until metadata fetch) then earliest logic path.
 	_ = cl.NewConnection()
-	_, _ = cl.NewStreamReader(ctx, "topic", 0, "earliest")
+	_, _ = cl.NewStreamReader(ctx, "topic", 0, "earliest", 0)
+	_, _ = cl.NewStreamReader(ctx, "topic", 0, "lastN", 100)
 }
 
 func TestGetKafkaLogger(t *testing.T) {

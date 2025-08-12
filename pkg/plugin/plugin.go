@@ -29,7 +29,7 @@ type KafkaClientAPI interface {
 	GetTopicPartitions(ctx context.Context, topicName string) ([]int32, error)
 	GetTopics(ctx context.Context, prefix string, limit int) ([]string, error)
 	HealthCheck() error
-	NewStreamReader(ctx context.Context, topic string, partition int32, autoOffsetReset string) (*kafka.Reader, error)
+	NewStreamReader(ctx context.Context, topic string, partition int32, autoOffsetReset string, lastN int32) (*kafka.Reader, error)
 	ConsumerPull(ctx context.Context, reader *kafka.Reader) (kafka_client.KafkaMessage, error)
 	Dispose()
 }
@@ -137,6 +137,7 @@ type queryModel struct {
 	Partition       interface{} `json:"partition"` // Can be int32 or "all"
 	AutoOffsetReset string      `json:"autoOffsetReset"`
 	TimestampMode   string      `json:"timestampMode"`
+	LastN           int32       `json:"lastN"`
 }
 
 func (d *KafkaDatasource) query(_ context.Context, pCtx backend.PluginContext, query backend.DataQuery) backend.DataResponse {
@@ -342,7 +343,7 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 	// Start a goroutine for each partition
 	for _, partition := range partitions {
 		go func(p int32) {
-			reader, err := d.client.NewStreamReader(ctx, qm.Topic, p, qm.AutoOffsetReset)
+			reader, err := d.client.NewStreamReader(ctx, qm.Topic, p, qm.AutoOffsetReset, qm.LastN)
 			if err != nil {
 				log.DefaultLogger.Error("Failed to create stream reader", "partition", p, "error", err)
 				return

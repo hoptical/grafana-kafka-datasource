@@ -79,9 +79,10 @@ test.describe('Kafka Query Editor', () => {
       .nth(2);
     const timestampSelect = page.locator('div').filter({ hasText: /^Now$/ }).nth(2);
 
-    // Test Auto offset reset options
+    // Test Offset options
     await autoOffsetSelect.click();
-    await expect(page.getByText('From the last 100')).toBeVisible();
+    await expect(page.getByText('Last N messages')).toBeVisible();
+    await expect(page.getByText('Earliest')).toBeVisible();
     if (isV10) {
       await page.getByLabel('Select options menu').getByText('Latest').click();
     } else {
