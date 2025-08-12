@@ -104,9 +104,16 @@ export class QueryEditor extends PureComponent<Props, State> {
 
   getPartitionOptions = (): Array<{ label: string; value: number | 'all' }> => {
     const options = [...partitionOptions];
-    (this.state.availablePartitions || []).forEach((partition) => {
-      options.push({ label: `Partition ${partition}`, value: partition });
+    const { partition } = defaults(this.props.query, defaultQuery);
+    const present = new Set<number>();
+    (this.state.availablePartitions || []).forEach((p) => {
+      options.push({ label: `Partition ${p}`, value: p });
+      present.add(p);
     });
+    // Ensure previously selected numeric partition is visible even before fetching
+    if (typeof partition === 'number' && !present.has(partition)) {
+      options.push({ label: `Partition ${partition}`, value: partition });
+    }
     return options;
   };
 
@@ -308,7 +315,8 @@ export class QueryEditor extends PureComponent<Props, State> {
               id="query-editor-partition"
               value={partition}
               options={this.getPartitionOptions()}
-              onChange={(value) => this.onPartitionChange(value.value as number | 'all')}
+              onChange={(opt) => this.onPartitionChange(opt.value as number | 'all')}
+              isClearable={false}
               width={22}
               placeholder="Select partition"
               noOptionsMessage="Fetch topic partitions first"
