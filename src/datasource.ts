@@ -8,7 +8,7 @@ import {
 } from '@grafana/data';
 import { DataSourceWithBackend, getGrafanaLiveSrv, getTemplateSrv } from '@grafana/runtime';
 import { Observable, merge, throwError, of } from 'rxjs';
-import { catchError } from 'rxjs/operators';
+import { catchError, startWith } from 'rxjs/operators';
 import { KafkaDataSourceOptions, KafkaQuery, AutoOffsetReset, TimestampMode } from './types';
 
 export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourceOptions> {
@@ -61,7 +61,7 @@ export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourc
   const interpolatedQuery = this.applyTemplateVariables(q as KafkaQuery, request.scopedVars);
   const path = `${interpolatedQuery.topicName}-${interpolatedQuery.partition}-${interpolatedQuery.autoOffsetReset}-${interpolatedQuery.lastN ?? ''}`;
 
-        return getGrafanaLiveSrv()
+    return getGrafanaLiveSrv()
           .getDataStream({
             addr: {
               scope: LiveChannelScope.DataSource,
@@ -71,6 +71,7 @@ export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourc
             },
           })
           .pipe(
+      startWith({ data: [] }),
             catchError((err) => {
               console.error('Stream error:', err);
               return throwError(() => ({
@@ -85,8 +86,13 @@ export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourc
   }
 
   async getTopicPartitions(topicName: string): Promise<number[]> {
-    const response = await this.getResource('partitions', { topic: topicName });
-    return response.partitions || [];
+    try {
+      const response = await this.getResource('partitions', { topic: topicName });
+      return response.partitions || [];
+    } catch (err: any) {
+      // Re-throw to let Grafana surface the error toast, preserving 404 messages
+      throw err;
+    }
   }
 
   async searchTopics(prefix: string, limit = 5): Promise<string[]> {

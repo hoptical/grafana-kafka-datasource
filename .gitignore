@@ -48,3 +48,6 @@ ci/
 
 # ASDF
 .tool-versions
+
+# CMD folder for developing purposes
+/cmd/

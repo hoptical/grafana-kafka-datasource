@@ -4,6 +4,7 @@
   "description": "Kafka Datasource Plugin",
   "scripts": {
     "build": "webpack -c ./.config/webpack/webpack.config.ts --env production",
+    "build:backend": "mage build:backend && docker restart hamedkarbasi93-kafka-datasource",
     "dev": "webpack -w -c ./.config/webpack/webpack.config.ts --env development",
     "e2e": "playwright test",
     "lint": "eslint --cache --ignore-path ./.gitignore --ext .js,.jsx,.ts,.tsx .",

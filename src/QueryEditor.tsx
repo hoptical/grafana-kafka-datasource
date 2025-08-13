@@ -244,6 +244,12 @@ export class QueryEditor extends PureComponent<Props, State> {
                     }
                   }}
                   type="text"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  name="gf-topic-search"
+                  aria-autocomplete="list"
                   width={24}
                   placeholder="Enter topic name"
                 />

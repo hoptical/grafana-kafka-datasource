@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -79,6 +80,9 @@ type KafkaMessage struct {
 	Timestamp time.Time
 	Offset    int64
 }
+
+// ErrTopicNotFound indicates the requested topic does not exist.
+var ErrTopicNotFound = errors.New("topic not found")
 
 func NewKafkaClient(options Options) KafkaClient {
 	// Build broker slice once
@@ -194,10 +198,14 @@ func (client *KafkaClient) metadataForTopic(ctx context.Context, topicName strin
 		return nil, fmt.Errorf("unable to get metadata: %w", err)
 	}
 	if len(meta.Topics) == 0 {
-		return nil, fmt.Errorf("topic %s not found", topicName)
+		return nil, fmt.Errorf("%w: %s", ErrTopicNotFound, topicName)
 	}
 	t := meta.Topics[0]
 	if t.Error != nil {
+		// Classify not-found errors deterministically if possible
+		if isTopicNotFound(t.Error) {
+			return nil, fmt.Errorf("%w: %s", ErrTopicNotFound, topicName)
+		}
 		return nil, fmt.Errorf("error getting topic %s metadata: %w", topicName, t.Error)
 	}
 	return &t, nil
@@ -353,6 +361,18 @@ func (client *KafkaClient) GetTopics(ctx context.Context, prefix string, limit i
 		}
 	}
 	return matching, nil
+}
+
+// isTopicNotFound attempts to classify broker errors that indicate a missing topic.
+func isTopicNotFound(err error) bool {
+	// Prefer kafka-go sentinel if available
+	if errors.Is(err, kafka.UnknownTopicOrPartition) {
+		return true
+	}
+	s := strings.ToLower(err.Error())
+	return strings.Contains(s, "unknown topic") ||
+		strings.Contains(s, "not found") ||
+		strings.Contains(s, "does not exist")
 }
 
 func getKafkaLogger(level string) (kafka.LoggerFunc, kafka.LoggerFunc) {
