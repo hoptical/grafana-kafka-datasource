@@ -217,7 +217,6 @@ func (client *KafkaClient) NewStreamReader(ctx context.Context, topic string, pa
 			return nil, fmt.Errorf("failed to create connection: %w", err)
 		}
 	}
-
 	reader := client.newReader(topic, int(partition))
 	// Determine starting offset based on mode
 	switch autoOffsetReset {
@@ -236,7 +235,15 @@ func (client *KafkaClient) NewStreamReader(ctx context.Context, topic string, pa
 			reader.Close()
 			return nil, fmt.Errorf("no brokers configured to read offsets")
 		}
-		leaderConn, err := client.Dialer.DialLeader(ctx, "tcp", client.Brokers[0], topic, int(partition))
+		// Bound leader dial by client.Timeout to avoid hanging indefinitely
+		offCtx := ctx
+		if client.Timeout > 0 {
+			d := time.Duration(client.Timeout) * time.Millisecond
+			var cancel context.CancelFunc
+			offCtx, cancel = context.WithTimeout(ctx, d)
+			defer cancel()
+		}
+		leaderConn, err := client.Dialer.DialLeader(offCtx, "tcp", client.Brokers[0], topic, int(partition))
 		if err != nil {
 			reader.Close()
 			return nil, fmt.Errorf("unable to dial leader: %w", err)

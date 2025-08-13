@@ -295,12 +295,6 @@ func (d *KafkaDatasource) SubscribeStream(ctx context.Context, req *backend.Subs
 		}, err
 	}
 
-	// Lazily create connection
-	if err := d.client.NewConnection(); err != nil {
-		log.DefaultLogger.Error("Creating new Kafka connection error", "error", err)
-		return &backend.SubscribeStreamResponse{Status: backend.SubscribeStreamStatusPermissionDenied}, err
-	}
-
 	log.DefaultLogger.Debug("SubscribeStream prepared", "topic", qm.Topic, "partition", qm.Partition)
 	return &backend.SubscribeStreamResponse{Status: backend.SubscribeStreamStatusOK}, nil
 }
@@ -314,6 +308,12 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 	if err != nil {
 		log.DefaultLogger.Error("RunStream unmarshal error", "error", err)
 		return err
+	}
+
+	// Create connection
+	if err := d.client.NewConnection(); err != nil {
+		log.DefaultLogger.Error("Failed to create Kafka connection for streaming", "error", err)
+		return fmt.Errorf("failed to establish Kafka connection: %w", err)
 	}
 
 	// Parse partition field which can be int32 or "all"
