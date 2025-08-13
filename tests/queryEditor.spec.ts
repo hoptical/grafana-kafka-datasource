@@ -191,7 +191,10 @@ test.describe('Kafka Query Editor', () => {
 
     // Pick single partition 1
     if (isV10) {
-      await page.getByLabel('Select options menu').getByText(/Partition 1/).click();
+      await page
+        .getByLabel('Select options menu')
+        .getByText(/Partition 1/)
+        .click();
     } else {
       await page.getByRole('option', { name: /Partition 1/ }).click();
     }

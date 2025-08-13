@@ -57,7 +57,12 @@ const onChange = jest.fn();
 const onRunQuery = jest.fn();
 
 beforeEach(() => {
+  jest.useFakeTimers();
   jest.clearAllMocks();
+});
+afterEach(() => {
+  jest.runOnlyPendingTimers();
+  jest.useRealTimers();
 });
 
 const renderEditor = (query?: Partial<KafkaQuery>) =>
@@ -181,21 +186,15 @@ describe('QueryEditor', () => {
 
     // Test negative value gets clamped to 1
     fireEvent.change(lastNInput, { target: { value: '-5' } });
-    expect(onChange).toHaveBeenCalledWith(
-      expect.objectContaining({ lastN: 1 })
-    );
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ lastN: 1 }));
 
     // Test zero gets clamped to 1
     fireEvent.change(lastNInput, { target: { value: '0' } });
-    expect(onChange).toHaveBeenCalledWith(
-      expect.objectContaining({ lastN: 1 })
-    );
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ lastN: 1 }));
 
     // Test very large value gets clamped
     fireEvent.change(lastNInput, { target: { value: '10000000' } });
-    expect(onChange).toHaveBeenCalledWith(
-      expect.objectContaining({ lastN: 1000000 })
-    );
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ lastN: 1000000 }));
   });
 
   it('calls onChange and onRunQuery when timestamp mode changes', () => {
@@ -271,7 +270,7 @@ describe('QueryEditor', () => {
   it('shows available partitions in partition select after fetch', async () => {
     mockDs.getTopicPartitions.mockResolvedValueOnce([0, 1, 2, 3]);
     renderEditor({ topicName: 'test-topic' });
-    
+
     const fetchButton = screen.getByText('Fetch');
     fireEvent.click(fetchButton);
 
@@ -286,7 +285,7 @@ describe('QueryEditor', () => {
   it('handles fetch partitions error gracefully', async () => {
     const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
     mockDs.getTopicPartitions.mockRejectedValueOnce(new Error('Network error'));
-    
+
     renderEditor({ topicName: 'test-topic' });
     const fetchButton = screen.getByText('Fetch');
 
@@ -306,23 +305,29 @@ describe('QueryEditor', () => {
     fireEvent.change(input, { target: { value: 'my' } });
 
     // The search is debounced, so we need to wait
-    await waitFor(() => {
-      expect(mockDs.searchTopics).toHaveBeenCalledWith('my', 10);
-    }, { timeout: 500 });
+    await waitFor(
+      () => {
+        expect(mockDs.searchTopics).toHaveBeenCalledWith('my', 10);
+      },
+      { timeout: 500 }
+    );
   });
 
   it('handles topic search error gracefully', async () => {
     const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
     mockDs.searchTopics.mockRejectedValueOnce(new Error('Search error'));
-    
+
     renderEditor({ topicName: '' });
     const input = screen.getByPlaceholderText('Enter topic name') as HTMLInputElement;
 
     fireEvent.change(input, { target: { value: 'test' } });
 
-    await waitFor(() => {
-      expect(consoleError).toHaveBeenCalledWith('Failed to search topics:', expect.any(Error));
-    }, { timeout: 500 });
+    await waitFor(
+      () => {
+        expect(consoleError).toHaveBeenCalledWith('Failed to search topics:', expect.any(Error));
+      },
+      { timeout: 500 }
+    );
 
     consoleError.mockRestore();
   });

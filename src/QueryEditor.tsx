@@ -5,6 +5,11 @@ import { QueryEditorProps } from '@grafana/data';
 import { DataSource } from './datasource';
 import { defaultQuery, KafkaDataSourceOptions, KafkaQuery, AutoOffsetReset, TimestampMode } from './types';
 
+// Constants for Last N messages input
+const LAST_N_MIN = 1;
+const LAST_N_MAX = 1000000;
+const LAST_N_DEFAULT = 100;
+
 const autoResetOffsets: Array<{ label: string; value: AutoOffsetReset }> = [
   { label: 'Latest', value: AutoOffsetReset.LATEST },
   { label: 'Last N messages', value: AutoOffsetReset.LAST_N },
@@ -171,7 +176,7 @@ export class QueryEditor extends PureComponent<Props, State> {
     // If switching to Last N and no lastN set, default to 100
     const next: KafkaQuery = { ...query, autoOffsetReset: value } as KafkaQuery;
     if (value === AutoOffsetReset.LAST_N && (!next.lastN || next.lastN <= 0)) {
-      (next as any).lastN = 100;
+      next.lastN = 100;
     }
     onChange(next);
     onRunQuery();
@@ -180,7 +185,7 @@ export class QueryEditor extends PureComponent<Props, State> {
   onLastNChanged = (event: ChangeEvent<HTMLInputElement>) => {
     const { onChange, query, onRunQuery } = this.props;
     const value = Number(event.target.value);
-    const n = Number.isFinite(value) ? Math.max(1, Math.min(1000000, Math.round(value))) : 100; // clamp 1..1e6
+    const n = Number.isFinite(value) ? Math.max(LAST_N_MIN, Math.min(LAST_N_MAX, Math.round(value))) : LAST_N_DEFAULT; // clamp LAST_N_MIN..LAST_N_MAX
     onChange({ ...query, lastN: n });
     // Don't auto-run on every keystroke if empty; only when valid number present
     if (!Number.isNaN(n)) {
@@ -223,12 +228,17 @@ export class QueryEditor extends PureComponent<Props, State> {
 
   render() {
     const query = defaults(this.props.query, defaultQuery);
-  const { topicName, partition, autoOffsetReset, timestampMode, lastN } = query;
+    const { topicName, partition, autoOffsetReset, timestampMode, lastN } = query;
 
     return (
       <>
         <InlineFieldRow>
-          <InlineField label="Topic" labelWidth={12} tooltip="Kafka topic name + click Fetch to load partitions" style={{ minWidth: 260 }}>
+          <InlineField
+            label="Topic"
+            labelWidth={12}
+            tooltip="Kafka topic name + click Fetch to load partitions"
+            style={{ minWidth: 260 }}
+          >
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', position: 'relative', minWidth: 260 }}>
               <div style={{ position: 'relative', minWidth: 180 }}>
                 <Input
@@ -331,7 +341,12 @@ export class QueryEditor extends PureComponent<Props, State> {
           </InlineField>
         </InlineFieldRow>
         <InlineFieldRow>
-          <InlineField label="Offset" labelWidth={12} tooltip="Where to start consuming from for this query" style={{ minWidth: 260 }}>
+          <InlineField
+            label="Offset"
+            labelWidth={12}
+            tooltip="Where to start consuming from for this query"
+            style={{ minWidth: 260 }}
+          >
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <Select
                 width={22}

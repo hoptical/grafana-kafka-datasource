@@ -4,12 +4,14 @@ import { AutoOffsetReset, TimestampMode, type KafkaQuery } from '../types';
 
 // Mock @grafana/runtime pieces used by DataSource
 let capturedPath: string | undefined;
+// Allow tests to override template replacement logic dynamically
+let templateReplaceImpl = (v: string) => v.replace('${var}', '5');
 jest.mock('@grafana/runtime', () => {
   return {
     getTemplateSrv: () => ({
-      replace: (v: string) => v.replace('${var}', '5'),
+      replace: (v: string) => templateReplaceImpl(v),
     }),
-  getGrafanaLiveSrv: () => ({
+    getGrafanaLiveSrv: () => ({
       getDataStream: ({ addr }: any) => {
         capturedPath = addr.path;
         return of({ data: [] });
@@ -46,7 +48,7 @@ describe('DataSource', () => {
   describe('getDefaultQuery', () => {
     it('returns default query values', () => {
       const defaultQuery = ds.getDefaultQuery('explore' as any);
-      
+
       expect(defaultQuery).toEqual({
         topicName: '',
         partition: 'all',
@@ -236,10 +238,10 @@ describe('DataSource', () => {
       });
     });
 
-  it('filters out invalid queries', (done) => {
+    it('filters out invalid queries', (done) => {
       const targets = [
-    { refId: 'A', topicName: '', partition: 'all' }, // Invalid - no topic
-    { refId: 'B', topicName: 'valid-topic', partition: 'all', autoOffsetReset: AutoOffsetReset.LATEST }, // Valid
+        { refId: 'A', topicName: '', partition: 'all' }, // Invalid - no topic
+        { refId: 'B', topicName: 'valid-topic', partition: 'all', autoOffsetReset: AutoOffsetReset.LATEST }, // Valid
         { refId: 'C', topicName: 'another-topic', partition: -1 }, // Invalid - negative partition
       ] as KafkaQuery[];
 
@@ -253,9 +255,7 @@ describe('DataSource', () => {
     });
 
     it('returns empty data when no valid targets', (done) => {
-      const targets = [
-        { refId: 'A', topicName: '', partition: 'all' },
-      ] as KafkaQuery[];
+      const targets = [{ refId: 'A', topicName: '', partition: 'all' }] as KafkaQuery[];
 
       ds.query({ targets } as any).subscribe({
         next: (response) => {

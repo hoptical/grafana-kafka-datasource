@@ -15,13 +15,7 @@ jest.mock('@grafana/ui', () => ({
   Divider: ({ spacing }: any) => <div data-testid="divider" data-spacing={spacing} />,
   SecretInput: ({ value, onChange, onReset, isConfigured, placeholder, id }: any) => (
     <div>
-      <input
-        id={id}
-        value={value}
-        onChange={onChange}
-        placeholder={placeholder}
-        data-testid="secret-input"
-      />
+      <input id={id} value={value} onChange={onChange} placeholder={placeholder} data-testid="secret-input" />
       {isConfigured && (
         <button onClick={onReset} data-testid="reset-button">
           Reset
@@ -30,12 +24,7 @@ jest.mock('@grafana/ui', () => ({
     </div>
   ),
   Checkbox: ({ value, onChange }: any) => (
-    <input
-      type="checkbox"
-      checked={value}
-      onChange={onChange}
-      data-testid="checkbox"
-    />
+    <input type="checkbox" checked={value} onChange={onChange} data-testid="checkbox" />
   ),
   SecretTextArea: ({ value, onChange, onReset, isConfigured, placeholder, id, rows }: any) => (
     <div>
@@ -78,14 +67,24 @@ jest.mock('@grafana/ui', () => ({
 // Mock @grafana/plugin-ui components
 jest.mock('@grafana/plugin-ui', () => ({
   ConfigSection: ({ title, description, children, isCollapsible, isInitiallyOpen }: any) => (
-    <div data-testid="config-section" data-title={title} data-collapsible={isCollapsible} data-initially-open={isInitiallyOpen}>
+    <div
+      data-testid="config-section"
+      data-title={title}
+      data-collapsible={isCollapsible}
+      data-initially-open={isInitiallyOpen}
+    >
       <h3>{title}</h3>
       {description && <p>{description}</p>}
       {children}
     </div>
   ),
   DataSourceDescription: ({ dataSourceName, docsLink, hasRequiredFields }: any) => (
-    <div data-testid="datasource-description" data-name={dataSourceName} data-docs={docsLink} data-required={hasRequiredFields}>
+    <div
+      data-testid="datasource-description"
+      data-name={dataSourceName}
+      data-docs={docsLink}
+      data-required={hasRequiredFields}
+    >
       Data source: {dataSourceName}
     </div>
   ),
@@ -132,12 +131,7 @@ const renderConfigEditor = (
   secureJsonFields?: any
 ) => {
   const options = createMockOptions(jsonData, secureJsonData, secureJsonFields);
-  return render(
-    <ConfigEditor
-      options={options}
-      onOptionsChange={mockOnOptionsChange}
-    />
-  );
+  return render(<ConfigEditor options={options} onOptionsChange={mockOnOptionsChange} />);
 };
 
 beforeEach(() => {
@@ -160,14 +154,14 @@ describe('ConfigEditor', () => {
   it('calls onOptionsChange when bootstrap servers change', () => {
     renderConfigEditor();
     const input = screen.getByPlaceholderText('broker1:9092,broker2:9092');
-    
+
     fireEvent.change(input, { target: { value: 'localhost:9092' } });
-    
+
     expect(mockOnOptionsChange).toHaveBeenCalledWith(
       expect.objectContaining({
         jsonData: expect.objectContaining({
-          bootstrapServers: 'localhost:9092'
-        })
+          bootstrapServers: 'localhost:9092',
+        }),
       })
     );
   });
@@ -175,14 +169,14 @@ describe('ConfigEditor', () => {
   it('calls onOptionsChange when client ID changes', () => {
     renderConfigEditor();
     const input = screen.getByPlaceholderText('my-kafka-client');
-    
+
     fireEvent.change(input, { target: { value: 'test-client' } });
-    
+
     expect(mockOnOptionsChange).toHaveBeenCalledWith(
       expect.objectContaining({
         jsonData: expect.objectContaining({
-          clientId: 'test-client'
-        })
+          clientId: 'test-client',
+        }),
       })
     );
   });
@@ -190,42 +184,42 @@ describe('ConfigEditor', () => {
   it('calls onOptionsChange when security protocol changes', () => {
     renderConfigEditor();
     const select = screen.getByTestId('select');
-    
+
     fireEvent.change(select, { target: { value: 'SASL_PLAINTEXT' } });
-    
+
     expect(mockOnOptionsChange).toHaveBeenCalledWith(
       expect.objectContaining({
         jsonData: expect.objectContaining({
-          securityProtocol: 'SASL_PLAINTEXT'
-        })
+          securityProtocol: 'SASL_PLAINTEXT',
+        }),
       })
     );
   });
 
   it('shows SASL fields when SASL_PLAINTEXT is selected', () => {
     renderConfigEditor({ securityProtocol: 'SASL_PLAINTEXT' });
-    
+
     expect(screen.getByPlaceholderText('SASL Username')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('SASL Password')).toBeInTheDocument();
   });
 
   it('shows SASL fields when SASL_SSL is selected', () => {
     renderConfigEditor({ securityProtocol: 'SASL_SSL' });
-    
+
     expect(screen.getByPlaceholderText('SASL Username')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('SASL Password')).toBeInTheDocument();
   });
 
   it('hides SASL fields when PLAINTEXT is selected', () => {
     renderConfigEditor({ securityProtocol: 'PLAINTEXT' });
-    
+
     expect(screen.queryByPlaceholderText('SASL Username')).not.toBeInTheDocument();
     expect(screen.queryByPlaceholderText('SASL Password')).not.toBeInTheDocument();
   });
 
   it('shows TLS fields when SSL is selected', () => {
     renderConfigEditor({ securityProtocol: 'SSL' });
-    
+
     expect(screen.getByText('TLS Settings')).toBeInTheDocument();
     expect(screen.getByText('Skip TLS Verification')).toBeInTheDocument();
     expect(screen.getByText('Self-signed Certificate')).toBeInTheDocument();
@@ -234,21 +228,21 @@ describe('ConfigEditor', () => {
 
   it('shows TLS fields when SASL_SSL is selected', () => {
     renderConfigEditor({ securityProtocol: 'SASL_SSL' });
-    
+
     expect(screen.getByText('TLS Settings')).toBeInTheDocument();
   });
 
   it('calls onOptionsChange when SASL username changes', () => {
     renderConfigEditor({ securityProtocol: 'SASL_PLAINTEXT' });
     const input = screen.getByPlaceholderText('SASL Username');
-    
+
     fireEvent.change(input, { target: { value: 'testuser' } });
-    
+
     expect(mockOnOptionsChange).toHaveBeenCalledWith(
       expect.objectContaining({
         jsonData: expect.objectContaining({
-          saslUsername: 'testuser'
-        })
+          saslUsername: 'testuser',
+        }),
       })
     );
   });
@@ -256,72 +250,72 @@ describe('ConfigEditor', () => {
   it('calls onOptionsChange when SASL password changes', () => {
     renderConfigEditor({ securityProtocol: 'SASL_PLAINTEXT' });
     const input = screen.getByPlaceholderText('SASL Password');
-    
+
     fireEvent.change(input, { target: { value: 'testpass' } });
-    
+
     expect(mockOnOptionsChange).toHaveBeenCalledWith(
       expect.objectContaining({
         secureJsonData: expect.objectContaining({
-          saslPassword: 'testpass'
-        })
+          saslPassword: 'testpass',
+        }),
       })
     );
   });
 
   it('calls onOptionsChange when TLS skip verify changes', () => {
     renderConfigEditor({ securityProtocol: 'SSL' });
-  const checkbox = screen.getAllByTestId('checkbox')[0]; // First checkbox is skip verify
-    
-  fireEvent.click(checkbox);
-    
+    const checkbox = screen.getAllByTestId('checkbox')[0]; // First checkbox is skip verify
+
+    fireEvent.click(checkbox);
+
     expect(mockOnOptionsChange).toHaveBeenCalledWith(
       expect.objectContaining({
         jsonData: expect.objectContaining({
-          tlsSkipVerify: true
-        })
+          tlsSkipVerify: true,
+        }),
       })
     );
   });
 
   it('calls onOptionsChange when TLS auth with CA cert changes', () => {
     renderConfigEditor({ securityProtocol: 'SSL' });
-  const checkbox = screen.getAllByTestId('checkbox')[1]; // Second checkbox is CA cert
-    
-  fireEvent.click(checkbox);
-    
+    const checkbox = screen.getAllByTestId('checkbox')[1]; // Second checkbox is CA cert
+
+    fireEvent.click(checkbox);
+
     expect(mockOnOptionsChange).toHaveBeenCalledWith(
       expect.objectContaining({
         jsonData: expect.objectContaining({
-          tlsAuthWithCACert: true
-        })
+          tlsAuthWithCACert: true,
+        }),
       })
     );
   });
 
   it('shows CA certificate textarea when TLS auth with CA cert is enabled', () => {
     renderConfigEditor({ securityProtocol: 'SSL', tlsAuthWithCACert: true });
-    
+
     expect(screen.getByPlaceholderText('Begins with -----BEGIN CERTIFICATE-----')).toBeInTheDocument();
   });
 
   it('calls onOptionsChange when TLS client auth changes', () => {
     renderConfigEditor({ securityProtocol: 'SSL' });
-  const checkbox = screen.getAllByTestId('checkbox')[2]; // Third checkbox is client auth
-    
-  fireEvent.click(checkbox);
-    
+    const checkbox = screen.getAllByTestId('checkbox')[2]; // Third checkbox is client auth
+
+    fireEvent.click(checkbox);
+
     expect(mockOnOptionsChange).toHaveBeenCalledWith(
       expect.objectContaining({
         jsonData: expect.objectContaining({
-          tlsAuth: true
-        })
+          tlsAuth: true,
+        }),
       })
     );
   });
 
   it('shows client certificate fields when TLS client auth is enabled', () => {
     renderConfigEditor({ securityProtocol: 'SSL', tlsAuth: true });
-    
+
     expect(screen.getByPlaceholderText('domain.example.com')).toBeInTheDocument();
     expect(screen.getAllByPlaceholderText('Begins with -----BEGIN CERTIFICATE-----')).toHaveLength(1);
     expect(screen.getByPlaceholderText('Begins with -----BEGIN PRIVATE KEY-----')).toBeInTheDocument();
@@ -330,14 +324,14 @@ describe('ConfigEditor', () => {
   it('calls onOptionsChange when server name changes', () => {
     renderConfigEditor({ securityProtocol: 'SSL', tlsAuth: true });
     const input = screen.getByPlaceholderText('domain.example.com');
-    
+
     fireEvent.change(input, { target: { value: 'kafka.example.com' } });
-    
+
     expect(mockOnOptionsChange).toHaveBeenCalledWith(
       expect.objectContaining({
         jsonData: expect.objectContaining({
-          serverName: 'kafka.example.com'
-        })
+          serverName: 'kafka.example.com',
+        }),
       })
     );
   });
@@ -345,21 +339,21 @@ describe('ConfigEditor', () => {
   it('calls onOptionsChange when CA certificate changes', () => {
     renderConfigEditor({ securityProtocol: 'SSL', tlsAuthWithCACert: true });
     const textarea = screen.getByPlaceholderText('Begins with -----BEGIN CERTIFICATE-----');
-    
+
     fireEvent.change(textarea, { target: { value: '-----BEGIN CERTIFICATE-----\ntest\n-----END CERTIFICATE-----' } });
-    
+
     expect(mockOnOptionsChange).toHaveBeenCalledWith(
       expect.objectContaining({
         secureJsonData: expect.objectContaining({
-          tlsCACert: '-----BEGIN CERTIFICATE-----\ntest\n-----END CERTIFICATE-----'
-        })
+          tlsCACert: '-----BEGIN CERTIFICATE-----\ntest\n-----END CERTIFICATE-----',
+        }),
       })
     );
   });
 
   it('renders advanced settings section', () => {
     renderConfigEditor();
-    
+
     expect(screen.getByText('Advanced Settings')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('debug | info | warn | error')).toBeInTheDocument();
   });
@@ -367,14 +361,14 @@ describe('ConfigEditor', () => {
   it('calls onOptionsChange when log level changes', () => {
     renderConfigEditor();
     const input = screen.getByPlaceholderText('debug | info | warn | error');
-    
+
     fireEvent.change(input, { target: { value: 'debug' } });
-    
+
     expect(mockOnOptionsChange).toHaveBeenCalledWith(
       expect.objectContaining({
         jsonData: expect.objectContaining({
-          logLevel: 'debug'
-        })
+          logLevel: 'debug',
+        }),
       })
     );
   });
@@ -382,14 +376,14 @@ describe('ConfigEditor', () => {
   it('calls onOptionsChange when healthcheck timeout changes', () => {
     renderConfigEditor();
     const input = screen.getByDisplayValue('2000'); // Default healthcheck timeout
-    
+
     fireEvent.change(input, { target: { value: '5000' } });
-    
+
     expect(mockOnOptionsChange).toHaveBeenCalledWith(
       expect.objectContaining({
         jsonData: expect.objectContaining({
-          healthcheckTimeout: 5000
-        })
+          healthcheckTimeout: 5000,
+        }),
       })
     );
   });
@@ -397,14 +391,14 @@ describe('ConfigEditor', () => {
   it('validates healthcheck timeout to non-negative values', () => {
     renderConfigEditor();
     const input = screen.getByDisplayValue('2000');
-    
+
     fireEvent.change(input, { target: { value: '-100' } });
-    
+
     expect(mockOnOptionsChange).toHaveBeenCalledWith(
       expect.objectContaining({
         jsonData: expect.objectContaining({
-          healthcheckTimeout: 0
-        })
+          healthcheckTimeout: 0,
+        }),
       })
     );
   });
@@ -412,14 +406,14 @@ describe('ConfigEditor', () => {
   it('calls onOptionsChange when request timeout changes', () => {
     renderConfigEditor();
     const input = screen.getByDisplayValue('0'); // Default request timeout
-    
+
     fireEvent.change(input, { target: { value: '30000' } });
-    
+
     expect(mockOnOptionsChange).toHaveBeenCalledWith(
       expect.objectContaining({
         jsonData: expect.objectContaining({
-          timeout: 30000
-        })
+          timeout: 30000,
+        }),
       })
     );
   });
@@ -427,14 +421,14 @@ describe('ConfigEditor', () => {
   it('validates request timeout to non-negative values', () => {
     renderConfigEditor();
     const input = screen.getByDisplayValue('0');
-    
+
     fireEvent.change(input, { target: { value: '-500' } });
-    
+
     expect(mockOnOptionsChange).toHaveBeenCalledWith(
       expect.objectContaining({
         jsonData: expect.objectContaining({
-          timeout: 0
-        })
+          timeout: 0,
+        }),
       })
     );
   });
@@ -445,18 +439,18 @@ describe('ConfigEditor', () => {
       { saslPassword: 'existing-password' },
       { saslPassword: true }
     );
-    
+
     const resetButton = screen.getByTestId('reset-button');
     fireEvent.click(resetButton);
-    
+
     expect(mockOnOptionsChange).toHaveBeenCalledWith(
       expect.objectContaining({
         secureJsonFields: expect.objectContaining({
-          saslPassword: false
+          saslPassword: false,
         }),
         secureJsonData: expect.objectContaining({
-          saslPassword: ''
-        })
+          saslPassword: '',
+        }),
       })
     );
   });
@@ -467,18 +461,18 @@ describe('ConfigEditor', () => {
       { tlsCACert: 'existing-cert' },
       { tlsCACert: true }
     );
-    
+
     const resetButton = screen.getByTestId('reset-textarea-button');
     fireEvent.click(resetButton);
-    
+
     expect(mockOnOptionsChange).toHaveBeenCalledWith(
       expect.objectContaining({
         secureJsonFields: expect.objectContaining({
-          tlsCACert: false
+          tlsCACert: false,
         }),
         secureJsonData: expect.objectContaining({
-          tlsCACert: ''
-        })
+          tlsCACert: '',
+        }),
       })
     );
   });
@@ -494,9 +488,9 @@ describe('ConfigEditor', () => {
       healthcheckTimeout: 5000,
       timeout: 10000,
     };
-    
+
     renderConfigEditor(existingConfig);
-    
+
     expect(screen.getByDisplayValue('existing-servers:9092')).toBeInTheDocument();
     expect(screen.getByDisplayValue('existing-client')).toBeInTheDocument();
     expect(screen.getByDisplayValue('existing-user')).toBeInTheDocument();

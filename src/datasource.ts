@@ -66,21 +66,21 @@ export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourc
     const observables = request.targets
       .filter((q): q is KafkaQuery => this.filterQuery(q as KafkaQuery))
       .map((q) => {
-  const interpolatedQuery = this.applyTemplateVariables(q as KafkaQuery, request.scopedVars);
-  // Build path from encoded segments without dangling dashes
-  const segments: string[] = [];
-  segments.push(encodeURIComponent(String(interpolatedQuery.topicName)));
-  segments.push(encodeURIComponent(String(interpolatedQuery.partition)));
-  segments.push(encodeURIComponent(String(interpolatedQuery.autoOffsetReset)));
-  if (
-    interpolatedQuery.autoOffsetReset === AutoOffsetReset.LAST_N &&
-    typeof interpolatedQuery.lastN !== 'undefined'
-  ) {
-    segments.push(encodeURIComponent(String(interpolatedQuery.lastN)));
-  }
-  const path = segments.join('-');
+        const interpolatedQuery = this.applyTemplateVariables(q as KafkaQuery, request.scopedVars);
+        // Build path from encoded segments without dangling dashes
+        const segments: string[] = [];
+        segments.push(encodeURIComponent(String(interpolatedQuery.topicName)));
+        segments.push(encodeURIComponent(String(interpolatedQuery.partition)));
+        segments.push(encodeURIComponent(String(interpolatedQuery.autoOffsetReset)));
+        if (
+          interpolatedQuery.autoOffsetReset === AutoOffsetReset.LAST_N &&
+          typeof interpolatedQuery.lastN !== 'undefined'
+        ) {
+          segments.push(encodeURIComponent(String(interpolatedQuery.lastN)));
+        }
+        const path = segments.join('-');
 
-    return getGrafanaLiveSrv()
+        return getGrafanaLiveSrv()
           .getDataStream({
             addr: {
               scope: LiveChannelScope.DataSource,
@@ -90,7 +90,7 @@ export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourc
             },
           })
           .pipe(
-      startWith({ data: [] }),
+            startWith({ data: [] }),
             catchError((err) => {
               console.error('Stream error:', err);
               return throwError(() => ({
