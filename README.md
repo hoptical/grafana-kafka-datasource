@@ -11,7 +11,7 @@ The Kafka data source plugin allows you to visualize streaming Kafka data from w
 - Real-time monitoring of Kafka topics
 - Query all partitions or specific partitions
 - Choose between "latest" or "last 100" messages
-- Timestamp modes: "Now" for real-time or "Message Timestamp" for event time
+- Timestamp modes: "Kafka Event Time" (from message metadata, default) or "Dashboard received time" (when Grafana plugin got the message)
 - Simple JSON data format support
 - Kafka authentication support (SASL)
 - Encryption support (SSL/TLS)
