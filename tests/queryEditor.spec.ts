@@ -154,7 +154,7 @@ test.describe('Kafka Query Editor', () => {
     await page.getByRole('textbox', { name: 'Enter topic name' }).fill('nonexistent_topic_xyz');
     await page.getByRole('button', { name: 'Fetch' }).click();
     // Expect the error
-    await expect(page.getByText('Failed to get partitions:')).toBeVisible();
+    await expect(page.getByText('topic nonexistent_topic_xyz not found')).toBeVisible();
     // We removed inline error; ensure no success message appears
     await expect(page.getByText(/Fetched \d+ partition/)).not.toBeVisible();
     // Open partition select and ensure no concrete partition entries were added
