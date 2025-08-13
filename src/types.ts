@@ -72,6 +72,6 @@ export interface KafkaQuery extends DataQuery {
 export const defaultQuery: Partial<KafkaQuery> = {
   partition: 'all',
   autoOffsetReset: AutoOffsetReset.LATEST,
-  timestampMode: TimestampMode.Now,
+  timestampMode: TimestampMode.Message, // Kafka Event Time is now default
   lastN: 100,
 };

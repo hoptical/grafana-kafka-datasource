@@ -9,7 +9,7 @@ import {
 import { DataSourceWithBackend, getGrafanaLiveSrv, getTemplateSrv } from '@grafana/runtime';
 import { Observable, merge, throwError, of } from 'rxjs';
 import { catchError, startWith } from 'rxjs/operators';
-import { KafkaDataSourceOptions, KafkaQuery, AutoOffsetReset, TimestampMode } from './types';
+import { KafkaDataSourceOptions, KafkaQuery, AutoOffsetReset, defaultQuery } from './types';
 
 export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourceOptions> {
   constructor(instanceSettings: DataSourceInstanceSettings<KafkaDataSourceOptions>) {
@@ -19,9 +19,7 @@ export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourc
   getDefaultQuery(_: CoreApp): Partial<KafkaQuery> {
     return {
       topicName: '',
-      partition: 'all',
-      autoOffsetReset: AutoOffsetReset.LATEST,
-      timestampMode: TimestampMode.Now,
+      ...defaultQuery,
     };
   }
 

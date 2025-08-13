@@ -46,15 +46,20 @@ describe('DataSource', () => {
   });
 
   describe('getDefaultQuery', () => {
-    it('returns default query values', () => {
+    it('returns default query values with Kafka Event Time mode', () => {
       const defaultQuery = ds.getDefaultQuery('explore' as any);
-
       expect(defaultQuery).toEqual({
         topicName: '',
         partition: 'all',
         autoOffsetReset: AutoOffsetReset.LATEST,
-        timestampMode: TimestampMode.Now,
+        timestampMode: TimestampMode.Message,
+        lastN: 100,
       });
+    });
+    it('returns query values with Kafka Message Timestamp mode', () => {
+      const defaultQuery = ds.getDefaultQuery('explore' as any);
+      const customQuery = { ...defaultQuery, timestampMode: TimestampMode.Message };
+      expect(customQuery.timestampMode).toBe(TimestampMode.Message);
     });
   });
 

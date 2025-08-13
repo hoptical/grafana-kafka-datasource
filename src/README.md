@@ -1,13 +1,19 @@
 # Kafka Datasource Plugin
 
-Visualize real-time streaming data from Apache Kafka directly in your Grafana dashboards. This plugin enables you to monitor live Kafka topics with automatic updates and time-series visualizations.
-
-## Features
-
-- Real-time monitoring of Kafka topics
-- Query all partitions or specific partitions
-- Choose between "latest" or "last 100" messages
-- Timestamp modes: "Now" for real-time or "Message Timestamp" for event time
+ Visualize real-time streaming data from Apache Kafka directly in your Grafana dashboards. This plugin enables you to monitor live Kafka topics with automatic updates and time-series visualizations.
+ 
+ ## Features
+ 
+ - Real-time monitoring of Kafka topics
+ - Query all partitions or specific partitions
+ - Autocomplete support for topic names
+ - Flexible offset options:
+   - **Latest**: Stream new messages as they arrive (default)
+   - **Last N messages**: Fetch the most recent N messages (user-selectable)
+   - **Earliest**: Start from the oldest available message in the topic
+ - Timestamp modes: 
+   - **Kafka Event Time** (from message metadata, default)
+   - **Dashboard received time** (when Grafana plugin got the message)
 - Simple JSON data format support
 - Kafka authentication support (SASL)
 - Encryption support (SSL/TLS)
@@ -26,12 +32,12 @@ For the installation process, please refer to the [plugin installation docs](htt
 
 After installation, configure the plugin by adding a new Kafka data source in Grafana and filling out the following fields:
 
-- **Bootstrap Servers**: Comma-separated list of Kafka bootstrap servers (e.g. `broker1:9092, broker2:9092`)
-- **Security Protocol**: Choose the protocol (e.g. `PLAINTEXT`, `SASL_PLAINTEXT`)
-- **SASL Mechanisms**: Specify SASL mechanism if required (e.g. `PLAIN`, `SCRAM-SHA-512`)
-- **SASL Username/Password**: Provide credentials if SASL authentication is enabled
-- **Log Level**: Set log verbosity (`debug`, `error`)
-- **API Key**: (Deprecated) This field is deprecated and will be removed in future versions. Avoid using it for new configurations.
+ - **Bootstrap Servers**: Comma-separated list of Kafka bootstrap servers (e.g. `broker1:9092, broker2:9092`)
+ - **Security Protocol**: Choose the protocol (e.g. `PLAINTEXT`, `SASL_PLAINTEXT`)
+ - **SASL Mechanisms**: Specify SASL mechanism if required (e.g. `PLAIN`, `SCRAM-SHA-512`)
+ - **SASL Username/Password**: Provide credentials if SASL authentication is enabled
+ - **Log Level**: Set log verbosity (`debug`, `error`)
+ - **API Key**: (Deprecated) This field is deprecated and will be removed in future versions. Avoid using it for new configurations.
 
 ### Provisioning
 
@@ -42,10 +48,14 @@ You can automatically configure the Kafka datasource using Grafana's provisionin
 1. Create a new dashboard panel
 2. Select your Kafka data source
 3. Configure the query:
-   - **Topic**: Your Kafka topic name
-   - **Partition**: Partition number (usually 0)
-   - **Auto offset reset**: Choose "latest" for new data or "last 100" for recent history
-   - **Timestamp Mode**: Use "Now" for real-time or "Message Timestamp" for event time
+   - **Topic**: Your Kafka topic name. You can search your topic and select it from the autocomplete dropdown.
+   - Click the **Fetch** button to retrieve the available partitions
+   - **Partition**: Partition number (or "all" for all partitions)
+   - **Offset Reset**:
+     - **Latest**: Only new messages
+     - **Last N messages**: Start from the most recent N messages per partition (set N in the UI)
+     - **Earliest**: Start from the oldest message
+  - **Timestamp Mode**: Use "Kafka Event Time" (from message metadata, default) or "Dashboard received time" (when Grafana plugin got the message)
 
 ## Supported Data Format
 

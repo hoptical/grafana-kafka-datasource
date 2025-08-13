@@ -17,8 +17,8 @@ const autoResetOffsets: Array<{ label: string; value: AutoOffsetReset }> = [
 ];
 
 const timestampModes: Array<{ label: string; value: TimestampMode }> = [
-  { label: 'Now', value: TimestampMode.Now },
-  { label: 'Message Timestamp', value: TimestampMode.Message },
+  { label: 'Kafka Event Time', value: TimestampMode.Message },
+  { label: 'Dashboard received time', value: TimestampMode.Now },
 ];
 
 const partitionOptions: Array<{ label: string; value: number | 'all' }> = [{ label: 'All partitions', value: 'all' }];
@@ -370,7 +370,13 @@ export class QueryEditor extends PureComponent<Props, State> {
               )}
             </div>
           </InlineField>
-          <InlineField label="Timestamp Mode" labelWidth={20} tooltip="Timestamp of the kafka value to visualize.">
+          <InlineField 
+            label="Timestamp Mode" 
+            labelWidth={20} 
+            tooltip={timestampMode === TimestampMode.Message 
+              ? 'Kafka Event Time: Timestamp from the Kafka message metadata.' 
+              : 'Dashboard received time: When the Grafana plugin received the message.'}
+          >
             <Select
               width={25}
               value={timestampMode}
