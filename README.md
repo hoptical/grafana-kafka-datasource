@@ -10,8 +10,14 @@ The Kafka data source plugin allows you to visualize streaming Kafka data from w
 
 - Real-time monitoring of Kafka topics
 - Query all partitions or specific partitions
-- Choose between "latest" or "last 100" messages
-- Timestamp modes: "Kafka Event Time" (from message metadata, default) or "Dashboard received time" (when Grafana plugin got the message)
+- Autocomplete support for topic names
+- Flexible offset options:
+   - **Latest**: Stream new messages as they arrive (default)
+   - **Last N messages**: Fetch the most recent N messages (user-selectable)
+   - **Earliest**: Start from the oldest available message in the topic
+- Timestamp modes: 
+   - **Kafka Event Time** (from message metadata, default)
+   - **Dashboard received time** (when Grafana plugin got the message)
 - Simple JSON data format support
 - Kafka authentication support (SASL)
 - Encryption support (SSL/TLS)
@@ -98,13 +104,14 @@ A data source backend plugin consists of both frontend and backend components.
    npm run build
    ```
 
-4. Run the tests (using Jest)
+
+4. Run the frontend unit tests (using Jest)
 
    ```bash
-   # Runs the tests and watches for changes, requires git init first
+   # Runs the Jest unit tests and watches for changes
    npm run test
 
-   # Exits after running all the tests
+   # Exits after running all the tests (CI mode)
    npm run test:ci
    ```
 
@@ -113,6 +120,7 @@ A data source backend plugin consists of both frontend and backend components.
    ```bash
    npm run server
    ```
+
 
 6. Run the E2E tests (using Playwright)
 

@@ -6,8 +6,14 @@
  
  - Real-time monitoring of Kafka topics
  - Query all partitions or specific partitions
- - Choose between "latest" or "last 100" messages
- - Timestamp modes: "Kafka Event Time" (from message metadata, default) or "Dashboard received time" (when Grafana plugin got the message)
+ - Autocomplete support for topic names
+ - Flexible offset options:
+   - **Latest**: Stream new messages as they arrive (default)
+   - **Last N messages**: Fetch the most recent N messages (user-selectable)
+   - **Earliest**: Start from the oldest available message in the topic
+ - Timestamp modes: 
+   - **Kafka Event Time** (from message metadata, default)
+   - **Dashboard received time** (when Grafana plugin got the message)
 - Simple JSON data format support
 - Kafka authentication support (SASL)
 - Encryption support (SSL/TLS)
@@ -42,9 +48,13 @@ You can automatically configure the Kafka datasource using Grafana's provisionin
 1. Create a new dashboard panel
 2. Select your Kafka data source
 3. Configure the query:
-   - **Topic**: Your Kafka topic name
-   - **Partition**: Partition number (usually 0)
-   - **Auto offset reset**: Choose "latest" for new data or "last 100" for recent history
+   - **Topic**: Your Kafka topic name. You can search your topic and select it from the autocomplete dropdown.
+   - Click the **Fetch** button to retrieve the available partitions
+   - **Partition**: Partition number (or "all" for all partitions)
+   - **Offset Reset**:
+     - **Latest**: Only new messages
+     - **Last N messages**: Start from the most recent N messages per partition (set N in the UI)
+     - **Earliest**: Start from the oldest message
   - **Timestamp Mode**: Use "Kafka Event Time" (from message metadata, default) or "Dashboard received time" (when Grafana plugin got the message)
 
 ## Supported Data Format
