@@ -50,7 +50,7 @@ test.describe('Kafka Query Editor', () => {
         .filter({ hasText: /^Latest$/ })
         .nth(2)
     ).toBeVisible();
-    await expect(page.locator('div').filter({ hasText: /^Now$/ }).nth(2)).toBeVisible();
+    await expect(page.locator('div').filter({ hasText: /^Kafka Event Time$/ }).nth(2)).toBeVisible();
 
     await expect(page.getByRole('textbox', { name: 'Enter topic name' })).toBeVisible();
     await expect(
@@ -77,7 +77,7 @@ test.describe('Kafka Query Editor', () => {
       .locator('div')
       .filter({ hasText: /^Latest$/ })
       .nth(2);
-    const timestampSelect = page.locator('div').filter({ hasText: /^Now$/ }).nth(2);
+    const timestampSelect = page.locator('div').filter({ hasText: /^Kafka Event Time$/ }).nth(2);
 
     // Test Offset options
     await autoOffsetSelect.click();
@@ -91,11 +91,11 @@ test.describe('Kafka Query Editor', () => {
 
     // Test Timestamp Mode options
     await timestampSelect.click();
-    await expect(page.getByText('Message Timestamp')).toBeVisible();
+    await expect(page.getByText('Dashboard received time')).toBeVisible();
     if (isV10) {
-      await page.getByLabel('Select options menu').getByText('Message Timestamp').click();
+      await page.getByLabel('Select options menu').getByText('Kafka Event Time').click();
     } else {
-      await page.getByRole('option', { name: 'Message Timestamp' }).click();
+      await page.getByRole('option', { name: 'Kafka Event Time' }).click();
     }
   });
 
