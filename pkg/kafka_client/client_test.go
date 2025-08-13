@@ -95,14 +95,34 @@ func TestGetSASLMechanism_Supported(t *testing.T) {
 	}
 }
 
-func TestNewStreamReader_EarliestOffsetClamp(t *testing.T) {
-	// Uses negative offset clamp logic indirectly; since we can't connect to real kafka here,
-	// just ensure it doesn't panic and returns error due to missing connection when creating connection.
+func TestNewStreamReader_EarliestAndLastN(t *testing.T) {
 	cl := NewKafkaClient(Options{BootstrapServers: "localhost:9092"})
 	ctx := context.Background()
-	// Force NewConnection (will succeed with fake bootstrap but no real broker until metadata fetch) then earliest logic path.
-	_ = cl.NewConnection()
-	_, _ = cl.NewStreamReader(ctx, "topic", 0, "earliest")
+	// Initialize connection; this config will allow creating a reader object
+	if err := cl.NewConnection(); err != nil {
+		t.Fatalf("NewConnection() error = %v", err)
+	}
+
+	// Earliest should set offset without error and return a reader
+	reader, err := cl.NewStreamReader(ctx, "topic", 0, "earliest", 0)
+	if err != nil {
+		t.Fatalf("earliest: expected no error, got %v", err)
+	}
+	if reader == nil {
+		t.Fatalf("earliest: expected non-nil reader")
+	}
+	if reader != nil {
+		_ = reader.Close()
+	}
+
+	// lastN requires leader offset lookups; with no real broker, it should error
+	reader2, err2 := cl.NewStreamReader(ctx, "topic", 0, "lastN", 100)
+	if err2 == nil {
+		t.Fatalf("lastN: expected an error due to no broker, got nil")
+	}
+	if reader2 != nil {
+		t.Fatalf("lastN: expected nil reader on error, got non-nil")
+	}
 }
 
 func TestGetKafkaLogger(t *testing.T) {

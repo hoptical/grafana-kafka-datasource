@@ -79,9 +79,10 @@ test.describe('Kafka Query Editor', () => {
       .nth(2);
     const timestampSelect = page.locator('div').filter({ hasText: /^Now$/ }).nth(2);
 
-    // Test Auto offset reset options
+    // Test Offset options
     await autoOffsetSelect.click();
-    await expect(page.getByText('From the last 100')).toBeVisible();
+    await expect(page.getByText('Last N messages')).toBeVisible();
+    await expect(page.getByText('Earliest')).toBeVisible();
     if (isV10) {
       await page.getByLabel('Select options menu').getByText('Latest').click();
     } else {
@@ -153,7 +154,7 @@ test.describe('Kafka Query Editor', () => {
     await page.getByRole('textbox', { name: 'Enter topic name' }).fill('nonexistent_topic_xyz');
     await page.getByRole('button', { name: 'Fetch' }).click();
     // Expect the error
-    await expect(page.getByText('Failed to get partitions:')).toBeVisible();
+    await expect(page.getByText('topic nonexistent_topic_xyz not found')).toBeVisible();
     // We removed inline error; ensure no success message appears
     await expect(page.getByText(/Fetched \d+ partition/)).not.toBeVisible();
     // Open partition select and ensure no concrete partition entries were added
@@ -190,7 +191,10 @@ test.describe('Kafka Query Editor', () => {
 
     // Pick single partition 1
     if (isV10) {
-      await page.getByLabel('Select options menu').getByText(/Partition 1/).click();
+      await page
+        .getByLabel('Select options menu')
+        .getByText(/Partition 1/)
+        .click();
     } else {
       await page.getByRole('option', { name: /Partition 1/ }).click();
     }

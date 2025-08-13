@@ -3,6 +3,7 @@ package plugin
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"strconv"
@@ -29,7 +30,7 @@ type KafkaClientAPI interface {
 	GetTopicPartitions(ctx context.Context, topicName string) ([]int32, error)
 	GetTopics(ctx context.Context, prefix string, limit int) ([]string, error)
 	HealthCheck() error
-	NewStreamReader(ctx context.Context, topic string, partition int32, autoOffsetReset string) (*kafka.Reader, error)
+	NewStreamReader(ctx context.Context, topic string, partition int32, autoOffsetReset string, lastN int32) (*kafka.Reader, error)
 	ConsumerPull(ctx context.Context, reader *kafka.Reader) (kafka_client.KafkaMessage, error)
 	Dispose()
 }
@@ -137,6 +138,7 @@ type queryModel struct {
 	Partition       interface{} `json:"partition"` // Can be int32 or "all"
 	AutoOffsetReset string      `json:"autoOffsetReset"`
 	TimestampMode   string      `json:"timestampMode"`
+	LastN           int32       `json:"lastN"`
 }
 
 func (d *KafkaDatasource) query(_ context.Context, pCtx backend.PluginContext, query backend.DataQuery) backend.DataResponse {
@@ -203,10 +205,13 @@ func (d *KafkaDatasource) handleGetPartitions(ctx context.Context, req *backend.
 		log.DefaultLogger.Error("Failed to create connection", "error", err)
 		return sendJSON(sender, 500, map[string]string{"error": fmt.Sprintf("Failed to connect: %s", err.Error())})
 	}
-
 	partitions, err := d.client.GetTopicPartitions(ctx, topicName)
 	if err != nil {
 		log.DefaultLogger.Error("Failed to get partitions", "topic", topicName, "error", err)
+		// Classify not-found using sentinel error from client
+		if errors.Is(err, kafka_client.ErrTopicNotFound) {
+			return sendJSON(sender, 404, map[string]string{"error": fmt.Sprintf("topic %s not found", topicName)})
+		}
 		return sendJSON(sender, 500, map[string]string{"error": fmt.Sprintf("Failed to get partitions: %s", err.Error())})
 	}
 
@@ -290,12 +295,6 @@ func (d *KafkaDatasource) SubscribeStream(ctx context.Context, req *backend.Subs
 		}, err
 	}
 
-	// Lazily create connection (no proactive topic existence check to avoid latency / auto-create side effects)
-	if err := d.client.NewConnection(); err != nil {
-		log.DefaultLogger.Error("Creating new Kafka connection error", "error", err)
-		return &backend.SubscribeStreamResponse{Status: backend.SubscribeStreamStatusPermissionDenied}, err
-	}
-
 	log.DefaultLogger.Debug("SubscribeStream prepared", "topic", qm.Topic, "partition", qm.Partition)
 	return &backend.SubscribeStreamResponse{Status: backend.SubscribeStreamStatusOK}, nil
 }
@@ -311,19 +310,38 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 		return err
 	}
 
-	// Skip topic existence check to avoid auto-creation
-	// Instead, let the reader creation fail gracefully if topic doesn't exist
+	// Create connection
+	if err := d.client.NewConnection(); err != nil {
+		log.DefaultLogger.Error("Failed to create Kafka connection for streaming", "error", err)
+		return fmt.Errorf("failed to establish Kafka connection: %w", err)
+	}
 
 	// Parse partition field which can be int32 or "all"
 	var partitions []int32
 	switch v := qm.Partition.(type) {
 	case float64: // JSON numbers are parsed as float64
-		partitions = []int32{int32(v)}
+		// Validate topic exists and selected partition is within range by fetching partitions
+		allPartitions, err := d.client.GetTopicPartitions(ctx, qm.Topic)
+		if err != nil {
+			if errors.Is(err, kafka_client.ErrTopicNotFound) {
+				return fmt.Errorf("topic %s not found", qm.Topic)
+			}
+			return fmt.Errorf("failed to get topic partitions: %w", err)
+		}
+		sel := int32(v)
+		count := int32(len(allPartitions))
+		if sel < 0 || sel >= count {
+			return fmt.Errorf("partition %d out of range [0..%d) for topic %s", sel, count, qm.Topic)
+		}
+		partitions = []int32{sel}
 	case string:
 		if v == "all" {
-			// Get all partitions for the topic
+			// Get all partitions for the topic (also validates existence)
 			allPartitions, err := d.client.GetTopicPartitions(ctx, qm.Topic)
 			if err != nil {
+				if errors.Is(err, kafka_client.ErrTopicNotFound) {
+					return fmt.Errorf("topic %s not found", qm.Topic)
+				}
 				return fmt.Errorf("failed to get topic partitions: %w", err)
 			}
 			partitions = allPartitions
@@ -342,7 +360,7 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 	// Start a goroutine for each partition
 	for _, partition := range partitions {
 		go func(p int32) {
-			reader, err := d.client.NewStreamReader(ctx, qm.Topic, p, qm.AutoOffsetReset)
+			reader, err := d.client.NewStreamReader(ctx, qm.Topic, p, qm.AutoOffsetReset, qm.LastN)
 			if err != nil {
 				log.DefaultLogger.Error("Failed to create stream reader", "partition", p, "error", err)
 				return

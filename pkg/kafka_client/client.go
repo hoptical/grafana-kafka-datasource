@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -21,7 +22,7 @@ const debugLogLevel = "debug"
 const errorLogLevel = "error"
 const dialerTimeout = 10 * time.Second // Fallback dialer timeout when user timeout not set
 const defaultTimeoutMs = 2000          // Fallback general timeout (health check) in ms if user timeout not provided
-const maxEarliest = 100                // retained for offset backfill logic (earliest last N)
+// note: lastN offset calculation is approximate using kafka.LastOffset - N and clamped to kafka.FirstOffset
 
 // Options holds datasource configuration passed from Grafana.
 // Timeout (ms) is the single user-facing timeout controlling:
@@ -79,6 +80,9 @@ type KafkaMessage struct {
 	Timestamp time.Time
 	Offset    int64
 }
+
+// ErrTopicNotFound indicates the requested topic does not exist.
+var ErrTopicNotFound = errors.New("topic not found")
 
 func NewKafkaClient(options Options) KafkaClient {
 	// Build broker slice once
@@ -194,38 +198,80 @@ func (client *KafkaClient) metadataForTopic(ctx context.Context, topicName strin
 		return nil, fmt.Errorf("unable to get metadata: %w", err)
 	}
 	if len(meta.Topics) == 0 {
-		return nil, fmt.Errorf("topic %s not found", topicName)
+		return nil, fmt.Errorf("%w: %s", ErrTopicNotFound, topicName)
 	}
 	t := meta.Topics[0]
 	if t.Error != nil {
+		// Classify not-found errors deterministically if possible
+		if isTopicNotFound(t.Error) {
+			return nil, fmt.Errorf("%w: %s", ErrTopicNotFound, topicName)
+		}
 		return nil, fmt.Errorf("error getting topic %s metadata: %w", topicName, t.Error)
 	}
 	return &t, nil
 }
 
-func (client *KafkaClient) NewStreamReader(ctx context.Context, topic string, partition int32, autoOffsetReset string) (*kafka.Reader, error) {
-	var offset int64
+func (client *KafkaClient) NewStreamReader(ctx context.Context, topic string, partition int32, autoOffsetReset string, lastN int32) (*kafka.Reader, error) {
 	if client.Dialer == nil {
 		if err := client.NewConnection(); err != nil {
 			return nil, fmt.Errorf("failed to create connection: %w", err)
 		}
 	}
-	switch autoOffsetReset {
-	case "latest":
-		offset = kafka.LastOffset
-	case "earliest":
-		// retain limited backfill approach (last N) but clamp at first offset
-		offset = kafka.LastOffset - maxEarliest
-		if offset < 0 {
-			offset = kafka.FirstOffset
-		}
-	default:
-		offset = kafka.LastOffset
-	}
 	reader := client.newReader(topic, int(partition))
-	if err := reader.SetOffset(offset); err != nil {
-		reader.Close()
-		return nil, fmt.Errorf("unable to set offset: %w", err)
+	// Determine starting offset based on mode
+	switch autoOffsetReset {
+	case "earliest":
+		if err := reader.SetOffset(kafka.FirstOffset); err != nil {
+			reader.Close()
+			return nil, fmt.Errorf("unable to set earliest offset: %w", err)
+		}
+	case "lastN":
+		// Query broker for latest and earliest offsets for this partition using a leader connection
+		n := int64(lastN)
+		if n <= 0 {
+			n = 100
+		}
+		if len(client.Brokers) == 0 {
+			reader.Close()
+			return nil, fmt.Errorf("no brokers configured to read offsets")
+		}
+		// Bound leader dial by client.Timeout to avoid hanging indefinitely
+		offCtx := ctx
+		if client.Timeout > 0 {
+			d := time.Duration(client.Timeout) * time.Millisecond
+			var cancel context.CancelFunc
+			offCtx, cancel = context.WithTimeout(ctx, d)
+			defer cancel()
+		}
+		leaderConn, err := client.Dialer.DialLeader(offCtx, "tcp", client.Brokers[0], topic, int(partition))
+		if err != nil {
+			reader.Close()
+			return nil, fmt.Errorf("unable to dial leader: %w", err)
+		}
+		defer leaderConn.Close()
+		earliest, err := leaderConn.ReadFirstOffset()
+		if err != nil {
+			reader.Close()
+			return nil, fmt.Errorf("unable to read first offset: %w", err)
+		}
+		latest, err := leaderConn.ReadLastOffset()
+		if err != nil {
+			reader.Close()
+			return nil, fmt.Errorf("unable to read last offset: %w", err)
+		}
+		start := latest - n
+		if start < earliest {
+			start = earliest
+		}
+		if err := reader.SetOffset(start); err != nil {
+			reader.Close()
+			return nil, fmt.Errorf("unable to set lastN start offset: %w", err)
+		}
+	default: // latest
+		if err := reader.SetOffset(kafka.LastOffset); err != nil {
+			reader.Close()
+			return nil, fmt.Errorf("unable to set latest offset: %w", err)
+		}
 	}
 	return reader, nil
 }
@@ -322,6 +368,18 @@ func (client *KafkaClient) GetTopics(ctx context.Context, prefix string, limit i
 		}
 	}
 	return matching, nil
+}
+
+// isTopicNotFound attempts to classify broker errors that indicate a missing topic.
+func isTopicNotFound(err error) bool {
+	// Prefer kafka-go sentinel if available
+	if errors.Is(err, kafka.UnknownTopicOrPartition) {
+		return true
+	}
+	s := strings.ToLower(err.Error())
+	return strings.Contains(s, "unknown topic") ||
+		strings.Contains(s, "not found") ||
+		strings.Contains(s, "does not exist")
 }
 
 func getKafkaLogger(level string) (kafka.LoggerFunc, kafka.LoggerFunc) {

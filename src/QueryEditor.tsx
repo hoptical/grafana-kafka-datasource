@@ -1,13 +1,19 @@
 import { defaults, debounce, type DebouncedFunc } from 'lodash';
 import React, { ChangeEvent, PureComponent } from 'react';
-import { InlineField, InlineFieldRow, Input, Select, Button, Spinner } from '@grafana/ui';
+import { InlineField, InlineFieldRow, Input, Select, Button, Spinner, Alert, InlineLabel } from '@grafana/ui';
 import { QueryEditorProps } from '@grafana/data';
 import { DataSource } from './datasource';
 import { defaultQuery, KafkaDataSourceOptions, KafkaQuery, AutoOffsetReset, TimestampMode } from './types';
 
+// Constants for Last N messages input
+const LAST_N_MIN = 1;
+const LAST_N_MAX = 1000000;
+const LAST_N_DEFAULT = 100;
+
 const autoResetOffsets: Array<{ label: string; value: AutoOffsetReset }> = [
-  { label: 'From the last 100', value: AutoOffsetReset.EARLIEST },
   { label: 'Latest', value: AutoOffsetReset.LATEST },
+  { label: 'Last N messages', value: AutoOffsetReset.LAST_N },
+  { label: 'Earliest', value: AutoOffsetReset.EARLIEST },
 ];
 
 const timestampModes: Array<{ label: string; value: TimestampMode }> = [
@@ -103,9 +109,16 @@ export class QueryEditor extends PureComponent<Props, State> {
 
   getPartitionOptions = (): Array<{ label: string; value: number | 'all' }> => {
     const options = [...partitionOptions];
-    (this.state.availablePartitions || []).forEach((partition) => {
-      options.push({ label: `Partition ${partition}`, value: partition });
+    const { partition } = defaults(this.props.query, defaultQuery);
+    const present = new Set<number>();
+    (this.state.availablePartitions || []).forEach((p) => {
+      options.push({ label: `Partition ${p}`, value: p });
+      present.add(p);
     });
+    // Ensure previously selected numeric partition is visible even before fetching
+    if (typeof partition === 'number' && !present.has(partition)) {
+      options.push({ label: `Partition ${partition}`, value: partition });
+    }
     return options;
   };
 
@@ -160,8 +173,24 @@ export class QueryEditor extends PureComponent<Props, State> {
 
   onAutoResetOffsetChanged = (value: AutoOffsetReset) => {
     const { onChange, query, onRunQuery } = this.props;
-    onChange({ ...query, autoOffsetReset: value });
+    // If switching to Last N and no lastN set, default to 100
+    const next: KafkaQuery = { ...query, autoOffsetReset: value } as KafkaQuery;
+    if (value === AutoOffsetReset.LAST_N && (!next.lastN || next.lastN <= 0)) {
+      next.lastN = 100;
+    }
+    onChange(next);
     onRunQuery();
+  };
+
+  onLastNChanged = (event: ChangeEvent<HTMLInputElement>) => {
+    const { onChange, query, onRunQuery } = this.props;
+    const value = Number(event.target.value);
+    const n = Number.isFinite(value) ? Math.max(LAST_N_MIN, Math.min(LAST_N_MAX, Math.round(value))) : LAST_N_DEFAULT; // clamp LAST_N_MIN..LAST_N_MAX
+    onChange({ ...query, lastN: n });
+    // Don't auto-run on every keystroke if empty; only when valid number present
+    if (!Number.isNaN(n)) {
+      onRunQuery();
+    }
   };
 
   onTimestampModeChanged = (value: TimestampMode) => {
@@ -199,12 +228,17 @@ export class QueryEditor extends PureComponent<Props, State> {
 
   render() {
     const query = defaults(this.props.query, defaultQuery);
-    const { topicName, partition, autoOffsetReset, timestampMode } = query;
+    const { topicName, partition, autoOffsetReset, timestampMode, lastN } = query;
 
     return (
       <>
         <InlineFieldRow>
-          <InlineField label="Topic" labelWidth={12} tooltip="Kafka topic name + click Fetch to load partitions" style={{ minWidth: 260 }}>
+          <InlineField
+            label="Topic"
+            labelWidth={12}
+            tooltip="Kafka topic name + click Fetch to load partitions"
+            style={{ minWidth: 260 }}
+          >
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', position: 'relative', minWidth: 260 }}>
               <div style={{ position: 'relative', minWidth: 180 }}>
                 <Input
@@ -220,6 +254,12 @@ export class QueryEditor extends PureComponent<Props, State> {
                     }
                   }}
                   type="text"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  name="gf-topic-search"
+                  aria-autocomplete="list"
                   width={24}
                   placeholder="Enter topic name"
                 />
@@ -291,7 +331,8 @@ export class QueryEditor extends PureComponent<Props, State> {
               id="query-editor-partition"
               value={partition}
               options={this.getPartitionOptions()}
-              onChange={(value) => this.onPartitionChange(value.value as number | 'all')}
+              onChange={(opt) => this.onPartitionChange(opt.value as number | 'all')}
+              isClearable={false}
               width={22}
               placeholder="Select partition"
               noOptionsMessage="Fetch topic partitions first"
@@ -301,16 +342,33 @@ export class QueryEditor extends PureComponent<Props, State> {
         </InlineFieldRow>
         <InlineFieldRow>
           <InlineField
-            label="Auto offset reset"
-            labelWidth={20}
-            tooltip="Starting offset to consume that can be from latest or last 100."
+            label="Offset"
+            labelWidth={12}
+            tooltip="Where to start consuming from for this query"
+            style={{ minWidth: 260 }}
           >
-            <Select
-              width={22}
-              value={autoOffsetReset}
-              options={autoResetOffsets}
-              onChange={(value) => this.onAutoResetOffsetChanged(value.value as AutoOffsetReset)}
-            />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Select
+                width={22}
+                value={autoOffsetReset}
+                options={autoResetOffsets}
+                onChange={(value) => this.onAutoResetOffsetChanged(value.value as AutoOffsetReset)}
+              />
+              {autoOffsetReset === AutoOffsetReset.LAST_N && (
+                <>
+                  <InlineLabel width={12}>N</InlineLabel>
+                  <Input
+                    id="query-editor-last-n"
+                    value={String(lastN ?? 100)}
+                    type="number"
+                    min={1}
+                    step={1}
+                    width={12}
+                    onChange={this.onLastNChanged}
+                  />
+                </>
+              )}
+            </div>
           </InlineField>
           <InlineField label="Timestamp Mode" labelWidth={20} tooltip="Timestamp of the kafka value to visualize.">
             <Select
@@ -321,6 +379,13 @@ export class QueryEditor extends PureComponent<Props, State> {
             />
           </InlineField>
         </InlineFieldRow>
+        {autoOffsetReset !== AutoOffsetReset.LATEST && (
+          <div style={{ marginTop: 8 }}>
+            <Alert severity="warning" title="Potential higher load">
+              Starting from Earliest or reading the last N messages can increase load on Kafka and the backend.
+            </Alert>
+          </div>
+        )}
       </>
     );
   }
