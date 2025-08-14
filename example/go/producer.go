@@ -126,6 +126,19 @@ func main() {
 				"value1": value1,
 				"value2": value2,
 				"tags":   []string{"prod", "edge"},
+				"alerts": []interface{}{
+					map[string]interface{}{
+						"type":     "cpu_high",
+						"severity": "warning",
+						"value":    value1 * 100,
+					},
+					map[string]interface{}{
+						"type":     "mem_low",
+						"severity": "info",
+						"value":    value2 * 50,
+					},
+				},
+				"processes": []string{"nginx", "mysql", "redis"},
 			}
 		case "list":
 			// JSON that starts with an array containing multiple records
@@ -141,8 +154,8 @@ func main() {
 					"timestamp": time.Now().Unix(),
 				},
 				map[string]interface{}{
-					"id":   counter + 1000,
-					"type": "event",
+					"id":   counter + 1,
+					"type": "metric",
 					"host": map[string]interface{}{
 						"name": hostName,
 						"ip":   hostIP,
@@ -151,11 +164,39 @@ func main() {
 					"timestamp": time.Now().Unix(),
 				},
 				map[string]interface{}{
+					"id":   counter + 1000,
+					"type": "event",
+					"host": map[string]interface{}{
+						"name": hostName,
+						"ip":   hostIP,
+					},
+					"value":     value1 * 1.5,
+					"timestamp": time.Now().Unix(),
+				},
+				map[string]interface{}{
+					"id":   counter + 1001,
+					"type": "event",
+					"host": map[string]interface{}{
+						"name": hostName,
+						"ip":   hostIP,
+					},
+					"value":     value2 * 0.8,
+					"timestamp": time.Now().Unix(),
+				},
+				map[string]interface{}{
 					"id":        counter + 2000,
 					"type":      "log",
 					"message":   fmt.Sprintf("Sample log entry #%d", counter),
 					"level":     "info",
 					"tags":      []string{"prod", "edge"},
+					"timestamp": time.Now().Unix(),
+				},
+				map[string]interface{}{
+					"id":        counter + 2001,
+					"type":      "log",
+					"message":   fmt.Sprintf("Sample log entry #%d (batch)", counter),
+					"level":     "debug",
+					"tags":      []string{"prod", "edge", "batch"},
 					"timestamp": time.Now().Unix(),
 				},
 			}
