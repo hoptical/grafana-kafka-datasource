@@ -2,6 +2,7 @@ package kafka_client
 
 import (
 	"context"
+	"errors"
 	"testing"
 )
 
@@ -132,4 +133,171 @@ func TestGetKafkaLogger(t *testing.T) {
 	logger, errorLogger = getKafkaLogger("error")
 	logger("should not print")
 	errorLogger("should print error")
+}
+
+func TestNewKafkaClient_BrokerParsing(t *testing.T) {
+	tests := []struct {
+		name             string
+		bootstrapServers string
+		expectedBrokers  []string
+	}{
+		{
+			name:             "single broker",
+			bootstrapServers: "localhost:9092",
+			expectedBrokers:  []string{"localhost:9092"},
+		},
+		{
+			name:             "multiple brokers",
+			bootstrapServers: "broker1:9092,broker2:9092,broker3:9092",
+			expectedBrokers:  []string{"broker1:9092", "broker2:9092", "broker3:9092"},
+		},
+		{
+			name:             "brokers with spaces",
+			bootstrapServers: "broker1:9092 , broker2:9092 , broker3:9092",
+			expectedBrokers:  []string{"broker1:9092", "broker2:9092", "broker3:9092"},
+		},
+		{
+			name:             "empty broker filtered",
+			bootstrapServers: "broker1:9092,,broker2:9092",
+			expectedBrokers:  []string{"broker1:9092", "broker2:9092"},
+		},
+		{
+			name:             "only spaces and commas",
+			bootstrapServers: " , , ",
+			expectedBrokers:  []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := NewKafkaClient(Options{BootstrapServers: tt.bootstrapServers})
+
+			if len(client.Brokers) != len(tt.expectedBrokers) {
+				t.Errorf("Expected %d brokers, got %d", len(tt.expectedBrokers), len(client.Brokers))
+			}
+
+			for i, expected := range tt.expectedBrokers {
+				if i >= len(client.Brokers) || client.Brokers[i] != expected {
+					t.Errorf("Expected broker %s at index %d, got %s", expected, i, client.Brokers[i])
+				}
+			}
+		})
+	}
+}
+
+func TestNewKafkaClient_TimeoutHandling(t *testing.T) {
+	tests := []struct {
+		name            string
+		timeout         int32
+		expectedTimeout int32
+	}{
+		{"positive timeout", 5000, 5000},
+		{"zero timeout", 0, 0},
+		{"negative timeout sanitized", -1000, 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := NewKafkaClient(Options{Timeout: tt.timeout})
+			if client.Timeout != tt.expectedTimeout {
+				t.Errorf("Expected timeout %d, got %d", tt.expectedTimeout, client.Timeout)
+			}
+		})
+	}
+}
+
+func TestNewConnection_SecurityProtocols(t *testing.T) {
+	tests := []struct {
+		name             string
+		securityProtocol string
+		saslMechanisms   string
+		saslUsername     string
+		saslPassword     string
+		expectError      bool
+	}{
+		{"PLAINTEXT", "PLAINTEXT", "", "", "", false},
+		{"SASL_PLAINTEXT with PLAIN", "SASL_PLAINTEXT", "PLAIN", "user", "pass", false},
+		{"SASL_PLAINTEXT with SCRAM-SHA-256", "SASL_PLAINTEXT", "SCRAM-SHA-256", "user", "pass", false},
+		{"SASL_PLAINTEXT with SCRAM-SHA-512", "SASL_PLAINTEXT", "SCRAM-SHA-512", "user", "pass", false},
+		{"SASL_PLAINTEXT with unsupported mechanism", "SASL_PLAINTEXT", "UNSUPPORTED", "user", "pass", true},
+		{"SSL", "SSL", "", "", "", false},
+		{"SASL_SSL", "SASL_SSL", "PLAIN", "user", "pass", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := NewKafkaClient(Options{
+				BootstrapServers: "localhost:9092",
+				SecurityProtocol: tt.securityProtocol,
+				SaslMechanisms:   tt.saslMechanisms,
+				SaslUsername:     tt.saslUsername,
+				SaslPassword:     tt.saslPassword,
+			})
+
+			err := client.NewConnection()
+
+			if tt.expectError && err == nil {
+				t.Error("Expected error but got none")
+			} else if !tt.expectError && err != nil {
+				t.Errorf("Unexpected error: %v", err)
+			}
+
+			if !tt.expectError {
+				if client.Dialer == nil {
+					t.Error("Expected Dialer to be initialized")
+				}
+				if client.Conn == nil {
+					t.Error("Expected Conn to be initialized")
+				}
+			}
+		})
+	}
+}
+
+func TestIsTopicNotFound(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      error
+		expected bool
+	}{
+		{
+			name:     "unknown topic error",
+			err:      errors.New("unknown topic or partition"),
+			expected: true,
+		},
+		{
+			name:     "not found error",
+			err:      errors.New("topic not found"),
+			expected: true,
+		},
+		{
+			name:     "does not exist error",
+			err:      errors.New("topic does not exist"),
+			expected: true,
+		},
+		{
+			name:     "case insensitive unknown",
+			err:      errors.New("UNKNOWN TOPIC"),
+			expected: true,
+		},
+		{
+			name:     "other error",
+			err:      errors.New("connection failed"),
+			expected: false,
+		},
+		{
+			name:     "nil error",
+			err:      nil,
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isTopicNotFound(tt.err)
+			if result != tt.expected {
+				t.Errorf("Expected %v, got %v for error: %v", tt.expected, result, tt.err)
+			}
+		})
+	}
 }

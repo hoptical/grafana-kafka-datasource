@@ -378,6 +378,9 @@ func (client *KafkaClient) GetTopics(ctx context.Context, prefix string, limit i
 
 // isTopicNotFound attempts to classify broker errors that indicate a missing topic.
 func isTopicNotFound(err error) bool {
+	if err == nil {
+		return false
+	}
 	// Prefer kafka-go sentinel if available
 	if errors.Is(err, kafka.UnknownTopicOrPartition) {
 		return true

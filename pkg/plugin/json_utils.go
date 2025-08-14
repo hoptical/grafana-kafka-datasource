@@ -50,3 +50,39 @@ func CoerceJSONNumber(num json.Number) interface{} {
 	}
 	return num.String()
 }
+
+// toInt64 converts various integer types to int64.
+func toInt64(v interface{}) int64 {
+	switch n := v.(type) {
+	case int:
+		return int64(n)
+	case int8:
+		return int64(n)
+	case int16:
+		return int64(n)
+	case int32:
+		return int64(n)
+	case int64:
+		return n
+	default:
+		return 0
+	}
+}
+
+// toUint64 converts various unsigned integer types to uint64.
+func toUint64(v interface{}) uint64 {
+	switch n := v.(type) {
+	case uint:
+		return uint64(n)
+	case uint8:
+		return uint64(n)
+	case uint16:
+		return uint64(n)
+	case uint32:
+		return uint64(n)
+	case uint64:
+		return n
+	default:
+		return 0
+	}
+}
