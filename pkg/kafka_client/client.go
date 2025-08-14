@@ -77,7 +77,7 @@ type KafkaClient struct {
 }
 
 type KafkaMessage struct {
-	Value     map[string]interface{}
+	Value     interface{} // Can be map[string]interface{} or []interface{}
 	Timestamp time.Time
 	Offset    int64
 }
@@ -283,18 +283,22 @@ func (client *KafkaClient) ConsumerPull(ctx context.Context, reader *kafka.Reade
 	if err != nil {
 		return message, fmt.Errorf("error reading message from Kafka: %w", err)
 	}
-	// Decode while preserving numeric formats via UseNumber, then ensure top-level is an object.
+	// Decode while preserving numeric formats via UseNumber, and support both objects and arrays.
 	var doc interface{}
 	dec := json.NewDecoder(bytes.NewReader(msg.Value))
 	dec.UseNumber()
 	if err := dec.Decode(&doc); err != nil {
 		return message, fmt.Errorf("error unmarshalling message: %w", err)
 	}
-	obj, ok := doc.(map[string]interface{})
-	if !ok {
-		return message, fmt.Errorf("message JSON must be an object")
+
+	// Accept both objects and arrays at the top level
+	switch v := doc.(type) {
+	case map[string]interface{}, []interface{}:
+		message.Value = v
+	default:
+		return message, fmt.Errorf("message JSON must be an object or array")
 	}
-	message.Value = obj
+
 	message.Offset = msg.Offset
 	message.Timestamp = msg.Time
 	return message, nil

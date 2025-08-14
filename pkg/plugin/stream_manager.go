@@ -52,7 +52,20 @@ func (sm *StreamManager) ProcessMessage(
 
 	// Flatten and process message values
 	flat := make(map[string]interface{})
-	FlattenJSON("", msg.Value, flat, 0, defaultFlattenMaxDepth, defaultFlattenFieldCap)
+
+	// Handle top-level arrays by wrapping them in an object
+	messageValue := msg.Value
+	if arr, ok := msg.Value.([]interface{}); ok {
+		// For top-level arrays, create indexed keys for each element
+		wrappedValue := make(map[string]interface{})
+		for i, element := range arr {
+			key := fmt.Sprintf("item_%d", i)
+			wrappedValue[key] = element
+		}
+		messageValue = wrappedValue
+	}
+
+	FlattenJSON("", messageValue, flat, 0, defaultFlattenMaxDepth, defaultFlattenFieldCap)
 
 	fieldBuilder := NewFieldBuilder()
 	fieldIndex := len(frame.Fields)

@@ -208,6 +208,27 @@ func TestStreamManager_ProcessMessage(t *testing.T) {
 			timestampMode:  "message",
 			expectedFields: 6, // time + 5 data fields
 		},
+		{
+			name: "top-level array message",
+			message: kafka_client.KafkaMessage{
+				Value: []interface{}{
+					map[string]interface{}{
+						"id":   1,
+						"name": "item1",
+					},
+					map[string]interface{}{
+						"id":   2,
+						"name": "item2",
+					},
+				},
+				Timestamp: time.Now().Add(-30 * time.Minute),
+				Offset:    300,
+			},
+			partition:      0,
+			partitions:     []int32{0},
+			timestampMode:  "message",
+			expectedFields: 5, // time + item_0.id + item_0.name + item_1.id + item_1.name
+		},
 	}
 
 	for _, tt := range tests {

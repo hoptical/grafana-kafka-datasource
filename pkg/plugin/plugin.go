@@ -355,12 +355,18 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 				continue
 			}
 
-			log.DefaultLogger.Debug("Message received",
-				"topic", qm.Topic,
+			fieldCount := 0
+			if obj, ok := msgWithPartition.msg.Value.(map[string]interface{}); ok {
+				fieldCount = len(obj)
+			} else if arr, ok := msgWithPartition.msg.Value.([]interface{}); ok {
+				fieldCount = len(arr)
+			}
+
+			log.DefaultLogger.Debug("Message frame sent",
 				"partition", msgWithPartition.partition,
 				"offset", msgWithPartition.msg.Offset,
 				"timestamp", frame.Fields[0].At(0),
-				"fieldCount", len(msgWithPartition.msg.Value))
+				"fieldCount", fieldCount)
 
 			err = sender.SendFrame(frame, data.IncludeAll)
 			if err != nil {
