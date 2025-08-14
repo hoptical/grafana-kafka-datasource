@@ -29,7 +29,12 @@ func FlattenJSON(prefix string, in interface{}, out map[string]interface{}, dept
 	case []interface{}:
 		// Represent arrays as stringified JSON to keep plugin schema-free.
 		if prefix != "" && len(out) < fieldCap {
-			out[prefix] = fmt.Sprintf("%v", val)
+			if jsonBytes, err := json.Marshal(val); err == nil {
+				out[prefix] = string(jsonBytes)
+			} else {
+				// Fallback to fmt.Sprintf if marshaling fails
+				out[prefix] = fmt.Sprintf("%v", val)
+			}
 		}
 	default:
 		if prefix != "" && len(out) < fieldCap {

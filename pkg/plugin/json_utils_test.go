@@ -66,8 +66,8 @@ func TestFlattenJSON(t *testing.T) {
 				},
 			},
 			expected: map[string]interface{}{
-				"tags":        "[prod web us-east]",
-				"data.values": "[1 2 3]",
+				"tags":        `["prod","web","us-east"]`,
+				"data.values": `[1,2,3]`,
 			},
 			maxDepth: 5,
 			maxCap:   100,
