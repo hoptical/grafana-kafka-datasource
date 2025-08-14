@@ -168,7 +168,7 @@ func TestStreamManager_ProcessMessage(t *testing.T) {
 			partition:      0,
 			partitions:     []int32{0},
 			timestampMode:  "now",
-			expectedFields: 3, // time + temperature + humidity
+			expectedFields: 4, // time + offset + temperature + humidity
 		},
 		{
 			name: "nested message with multiple partitions",
@@ -186,9 +186,9 @@ func TestStreamManager_ProcessMessage(t *testing.T) {
 				Offset:    200,
 			},
 			partition:      1,
-			partitions:     []int32{0, 1, 2}, // multiple partitions
+			partitions:     []int32{0, 1, 2},
 			timestampMode:  "message",
-			expectedFields: 5, // time + partition + host.name + host.ip + metrics.cpu
+			expectedFields: 6, // time + partition + offset + host.name + host.ip + metrics.cpu
 		},
 		{
 			name: "message with various data types",
@@ -206,7 +206,7 @@ func TestStreamManager_ProcessMessage(t *testing.T) {
 			partition:      0,
 			partitions:     []int32{0},
 			timestampMode:  "message",
-			expectedFields: 6, // time + 5 data fields
+			expectedFields: 7, // time + offset + 5 data fields
 		},
 		{
 			name: "top-level array message",
@@ -227,7 +227,7 @@ func TestStreamManager_ProcessMessage(t *testing.T) {
 			partition:      0,
 			partitions:     []int32{0},
 			timestampMode:  "message",
-			expectedFields: 5, // time + item_0.id + item_0.name + item_1.id + item_1.name
+			expectedFields: 6, // time + offset + item_0.id + item_0.name + item_1.id + item_1.name
 		},
 	}
 

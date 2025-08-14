@@ -50,6 +50,11 @@ func (sm *StreamManager) ProcessMessage(
 		frame.Fields[1].Set(0, partition)
 	}
 
+	// Add offset field
+	offsetFieldIndex := len(frame.Fields)
+	frame.Fields = append(frame.Fields, data.NewField("offset", nil, make([]int64, 1)))
+	frame.Fields[offsetFieldIndex].Set(0, msg.Offset)
+
 	// Flatten and process message values
 	flat := make(map[string]interface{})
 
