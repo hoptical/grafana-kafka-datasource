@@ -66,7 +66,7 @@ func main() {
 	numPartitions := flag.Int("num-partitions", 1, "Number of partitions when creating topic")
 	valuesOffset := flag.Float64("values-offset", 1.0, "Offset for the values")
 	connectTimeout := flag.Int("connect-timeout", 5000, "Broker connect timeout in milliseconds")
-	shape := flag.String("shape", "nested", "Payload shape: nested or flat")
+	shape := flag.String("shape", "nested", "Payload shape: nested, flat, or list")
 	flag.Parse()
 
 	// Create topic if it doesn't exist
@@ -89,11 +89,11 @@ func main() {
 	hostIP := "127.0.0.1"
 
 	for {
-		// Create sample data (flat or nested)
+		// Create sample data (flat, nested, or list)
 		value1 := *valuesOffset - rand.Float64()
 		value2 := *valuesOffset + rand.Float64()
 
-		var payload map[string]interface{}
+		var payload interface{}
 		switch *shape {
 		case "flat":
 			payload = map[string]interface{}{
@@ -127,9 +127,41 @@ func main() {
 				"value2": value2,
 				"tags":   []string{"prod", "edge"},
 			}
+		case "list":
+			// JSON that starts with an array containing multiple records
+			payload = []interface{}{
+				map[string]interface{}{
+					"id":   counter,
+					"type": "metric",
+					"host": map[string]interface{}{
+						"name": hostName,
+						"ip":   hostIP,
+					},
+					"value":     value1,
+					"timestamp": time.Now().Unix(),
+				},
+				map[string]interface{}{
+					"id":   counter + 1000,
+					"type": "event",
+					"host": map[string]interface{}{
+						"name": hostName,
+						"ip":   hostIP,
+					},
+					"value":     value2,
+					"timestamp": time.Now().Unix(),
+				},
+				map[string]interface{}{
+					"id":        counter + 2000,
+					"type":      "log",
+					"message":   fmt.Sprintf("Sample log entry #%d", counter),
+					"level":     "info",
+					"tags":      []string{"prod", "edge"},
+					"timestamp": time.Now().Unix(),
+				},
+			}
 		default:
 			// Handle unknown shape
-			fmt.Printf("Error: Unknown shape %q\n", *shape)
+			fmt.Printf("Error: Unknown shape %q. Valid options: nested, flat, list\n", *shape)
 			os.Exit(1)
 		}
 
