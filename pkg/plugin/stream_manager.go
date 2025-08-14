@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"time"
 
@@ -93,12 +94,14 @@ func (sm *StreamManager) readFromPartition(
 ) {
 	reader, err := sm.client.NewStreamReader(ctx, qm.Topic, partition, qm.AutoOffsetReset, qm.LastN)
 	if err != nil {
-		log.DefaultLogger.Error("Failed to create stream reader", "partition", partition, "error", err)
+		log.DefaultLogger.Error("Failed to create stream reader", "topic", qm.Topic, "partition", partition, "error", err)
 		return
 	}
-	if reader != nil {
-		defer reader.Close()
+	if reader == nil {
+		log.DefaultLogger.Error("Stream reader is nil", "topic", qm.Topic, "partition", partition)
+		return
 	}
+	defer reader.Close()
 
 	for {
 		select {
@@ -125,6 +128,9 @@ func (sm *StreamManager) ValidateAndGetPartitions(ctx context.Context, qm queryM
 	switch v := qm.Partition.(type) {
 	case float64: // JSON numbers are parsed as float64
 		// Validate topic exists and selected partition is within range
+		if v != math.Trunc(v) {
+			return nil, fmt.Errorf("partition must be an integer, got %v", v)
+		}
 		allPartitions, err := sm.client.GetTopicPartitions(ctx, qm.Topic)
 		if err != nil {
 			return nil, sm.handleTopicError(err, qm.Topic)
