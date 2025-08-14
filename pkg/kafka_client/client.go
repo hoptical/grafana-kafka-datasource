@@ -1,6 +1,7 @@
 package kafka_client
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
@@ -76,7 +77,7 @@ type KafkaClient struct {
 }
 
 type KafkaMessage struct {
-	Value     map[string]float64
+	Value     map[string]interface{}
 	Timestamp time.Time
 	Offset    int64
 }
@@ -282,9 +283,14 @@ func (client *KafkaClient) ConsumerPull(ctx context.Context, reader *kafka.Reade
 	if err != nil {
 		return message, fmt.Errorf("error reading message from Kafka: %w", err)
 	}
-	if err := json.Unmarshal(msg.Value, &message.Value); err != nil {
+	// Decode into a generic map while preserving numeric formats via UseNumber.
+	var raw map[string]interface{}
+	dec := json.NewDecoder(bytes.NewReader(msg.Value))
+	dec.UseNumber()
+	if err := dec.Decode(&raw); err != nil {
 		return message, fmt.Errorf("error unmarshalling message: %w", err)
 	}
+	message.Value = raw
 	message.Offset = msg.Offset
 	message.Timestamp = msg.Time
 	return message, nil

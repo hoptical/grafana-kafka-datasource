@@ -24,6 +24,12 @@ import (
 // yet remains small to keep memory usage low and latency tight.
 const streamMessageBuffer = 100
 
+// Defaults for JSON flattening behavior
+const (
+	defaultFlattenMaxDepth = 5
+	defaultFlattenFieldCap = 1000
+)
+
 // KafkaClientAPI abstracts the kafka client for easier testing.
 type KafkaClientAPI interface {
 	NewConnection() error
@@ -365,7 +371,9 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 				log.DefaultLogger.Error("Failed to create stream reader", "partition", p, "error", err)
 				return
 			}
-			defer reader.Close()
+			if reader != nil {
+				defer reader.Close()
+			}
 
 			for {
 				select {
@@ -426,11 +434,56 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 				frame.Fields[1].Set(0, partition)
 			}
 
+			// Flatten nested JSON values using dotted keys with sane limits.
+			flat := make(map[string]interface{})
+			FlattenJSON("", msg.Value, flat, 0, defaultFlattenMaxDepth, defaultFlattenFieldCap)
+
 			cnt := len(frame.Fields)
-			for key, value := range msg.Value {
-				frame.Fields = append(frame.Fields,
-					data.NewField(key, nil, make([]float64, 1)))
-				frame.Fields[cnt].Set(0, value)
+			for key, value := range flat {
+				switch v := value.(type) {
+				case json.Number:
+					coerced := CoerceJSONNumber(v)
+					switch cv := coerced.(type) {
+					case int64:
+						frame.Fields = append(frame.Fields, data.NewField(key, nil, make([]int64, 1)))
+						frame.Fields[cnt].Set(0, cv)
+					case float64:
+						frame.Fields = append(frame.Fields, data.NewField(key, nil, make([]float64, 1)))
+						frame.Fields[cnt].Set(0, cv)
+					default:
+						frame.Fields = append(frame.Fields, data.NewField(key, nil, make([]string, 1)))
+						frame.Fields[cnt].Set(0, fmt.Sprintf("%v", cv))
+					}
+				case float64:
+					frame.Fields = append(frame.Fields, data.NewField(key, nil, make([]float64, 1)))
+					frame.Fields[cnt].Set(0, v)
+				case float32:
+					frame.Fields = append(frame.Fields, data.NewField(key, nil, make([]float64, 1)))
+					frame.Fields[cnt].Set(0, float64(v))
+				case int:
+					frame.Fields = append(frame.Fields, data.NewField(key, nil, make([]int64, 1)))
+					frame.Fields[cnt].Set(0, int64(v))
+				case int8, int16, int32, int64:
+					frame.Fields = append(frame.Fields, data.NewField(key, nil, make([]int64, 1)))
+					frame.Fields[cnt].Set(0, toInt64(v))
+				case uint, uint8, uint16, uint32, uint64:
+					frame.Fields = append(frame.Fields, data.NewField(key, nil, make([]uint64, 1)))
+					frame.Fields[cnt].Set(0, toUint64(v))
+				case bool:
+					frame.Fields = append(frame.Fields, data.NewField(key, nil, make([]bool, 1)))
+					frame.Fields[cnt].Set(0, v)
+				case string:
+					frame.Fields = append(frame.Fields, data.NewField(key, nil, make([]string, 1)))
+					frame.Fields[cnt].Set(0, v)
+				case nil:
+					// Represent null as string "null" to avoid mixed-type columns
+					frame.Fields = append(frame.Fields, data.NewField(key, nil, make([]string, 1)))
+					frame.Fields[cnt].Set(0, "null")
+				default:
+					// Fallback to string for any complex or unknown scalar
+					frame.Fields = append(frame.Fields, data.NewField(key, nil, make([]string, 1)))
+					frame.Fields[cnt].Set(0, fmt.Sprintf("%v", v))
+				}
 				cnt++
 			}
 
@@ -455,4 +508,40 @@ func (d *KafkaDatasource) PublishStream(_ context.Context, req *backend.PublishS
 	return &backend.PublishStreamResponse{
 		Status: backend.PublishStreamStatusPermissionDenied,
 	}, nil
+}
+
+// (int/uint helpers defined below)
+
+func toInt64(v interface{}) int64 {
+	switch n := v.(type) {
+	case int:
+		return int64(n)
+	case int8:
+		return int64(n)
+	case int16:
+		return int64(n)
+	case int32:
+		return int64(n)
+	case int64:
+		return n
+	default:
+		return 0
+	}
+}
+
+func toUint64(v interface{}) uint64 {
+	switch n := v.(type) {
+	case uint:
+		return uint64(n)
+	case uint8:
+		return uint64(n)
+	case uint16:
+		return uint64(n)
+	case uint32:
+		return uint64(n)
+	case uint64:
+		return n
+	default:
+		return 0
+	}
 }
