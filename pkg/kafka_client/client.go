@@ -1,6 +1,7 @@
 package kafka_client
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
@@ -76,7 +77,7 @@ type KafkaClient struct {
 }
 
 type KafkaMessage struct {
-	Value     map[string]float64
+	Value     interface{} // Can be map[string]interface{} or []interface{}
 	Timestamp time.Time
 	Offset    int64
 }
@@ -282,9 +283,22 @@ func (client *KafkaClient) ConsumerPull(ctx context.Context, reader *kafka.Reade
 	if err != nil {
 		return message, fmt.Errorf("error reading message from Kafka: %w", err)
 	}
-	if err := json.Unmarshal(msg.Value, &message.Value); err != nil {
+	// Decode while preserving numeric formats via UseNumber, and support both objects and arrays.
+	var doc interface{}
+	dec := json.NewDecoder(bytes.NewReader(msg.Value))
+	dec.UseNumber()
+	if err := dec.Decode(&doc); err != nil {
 		return message, fmt.Errorf("error unmarshalling message: %w", err)
 	}
+
+	// Accept both objects and arrays at the top level
+	switch v := doc.(type) {
+	case map[string]interface{}, []interface{}:
+		message.Value = v
+	default:
+		return message, fmt.Errorf("message JSON must be an object or array")
+	}
+
 	message.Offset = msg.Offset
 	message.Timestamp = msg.Time
 	return message, nil
@@ -372,6 +386,9 @@ func (client *KafkaClient) GetTopics(ctx context.Context, prefix string, limit i
 
 // isTopicNotFound attempts to classify broker errors that indicate a missing topic.
 func isTopicNotFound(err error) bool {
+	if err == nil {
+		return false
+	}
 	// Prefer kafka-go sentinel if available
 	if errors.Is(err, kafka.UnknownTopicOrPartition) {
 		return true

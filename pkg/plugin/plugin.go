@@ -24,6 +24,12 @@ import (
 // yet remains small to keep memory usage low and latency tight.
 const streamMessageBuffer = 100
 
+// Defaults for JSON flattening behavior
+const (
+	defaultFlattenMaxDepth = 5
+	defaultFlattenFieldCap = 1000
+)
+
 // KafkaClientAPI abstracts the kafka client for easier testing.
 type KafkaClientAPI interface {
 	NewConnection() error
@@ -250,8 +256,11 @@ func (d *KafkaDatasource) handleSearchTopics(ctx context.Context, req *backend.C
 }
 
 func (d *KafkaDatasource) CheckHealth(_ context.Context, req *backend.CheckHealthRequest) (*backend.CheckHealthResult, error) {
-	log.DefaultLogger.Debug("CheckHealth called",
-		"datasourceID", req.PluginContext.DataSourceInstanceSettings.ID)
+	var datasourceID int64 = 0
+	if req.PluginContext.DataSourceInstanceSettings != nil {
+		datasourceID = req.PluginContext.DataSourceInstanceSettings.ID
+	}
+	log.DefaultLogger.Debug("CheckHealth called", "datasourceID", datasourceID)
 
 	var status = backend.HealthStatusOk
 	var message = "Data source is working"
@@ -300,8 +309,7 @@ func (d *KafkaDatasource) SubscribeStream(ctx context.Context, req *backend.Subs
 }
 
 func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamRequest, sender *backend.StreamSender) error {
-	log.DefaultLogger.Debug("RunStream called",
-		"path", req.Path)
+	log.DefaultLogger.Debug("RunStream called", "path", req.Path)
 
 	var qm queryModel
 	err := json.Unmarshal(req.Data, &qm)
@@ -316,123 +324,49 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 		return fmt.Errorf("failed to establish Kafka connection: %w", err)
 	}
 
-	// Parse partition field which can be int32 or "all"
-	var partitions []int32
-	switch v := qm.Partition.(type) {
-	case float64: // JSON numbers are parsed as float64
-		// Validate topic exists and selected partition is within range by fetching partitions
-		allPartitions, err := d.client.GetTopicPartitions(ctx, qm.Topic)
-		if err != nil {
-			if errors.Is(err, kafka_client.ErrTopicNotFound) {
-				return fmt.Errorf("topic %s not found", qm.Topic)
-			}
-			return fmt.Errorf("failed to get topic partitions: %w", err)
-		}
-		sel := int32(v)
-		count := int32(len(allPartitions))
-		if sel < 0 || sel >= count {
-			return fmt.Errorf("partition %d out of range [0..%d) for topic %s", sel, count, qm.Topic)
-		}
-		partitions = []int32{sel}
-	case string:
-		if v == "all" {
-			// Get all partitions for the topic (also validates existence)
-			allPartitions, err := d.client.GetTopicPartitions(ctx, qm.Topic)
-			if err != nil {
-				if errors.Is(err, kafka_client.ErrTopicNotFound) {
-					return fmt.Errorf("topic %s not found", qm.Topic)
-				}
-				return fmt.Errorf("failed to get topic partitions: %w", err)
-			}
-			partitions = allPartitions
-		} else {
-			return fmt.Errorf("invalid partition value: %s", v)
-		}
-	default:
-		return fmt.Errorf("invalid partition type: %T", v)
+	// Create stream manager and validate partitions
+	streamManager := NewStreamManager(d.client)
+	partitions, err := streamManager.ValidateAndGetPartitions(ctx, qm)
+	if err != nil {
+		return err
 	}
 
 	log.DefaultLogger.Debug("RunStream partitions", "topic", qm.Topic, "partitions", partitions)
 
-	// Create a channel to collect messages from all partitions (see streamMessageBuffer doc).
+	// Create message channel and start partition readers
 	messagesCh := make(chan messageWithPartition, streamMessageBuffer)
+	streamManager.StartPartitionReaders(ctx, partitions, qm, messagesCh)
 
-	// Start a goroutine for each partition
-	for _, partition := range partitions {
-		go func(p int32) {
-			reader, err := d.client.NewStreamReader(ctx, qm.Topic, p, qm.AutoOffsetReset, qm.LastN)
-			if err != nil {
-				log.DefaultLogger.Error("Failed to create stream reader", "partition", p, "error", err)
-				return
-			}
-			defer reader.Close()
-
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				default:
-					msg, err := d.client.ConsumerPull(ctx, reader)
-					if err != nil {
-						log.DefaultLogger.Error("Error reading from partition", "partition", p, "error", err)
-						continue
-					}
-
-					select {
-					case messagesCh <- messageWithPartition{msg: msg, partition: p}:
-					case <-ctx.Done():
-						return
-					}
-				}
-			}
-		}(partition)
-	}
-
-	// Main loop to process messages from all partitions
+	// Main processing loop
 	for {
 		select {
 		case <-ctx.Done():
 			log.DefaultLogger.Debug("Context done, finish streaming", "path", req.Path)
 			return nil
 		case msgWithPartition := <-messagesCh:
-			msg := msgWithPartition.msg
-			partition := msgWithPartition.partition
-
-			frame := data.NewFrame("response")
-			frame.Fields = append(frame.Fields,
-				data.NewField("time", nil, make([]time.Time, 1)),
+			frame, err := streamManager.ProcessMessage(
+				msgWithPartition.msg,
+				msgWithPartition.partition,
+				partitions,
+				qm,
 			)
-
-			var frame_time time.Time
-			if qm.TimestampMode == "now" {
-				frame_time = time.Now()
-			} else {
-				frame_time = msg.Timestamp
+			if err != nil {
+				log.DefaultLogger.Error("Error processing message", "error", err)
+				continue
 			}
 
-			log.DefaultLogger.Debug("Message received",
-				"topic", qm.Topic,
-				"partition", partition,
-				"offset", msg.Offset,
-				"timestamp", frame_time,
-				"fieldCount", len(msg.Value))
-
-			frame.Fields[0].Set(0, frame_time)
-
-			// Add partition field when consuming from multiple partitions
-			if len(partitions) > 1 {
-				frame.Fields = append(frame.Fields,
-					data.NewField("partition", nil, make([]int32, 1)))
-				frame.Fields[1].Set(0, partition)
+			fieldCount := 0
+			if obj, ok := msgWithPartition.msg.Value.(map[string]interface{}); ok {
+				fieldCount = len(obj)
+			} else if arr, ok := msgWithPartition.msg.Value.([]interface{}); ok {
+				fieldCount = len(arr)
 			}
 
-			cnt := len(frame.Fields)
-			for key, value := range msg.Value {
-				frame.Fields = append(frame.Fields,
-					data.NewField(key, nil, make([]float64, 1)))
-				frame.Fields[cnt].Set(0, value)
-				cnt++
-			}
+			log.DefaultLogger.Debug("Message frame sent",
+				"partition", msgWithPartition.partition,
+				"offset", msgWithPartition.msg.Offset,
+				"timestamp", frame.Fields[0].At(0),
+				"fieldCount", fieldCount)
 
 			err = sender.SendFrame(frame, data.IncludeAll)
 			if err != nil {

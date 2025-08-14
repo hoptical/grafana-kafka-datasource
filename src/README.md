@@ -14,7 +14,12 @@
  - Timestamp modes: 
    - **Kafka Event Time** (from message metadata, default)
    - **Dashboard received time** (when Grafana plugin got the message)
-- Simple JSON data format support
+- Advanced JSON data format support:
+   - **Flat JSON objects**: Simple key-value pairs
+   - **Nested JSON objects**: Automatically flattened with dotted notation (e.g., `user.profile.name`)
+   - **JSON arrays**: Both top-level arrays and nested arrays are supported
+   - **Mixed data types**: Preserves strings, numbers, booleans, and null values
+   - **Configurable flattening**: Depth limit (default: 5) and field cap (default: 1000)
 - Kafka authentication support (SASL)
 - Encryption support (SSL/TLS)
 
@@ -59,17 +64,48 @@ You can automatically configure the Kafka datasource using Grafana's provisionin
 
 ## Supported Data Format
 
-Your Kafka messages should contain simple JSON with numeric values:
+Your Kafka messages can contain various JSON structures that are automatically processed:
 
+**Simple flat objects:**
 ```json
 {
   "temperature": 23.5,
   "humidity": 65.2,
-  "pressure": 1013.25
+  "pressure": 1013.25,
+  "status": "active"
 }
 ```
 
-Each numeric field becomes a separate series in your graph, allowing you to monitor multiple metrics from a single topic.
+**Nested objects** (automatically flattened with dotted notation):
+```json
+{
+  "sensor": {
+    "location": "warehouse_a",
+    "readings": {
+      "temperature": 23.5,
+      "humidity": 65.2
+    }
+  },
+  "timestamp": "2025-01-15T10:30:00Z"
+}
+```
+Fields become: `sensor.location`, `sensor.readings.temperature`, `sensor.readings.humidity`, `timestamp`
+
+**Top-level arrays:**
+```json
+[
+  {"id": 1, "value": 10.5, "type": "cpu"},
+  {"id": 2, "value": 20.3, "type": "memory"}
+]
+```
+Fields become: `item_0.id`, `item_0.value`, `item_0.type`, `item_1.id`, `item_1.value`, `item_1.type`
+
+**Data features:**
+- All numeric fields become separate time series in your graph
+- String fields are preserved as labels
+- Boolean and null values are handled appropriately
+- Message offset and partition information are automatically included
+- Configurable flattening depth (default: 5 levels) and field limits (default: 1000 fields)
 
 ## Getting Help
 

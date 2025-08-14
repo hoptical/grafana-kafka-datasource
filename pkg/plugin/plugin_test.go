@@ -207,5 +207,171 @@ func TestRunStream_AllPartitions_ErrorFetching(t *testing.T) {
 	}
 }
 
+func TestRunStream_ConnectionError(t *testing.T) {
+	ds := plugin.NewWithClient(&mockKafkaClient{newConnErr: errors.New("connection failed")})
+	dataBytes, _ := json.Marshal(map[string]interface{}{"topicName": "t", "partition": 0})
+	err := ds.RunStream(context.Background(), &backend.RunStreamRequest{Data: dataBytes}, backend.NewStreamSender(nil))
+	if err == nil {
+		t.Fatalf("expected error when connection fails")
+	}
+}
+
+func TestRunStream_TopicNotFound(t *testing.T) {
+	ds := plugin.NewWithClient(&mockKafkaClient{partitionsErr: kafka_client.ErrTopicNotFound})
+	dataBytes, _ := json.Marshal(map[string]interface{}{"topicName": "nonexistent", "partition": "all"})
+	err := ds.RunStream(context.Background(), &backend.RunStreamRequest{Data: dataBytes}, backend.NewStreamSender(nil))
+	if err == nil {
+		t.Fatalf("expected error when topic not found")
+	}
+	if !errors.Is(err, kafka_client.ErrTopicNotFound) {
+		t.Errorf("expected topic not found error, got: %v", err)
+	}
+}
+
+func TestRunStream_InvalidJSON(t *testing.T) {
+	ds := plugin.NewWithClient(&mockKafkaClient{})
+	err := ds.RunStream(context.Background(), &backend.RunStreamRequest{Data: []byte("invalid-json")}, backend.NewStreamSender(nil))
+	if err == nil {
+		t.Fatalf("expected error for invalid JSON")
+	}
+}
+
+func TestSubscribeStream_InvalidJSON(t *testing.T) {
+	ds := plugin.NewWithClient(&mockKafkaClient{})
+	resp, err := ds.SubscribeStream(context.Background(), &backend.SubscribeStreamRequest{Data: []byte("invalid-json")})
+	if err == nil {
+		t.Error("Expected error for invalid JSON")
+	}
+	if resp.Status != backend.SubscribeStreamStatusPermissionDenied {
+		t.Errorf("Expected permission denied status, got %v", resp.Status)
+	}
+}
+
+func TestSubscribeStream_ValidRequest(t *testing.T) {
+	ds := plugin.NewWithClient(&mockKafkaClient{})
+	data, _ := json.Marshal(map[string]interface{}{"topicName": "valid-topic"})
+	resp, err := ds.SubscribeStream(context.Background(), &backend.SubscribeStreamRequest{Data: data})
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+	if resp.Status != backend.SubscribeStreamStatusOK {
+		t.Errorf("Expected OK status, got %v", resp.Status)
+	}
+}
+
+func TestCallResource_InvalidURL(t *testing.T) {
+	ds := plugin.NewWithClient(&mockKafkaClient{})
+	req := &backend.CallResourceRequest{Path: "partitions", Method: "GET", URL: "://invalid-url"}
+	var sent backend.CallResourceResponse
+	sender := backend.CallResourceResponseSenderFunc(func(r *backend.CallResourceResponse) error { sent = *r; return nil })
+	_ = ds.CallResource(context.Background(), req, sender)
+	if sent.Status != 400 {
+		t.Fatalf("expected 400 for invalid URL, got %d", sent.Status)
+	}
+}
+
+func TestCallResource_MissingTopicParameter(t *testing.T) {
+	ds := plugin.NewWithClient(&mockKafkaClient{})
+	req := &backend.CallResourceRequest{Path: "partitions", Method: "GET", URL: "/"}
+	var sent backend.CallResourceResponse
+	sender := backend.CallResourceResponseSenderFunc(func(r *backend.CallResourceResponse) error { sent = *r; return nil })
+	_ = ds.CallResource(context.Background(), req, sender)
+	if sent.Status != 400 {
+		t.Fatalf("expected 400 for missing topic parameter, got %d", sent.Status)
+	}
+}
+
+func TestCallResource_Partitions_ConnectionError(t *testing.T) {
+	mc := &mockKafkaClient{newConnErr: errors.New("connection failed")}
+	ds := plugin.NewWithClient(mc)
+	req := &backend.CallResourceRequest{Path: "partitions", Method: "GET", URL: "/?topic=test"}
+	var sent backend.CallResourceResponse
+	sender := backend.CallResourceResponseSenderFunc(func(r *backend.CallResourceResponse) error { sent = *r; return nil })
+	_ = ds.CallResource(context.Background(), req, sender)
+	if sent.Status != 500 {
+		t.Fatalf("expected 500 for connection error, got %d", sent.Status)
+	}
+}
+
+func TestCallResource_Partitions_TopicNotFound(t *testing.T) {
+	mc := &mockKafkaClient{partitionsErr: kafka_client.ErrTopicNotFound}
+	ds := plugin.NewWithClient(mc)
+	req := &backend.CallResourceRequest{Path: "partitions", Method: "GET", URL: "/?topic=nonexistent"}
+	var sent backend.CallResourceResponse
+	sender := backend.CallResourceResponseSenderFunc(func(r *backend.CallResourceResponse) error { sent = *r; return nil })
+	_ = ds.CallResource(context.Background(), req, sender)
+	if sent.Status != 404 {
+		t.Fatalf("expected 404 for topic not found, got %d", sent.Status)
+	}
+}
+
+func TestCallResource_Topics_ConnectionError(t *testing.T) {
+	mc := &mockKafkaClient{newConnErr: errors.New("connection failed")}
+	ds := plugin.NewWithClient(mc)
+	req := &backend.CallResourceRequest{Path: "topics", Method: "GET", URL: "/?prefix=test"}
+	var sent backend.CallResourceResponse
+	sender := backend.CallResourceResponseSenderFunc(func(r *backend.CallResourceResponse) error { sent = *r; return nil })
+	_ = ds.CallResource(context.Background(), req, sender)
+	if sent.Status != 500 {
+		t.Fatalf("expected 500 for connection error, got %d", sent.Status)
+	}
+}
+
+func TestCallResource_Topics_SearchError(t *testing.T) {
+	mc := &mockKafkaClient{topicsErr: errors.New("search failed")}
+	ds := plugin.NewWithClient(mc)
+	req := &backend.CallResourceRequest{Path: "topics", Method: "GET", URL: "/?prefix=test"}
+	var sent backend.CallResourceResponse
+	sender := backend.CallResourceResponseSenderFunc(func(r *backend.CallResourceResponse) error { sent = *r; return nil })
+	_ = ds.CallResource(context.Background(), req, sender)
+	if sent.Status != 500 {
+		t.Fatalf("expected 500 for search error, got %d", sent.Status)
+	}
+}
+
+func TestCallResource_Topics_WithLimit(t *testing.T) {
+	mc := &mockKafkaClient{topics: []string{"topic1", "topic2"}}
+	ds := plugin.NewWithClient(mc)
+	req := &backend.CallResourceRequest{Path: "topics", Method: "GET", URL: "/?prefix=topic&limit=10"}
+	var sent backend.CallResourceResponse
+	sender := backend.CallResourceResponseSenderFunc(func(r *backend.CallResourceResponse) error { sent = *r; return nil })
+	if err := ds.CallResource(context.Background(), req, sender); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if sent.Status != 200 {
+		t.Fatalf("expected 200, got %d", sent.Status)
+	}
+}
+
+func TestCheckHealth_NilClient(t *testing.T) {
+	ds := plugin.NewWithClient(nil)
+	result, err := ds.CheckHealth(context.Background(), &backend.CheckHealthRequest{})
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+	if result.Status != backend.HealthStatusError {
+		t.Error("Expected error status for nil client")
+	}
+}
+
+func TestDispose(t *testing.T) {
+	mc := &mockKafkaClient{}
+	ds := plugin.NewWithClient(mc)
+
+	// Should not panic
+	ds.Dispose()
+}
+
+func TestPublishStream(t *testing.T) {
+	ds := plugin.NewWithClient(&mockKafkaClient{})
+	resp, err := ds.PublishStream(context.Background(), &backend.PublishStreamRequest{})
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+	if resp.Status != backend.PublishStreamStatusPermissionDenied {
+		t.Errorf("Expected permission denied, got %v", resp.Status)
+	}
+}
+
 // Note: getDatasourceSettings is unexported; higher coverage would require moving
 // it or adding a test shim inside the plugin package. Skipping for now.

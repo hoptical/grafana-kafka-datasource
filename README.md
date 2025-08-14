@@ -18,7 +18,12 @@ The Kafka data source plugin allows you to visualize streaming Kafka data from w
 - Timestamp modes: 
    - **Kafka Event Time** (from message metadata, default)
    - **Dashboard received time** (when Grafana plugin got the message)
-- Simple JSON data format support
+- Advanced JSON data format support:
+   - **Flat JSON objects**: Simple key-value pairs
+   - **Nested JSON objects**: Automatically flattened with dotted notation (e.g., `user.profile.name`)
+   - **JSON arrays**: Both top-level arrays and nested arrays are supported
+   - **Mixed data types**: Preserves strings, numbers, booleans, and null values
+   - **Configurable flattening**: Depth limit (default: 5) and field cap (default: 1000)
 - Kafka authentication support (SASL)
 - Encryption support (SSL/TLS)
 
@@ -55,18 +60,52 @@ For configuration and usage instructions, see below and the [README.md](src/READ
 
 ## Known limitations
 
-This plugin supports topics publishing very simple JSON formatted messages. Note that only the following structure is supported as of now:
+This plugin supports JSON formatted messages with the following capabilities:
 
+**Supported JSON structures:**
+- Flat objects with simple key-value pairs
+- Nested objects (automatically flattened with dotted notation)
+- Top-level JSON arrays
+- Mixed data types (strings, numbers, booleans, null values)
+
+**Examples of supported formats:**
+
+Simple flat object:
 ```json
 {
-    "value1": 1.0,
-    "value2": 2,
-    "value3": 3.33,
-    ...
+    "temperature": 23.5,
+    "humidity": 65.2,
+    "status": "active"
 }
 ```
 
-We plan to support more complex JSON data structures, Protobuf and AVRO in the upcoming releases. Contributions are highly encouraged!
+Nested object (flattened as `user.name`, `user.age`, `settings.theme`):
+```json
+{
+    "user": {
+        "name": "John Doe",
+        "age": 30
+    },
+    "settings": {
+        "theme": "dark"
+    }
+}
+```
+
+Top-level array (flattened as `item_0.id`, `item_0.value`, `item_1.id`, etc.):
+```json
+[
+    {"id": 1, "value": 10.5},
+    {"id": 2, "value": 20.3}
+]
+```
+
+**Current limitations:**
+- Maximum flattening depth: 5 levels (configurable)
+- Maximum fields per message: 1000 (configurable)
+- Binary data formats (Protobuf, AVRO) are not yet supported
+
+We plan to support Protobuf and AVRO in upcoming releases. Contributions are highly encouraged!
 
 ## Sample producers
 
