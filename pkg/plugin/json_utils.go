@@ -7,32 +7,32 @@ import (
 
 // FlattenJSON flattens a nested JSON-like structure into a flat map with dotted keys.
 // It respects a maximum depth and a maximum number of fields to avoid overload.
-func FlattenJSON(prefix string, in interface{}, out map[string]interface{}, depth, maxDepth, cap int) int {
-	if len(out) >= cap {
+func FlattenJSON(prefix string, in interface{}, out map[string]interface{}, depth, maxDepth, fieldCap int) int {
+	if len(out) >= fieldCap {
 		return len(out)
 	}
-	if depth > maxDepth {
+	if depth >= maxDepth {
 		return len(out)
 	}
 	switch val := in.(type) {
 	case map[string]interface{}:
 		for k, v := range val {
-			if len(out) >= cap {
+			if len(out) >= fieldCap {
 				break
 			}
 			key := k
 			if prefix != "" {
 				key = prefix + "." + k
 			}
-			FlattenJSON(key, v, out, depth+1, maxDepth, cap)
+			FlattenJSON(key, v, out, depth+1, maxDepth, fieldCap)
 		}
 	case []interface{}:
 		// Represent arrays as stringified JSON to keep plugin schema-free.
-		if prefix != "" && len(out) < cap {
+		if prefix != "" && len(out) < fieldCap {
 			out[prefix] = fmt.Sprintf("%v", val)
 		}
 	default:
-		if prefix != "" && len(out) < cap {
+		if prefix != "" && len(out) < fieldCap {
 			out[prefix] = val
 		}
 	}

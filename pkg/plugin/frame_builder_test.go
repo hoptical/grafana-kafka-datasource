@@ -86,6 +86,21 @@ func TestFieldBuilder_AddValueToFrame(t *testing.T) {
 			if actualValue != tt.expectedValue {
 				t.Errorf("Expected value %v (%T), got %v (%T)", tt.expectedValue, tt.expectedValue, actualValue, actualValue)
 			}
+
+			// Assert field type when specified
+			if tt.expectedType != "" {
+				typeMap := map[string]data.FieldType{
+					"string":  data.FieldTypeString,
+					"int64":   data.FieldTypeInt64,
+					"float64": data.FieldTypeFloat64,
+					"bool":    data.FieldTypeBool,
+				}
+				if expectedFT, ok := typeMap[tt.expectedType]; ok {
+					if field.Type() != expectedFT {
+						t.Errorf("Expected field type %v, got %v", expectedFT, field.Type())
+					}
+				}
+			}
 		})
 	}
 }
@@ -122,24 +137,29 @@ func TestFieldBuilder_JSONNumber(t *testing.T) {
 			expectedValue: "not-a-number",
 		},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			fb := NewFieldBuilder()
 			frame := data.NewFrame("test")
 			num := json.Number(tt.jsonNumber)
-
 			fb.AddValueToFrame(frame, "test_field", num, 0)
-
 			if len(frame.Fields) != 1 {
 				t.Fatalf("Expected 1 field, got %d", len(frame.Fields))
 			}
-
 			field := frame.Fields[0]
 			actualValue := field.At(0)
-
 			if actualValue != tt.expectedValue {
 				t.Errorf("Expected value %v (%T), got %v (%T)", tt.expectedValue, tt.expectedValue, actualValue, actualValue)
+			}
+			typeMap := map[string]data.FieldType{
+				"string":  data.FieldTypeString,
+				"int64":   data.FieldTypeInt64,
+				"float64": data.FieldTypeFloat64,
+			}
+			if expectedFT, ok := typeMap[tt.expectedType]; ok {
+				if field.Type() != expectedFT {
+					t.Errorf("Expected field type %v, got %v", expectedFT, field.Type())
+				}
 			}
 		})
 	}

@@ -283,14 +283,18 @@ func (client *KafkaClient) ConsumerPull(ctx context.Context, reader *kafka.Reade
 	if err != nil {
 		return message, fmt.Errorf("error reading message from Kafka: %w", err)
 	}
-	// Decode into a generic map while preserving numeric formats via UseNumber.
-	var raw map[string]interface{}
+	// Decode while preserving numeric formats via UseNumber, then ensure top-level is an object.
+	var doc interface{}
 	dec := json.NewDecoder(bytes.NewReader(msg.Value))
 	dec.UseNumber()
-	if err := dec.Decode(&raw); err != nil {
+	if err := dec.Decode(&doc); err != nil {
 		return message, fmt.Errorf("error unmarshalling message: %w", err)
 	}
-	message.Value = raw
+	obj, ok := doc.(map[string]interface{})
+	if !ok {
+		return message, fmt.Errorf("message JSON must be an object")
+	}
+	message.Value = obj
 	message.Offset = msg.Offset
 	message.Timestamp = msg.Time
 	return message, nil

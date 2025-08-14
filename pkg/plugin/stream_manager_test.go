@@ -277,10 +277,10 @@ func TestNewStreamManager(t *testing.T) {
 
 	if sm == nil {
 		t.Error("NewStreamManager should return a non-nil StreamManager")
-	}
-
-	if sm.client != client {
-		t.Error("StreamManager should store the provided client")
+	} else {
+		if sm.client != client {
+			t.Error("StreamManager should store the provided client")
+		}
 	}
 }
 
