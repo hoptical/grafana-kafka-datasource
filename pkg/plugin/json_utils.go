@@ -3,7 +3,6 @@ package plugin
 import (
 	"encoding/json"
 	"fmt"
-	"sort"
 )
 
 // FlattenJSON flattens a nested JSON-like structure into a flat map with dotted keys.
@@ -17,18 +16,10 @@ func FlattenJSON(prefix string, in interface{}, out map[string]interface{}, dept
 	}
 	switch val := in.(type) {
 	case map[string]interface{}:
-		// Collect keys and sort them for deterministic iteration
-		keys := make([]string, 0, len(val))
-		for k := range val {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-
-		for _, k := range keys {
+		for k, v := range val {
 			if len(out) >= fieldCap {
 				break
 			}
-			v := val[k]
 			key := k
 			if prefix != "" {
 				key = prefix + "." + k

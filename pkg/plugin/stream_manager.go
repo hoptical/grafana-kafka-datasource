@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
@@ -55,7 +56,15 @@ func (sm *StreamManager) ProcessMessage(
 	fieldBuilder := NewFieldBuilder()
 	fieldIndex := len(frame.Fields)
 
-	for key, value := range flat {
+	// Collect keys and sort them for deterministic field ordering
+	keys := make([]string, 0, len(flat))
+	for key := range flat {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	for _, key := range keys {
+		value := flat[key]
 		fieldBuilder.AddValueToFrame(frame, key, value, fieldIndex)
 		fieldIndex++
 	}
