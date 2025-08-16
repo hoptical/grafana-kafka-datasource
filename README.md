@@ -134,7 +134,7 @@ Top-level array (flattened as `item_0.id`, `item_0.value`, `item_1.id`, etc.):
 Want to test the plugin? Use our [Go sample producer](example/go/producer.go) to generate realistic Kafka messages:
 
 ```bash
-go run producer.go -broker localhost:9094 -topic test -interval 500 -num-partitions 3 -shape nested
+go run example/go/producer.go -broker localhost:9094 -topic test -interval 500 -num-partitions 3 -shape nested
 ```
 
 Supports flat, nested, and array JSON payloads. See [example/README.md](example/README.md) for details.
@@ -151,8 +151,8 @@ Supports flat, nested, and array JSON payloads. See [example/README.md](example/
 
 - [Sample Producers](example/README.md)
 - [Changelog](CHANGELOG.md)
-- [Contribution Guidelines](contributing.md)
-- [Code of Conduct](code_of_conduct.md)
+- [Contribution Guidelines](CONTRIBUTING.md)
+- [Code of Conduct](CODE_OF_CONDUCT.md)
 
 ---
 

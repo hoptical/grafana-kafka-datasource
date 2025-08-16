@@ -83,4 +83,4 @@ Thank you for considering contributing! We welcome issues, feature requests, and
 
 ---
 
-See [code_of_conduct.md](code_of_conduct.md) for community guidelines.
+See [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for community guidelines.
