@@ -15,6 +15,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check if current tag is in CHANGELOG.md
+        run: |
+          TAG="${GITHUB_REF##*/}"
+          if ! grep -q "## \[${TAG}\]" CHANGELOG.md; then
+            echo "ERROR: Current tag (${TAG}) not found in CHANGELOG.md. Please update the changelog before releasing."
+            exit 1
+          fi
+
       - uses: grafana/plugin-actions/build-plugin@main
         with:
           # see https://grafana.com/developers/plugin-tools/publish-a-plugin/sign-a-plugin#generate-an-access-policy-token to generate it
