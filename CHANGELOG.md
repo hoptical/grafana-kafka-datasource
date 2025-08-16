@@ -1,10 +1,15 @@
 # Changelog
 
+## [v1.0.1](https://github.com/hoptical/grafana-kafka-datasource/tree/HEAD)
+
+[Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v1.0.0...HEAD)
+
 ## [v1.0.0](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.0.0) (2025-08-14)
 
 [Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v0.6.0...v1.0.0)
 
 - Add support for the nested JSON [\#83](https://github.com/hoptical/grafana-kafka-datasource/pull/83) ([hoptical](https://github.com/hoptical))
+- Support for Nested JSON via Automatic Flattening [\#79](https://github.com/hoptical/grafana-kafka-datasource/issues/79)
 
 ## [v0.6.0](https://github.com/hoptical/grafana-kafka-datasource/tree/v0.6.0) (2025-08-13)
 
