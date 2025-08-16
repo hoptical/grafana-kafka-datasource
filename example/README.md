@@ -2,6 +2,7 @@
 
 In this folder, there are simple producers for different langaues that generate json values in Kafka.
 
+
 ## Go
 
 ### Requirements
@@ -19,20 +20,53 @@ go get github.com/segmentio/kafka-go
 Then, run the producer:
 
 ```bash
-go run producer.go -broker <broker> -topic <topic> -interval <interval in milliseconds between producing messages> -num-partitions <number of partitions when creating the topic>
+go run producer.go -broker <broker> -topic <topic> -interval <interval ms> -num-partitions <partitions> -shape <flat|nested|list>
 ```
 
 > Note: The producer will create the topic if it does not exist.
 
-For example, to produce messages to `test` topic on `localhost:9094` with 3 partitions:
-
+#### Example: produce nested JSON messages to `test` topic on `localhost:9094` with 3 partitions every 500ms
 ```bash
-go run producer.go -broker localhost:9094 -topic test -interval 500 -num-partitions 3
+go run producer.go -broker localhost:9094 -topic test -interval 500 -num-partitions 3 -shape nested
 ```
+
+### Supported Shapes
+
+- `flat`: Flat key-value JSON
+	```json
+	{
+		"host.name": "srv-01",
+		"metrics.cpu.load": 0.95,
+		"tags": ["prod", "edge"]
+	}
+	```
+- `nested`: Nested JSON objects, arrays, metrics, alerts
+	```json
+	{
+		"host": {"name": "srv-01", "ip": "127.0.0.1"},
+		"metrics": {"cpu": {"load": 0.95}, "mem": {"used": 1200}},
+		"alerts": [{"type": "cpu_high", "value": 95}]
+	}
+	```
+- `list`: Top-level array of records (metrics, events, logs)
+	```json
+	[
+		{"id": 1, "type": "metric", "value": 0.95},
+		{"id": 2, "type": "event", "message": "Sample log entry"}
+	]
+	```
+
+All shapes are supported by the plugin and help test flattening, array handling, and nested data.
+
+#### Other options
+- `-values-offset <float>`: Offset for generated values
+- `-connect-timeout <ms>`: Broker connect timeout
+
+See the Go source for more advanced options and sample payloads.
 
 ## Python
 
-The Python code will produces JSON messages to the Kafka topic `test` every 500 milliseconds.
+The Python code will produces simple flat JSON messages to the Kafka topic `test` every 500 milliseconds.
 
 ### Requirements
 
