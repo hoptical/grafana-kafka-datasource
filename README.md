@@ -43,30 +43,14 @@ This plugin connects your Grafana instance directly to Kafka brokers, allowing y
 - Advanced JSON support (flat, nested, arrays, mixed types)
 - Kafka authentication (SASL) & encryption (SSL/TLS)
 
-## Getting Started
+## Installation
 
-### Installation
-
-#### Via grafana-cli
-
+### Via grafana-cli
 ```bash
 grafana-cli plugins install hamedkarbasi93-kafka-datasource
 ```
 
-#### Via zip file
-
-Download the [latest release](https://github.com/hoptical/grafana-kafka-datasource/releases/latest) and unpack it into your Grafana plugins directory (default: `/var/lib/grafana/plugins`).
-
-## Getting Started
-
-### Installation
-
-#### Via grafana-cli
-```bash
-grafana-cli plugins install hamedkarbasi93-kafka-datasource
-```
-
-#### Via zip file
+### Via zip file
 Download the [latest release](https://github.com/hoptical/grafana-kafka-datasource/releases/latest) and unpack it into your Grafana plugins directory (default: `/var/lib/grafana/plugins`).
 
 ### Provisioning
@@ -143,7 +127,7 @@ Top-level array (flattened as `item_0.id`, `item_0.value`, `item_1.id`, etc.):
 
 ## Live Demo
 
-![Kafka dashboard](src/img/graph.gif)
+![Kafka dashboard](https://raw.githubusercontent.com/hoptical/grafana-kafka-datasource/86ea8d360bfd67cfed41004f80adc39219983210/src/img/graph.gif)
 
 ## Sample Data Generator
 
