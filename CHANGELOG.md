@@ -1,8 +1,11 @@
 # Changelog
 
-## [v1.0.1](https://github.com/hoptical/grafana-kafka-datasource/tree/HEAD)
-
-[Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v1.0.0...HEAD)
+## [v1.0.1](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.0.1)
+[Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v1.0.0...v1.0.1)
+ - Restructure and split documentation (README, docs/development.md, docs/contributing.md, docs/code_of_conduct.md)
+ - Add “Create Plugin Update” GitHub Action
+ - Add release workflow pre‐check to ensure tag exists in CHANGELOG
+ - Bump plugin and package versions to 1.0.1
 
 ## [v1.0.0](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.0.0) (2025-08-14)
 
