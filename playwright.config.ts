@@ -49,7 +49,7 @@ export default defineConfig<PluginOptions>({
         launchOptions: {
           args: ['--disable-features=PlzDedicatedWorker'], // because https://github.com/microsoft/playwright/pull/34400
         },
-        channel: 'chrome',
+        // channel: 'chrome',
       },
       dependencies: ['auth'],
     },
