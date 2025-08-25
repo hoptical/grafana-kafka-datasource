@@ -11,6 +11,24 @@ Thank you for considering contributing! We welcome issues, feature requests, and
 
 ## Developer Setup
 
+### Dev Container (Recommended)
+
+This project includes a pre-configured [Dev Container](https://containers.dev/) for a consistent development environment. It installs Node.js, Go, Mage, Playwright, and other dependencies automatically.
+
+**How to use:**
+
+1. Open the project in [VS Code](https://code.visualstudio.com/) with the [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers).
+2. When prompted, "Reopen in Container" to start the dev container.
+3. All tools and dependencies will be installed automatically.
+4. You can run all `npm`, `go`, and `mage` commands inside the container terminal.
+
+**Notes:**
+- The dev container uses host network mode for better compatibility with local services.
+- Playwright browsers are pre-installed for the non-root user; E2E tests work out of the box.
+- If you update dependencies in `Dockerfile`, rebuild the container from the command palette: `Dev Containers: Rebuild Container`.
+
+---
+
 ### Prerequisites
 
 - Grafana v10.2+
