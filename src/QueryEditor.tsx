@@ -1,4 +1,4 @@
-import { defaults, debounce, type DebouncedFunc } from 'lodash';
+import { debounce, type DebouncedFunc } from 'lodash';
 import React, { ChangeEvent, PureComponent } from 'react';
 import { InlineField, InlineFieldRow, Input, Select, Button, Spinner, Alert, InlineLabel } from '@grafana/ui';
 import { QueryEditorProps } from '@grafana/data';
@@ -109,7 +109,8 @@ export class QueryEditor extends PureComponent<Props, State> {
 
   getPartitionOptions = (): Array<{ label: string; value: number | 'all' }> => {
     const options = [...partitionOptions];
-    const { partition } = defaults(this.props.query, defaultQuery);
+    const query = { ...defaultQuery, ...this.props.query };
+    const { partition } = query;
     const present = new Set<number>();
     (this.state.availablePartitions || []).forEach((p) => {
       options.push({ label: `Partition ${p}`, value: p });
@@ -158,7 +159,8 @@ export class QueryEditor extends PureComponent<Props, State> {
   };
 
   commitTopicIfChanged = () => {
-    const { topicName } = defaults(this.props.query, defaultQuery);
+    const query = { ...defaultQuery, ...this.props.query };
+    const { topicName } = query;
     if (topicName && topicName !== this.lastCommittedTopic) {
       this.lastCommittedTopic = topicName;
       this.props.onRunQuery();
@@ -227,7 +229,7 @@ export class QueryEditor extends PureComponent<Props, State> {
   };
 
   render() {
-    const query = defaults(this.props.query, defaultQuery);
+    const query = { ...defaultQuery, ...this.props.query };
     const { topicName, partition, autoOffsetReset, timestampMode, lastN } = query;
 
     return (

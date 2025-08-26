@@ -3,7 +3,7 @@ import { InlineField, Input, Divider, SecretInput, Checkbox, SecretTextArea, Sel
 import { DataSourcePluginOptionsEditorProps } from '@grafana/data';
 import { ConfigSection, DataSourceDescription } from '@grafana/plugin-ui';
 import { KafkaDataSourceOptions, defaultDataSourceOptions, KafkaSecureJsonData } from './types';
-import { defaults, isEqual } from 'lodash';
+import { isEqual } from 'lodash';
 
 interface Props extends DataSourcePluginOptionsEditorProps<KafkaDataSourceOptions> {}
 
@@ -27,7 +27,7 @@ export const ConfigEditor = (props: Props) => {
 
   // Ensure default values are set once
   useEffect(() => {
-    const jsonData = defaults(options.jsonData, defaultDataSourceOptions);
+    const jsonData = { ...defaultDataSourceOptions, ...options.jsonData };
     if (!isEqual(options.jsonData, jsonData)) {
       onOptionsChange({ ...options, jsonData });
     }
@@ -126,7 +126,7 @@ export const ConfigEditor = (props: Props) => {
     onOptionsChange({ ...options, jsonData: { ...options.jsonData, timeout: validated } });
   };
 
-  const jsonData = defaults(options.jsonData, defaultDataSourceOptions);
+  const jsonData = { ...defaultDataSourceOptions, ...options.jsonData };
   const secureJsonData = (options.secureJsonData || {}) as KafkaSecureJsonData;
   const { secureJsonFields } = options;
 
