@@ -139,6 +139,12 @@ beforeEach(() => {
 });
 
 describe('ConfigEditor', () => {
+  it('does not mutate frozen props', () => {
+    const frozenOptions = Object.freeze(createMockOptions());
+    expect(() => {
+      render(<ConfigEditor options={frozenOptions} onOptionsChange={mockOnOptionsChange} />);
+    }).not.toThrow();
+  });
   it('renders data source description', () => {
     renderConfigEditor();
     expect(screen.getByTestId('datasource-description')).toBeInTheDocument();
