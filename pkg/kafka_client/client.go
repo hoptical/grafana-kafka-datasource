@@ -49,6 +49,12 @@ type Options struct {
 	TLSClientKey      string `json:"tlsClientKey"`
 	// Advanced settings
 	Timeout int32 `json:"timeout"` // ms; primary timeout
+	// Avro Configuration
+	MessageFormat             string `json:"messageFormat"`
+	SchemaRegistryUrl         string `json:"schemaRegistryUrl"`
+	SchemaRegistryUsername    string `json:"schemaRegistryUsername"`
+	SchemaRegistryPassword    string `json:"schemaRegistryPassword"`
+	AvroSubjectNamingStrategy string `json:"avroSubjectNamingStrategy"`
 }
 
 type KafkaClient struct {
@@ -74,10 +80,17 @@ type KafkaClient struct {
 	TLSClientKey      string
 	// Advanced settings
 	Timeout int32 // effective timeout (ms)
+	// Avro Configuration
+	MessageFormat             string
+	SchemaRegistryUrl         string
+	SchemaRegistryUsername    string
+	SchemaRegistryPassword    string
+	AvroSubjectNamingStrategy string
 }
 
 type KafkaMessage struct {
 	Value     interface{} // Can be map[string]interface{} or []interface{}
+	RawValue  []byte      // Raw message bytes for Avro decoding
 	Timestamp time.Time
 	Offset    int64
 }
@@ -119,6 +132,12 @@ func NewKafkaClient(options Options) KafkaClient {
 		TLSClientCert:     options.TLSClientCert,
 		TLSClientKey:      options.TLSClientKey,
 		Timeout:           effectiveTimeoutMs,
+		// Avro Configuration
+		MessageFormat:             options.MessageFormat,
+		SchemaRegistryUrl:         options.SchemaRegistryUrl,
+		SchemaRegistryUsername:    options.SchemaRegistryUsername,
+		SchemaRegistryPassword:    options.SchemaRegistryPassword,
+		AvroSubjectNamingStrategy: options.AvroSubjectNamingStrategy,
 	}
 }
 
@@ -283,20 +302,26 @@ func (client *KafkaClient) ConsumerPull(ctx context.Context, reader *kafka.Reade
 	if err != nil {
 		return message, fmt.Errorf("error reading message from Kafka: %w", err)
 	}
-	// Decode while preserving numeric formats via UseNumber, and support both objects and arrays.
+
+	// Store raw bytes for potential Avro decoding
+	message.RawValue = msg.Value
+
+	// Try to decode as JSON first (for backward compatibility)
 	var doc interface{}
 	dec := json.NewDecoder(bytes.NewReader(msg.Value))
 	dec.UseNumber()
 	if err := dec.Decode(&doc); err != nil {
-		return message, fmt.Errorf("error unmarshalling message: %w", err)
-	}
-
-	// Accept both objects and arrays at the top level
-	switch v := doc.(type) {
-	case map[string]interface{}, []interface{}:
-		message.Value = v
-	default:
-		return message, fmt.Errorf("message JSON must be an object or array")
+		// If JSON decoding fails, we'll handle it later (could be Avro)
+		message.Value = nil
+	} else {
+		// Accept both objects and arrays at the top level
+		switch v := doc.(type) {
+		case map[string]interface{}, []interface{}:
+			message.Value = v
+		default:
+			// If it's not a valid JSON object/array, it might be Avro
+			message.Value = nil
+		}
 	}
 
 	message.Offset = msg.Offset
@@ -411,4 +436,29 @@ func getKafkaLogger(level string) (kafka.LoggerFunc, kafka.LoggerFunc) {
 		errorLogger = func(msg string, args ...interface{}) { log.Printf("[KAFKA ERROR] "+msg, args...) }
 	}
 	return logger, errorLogger
+}
+
+// GetMessageFormat returns the message format setting
+func (client *KafkaClient) GetMessageFormat() string {
+	return client.MessageFormat
+}
+
+// GetSchemaRegistryUrl returns the Schema Registry URL
+func (client *KafkaClient) GetSchemaRegistryUrl() string {
+	return client.SchemaRegistryUrl
+}
+
+// GetSchemaRegistryUsername returns the Schema Registry username
+func (client *KafkaClient) GetSchemaRegistryUsername() string {
+	return client.SchemaRegistryUsername
+}
+
+// GetSchemaRegistryPassword returns the Schema Registry password
+func (client *KafkaClient) GetSchemaRegistryPassword() string {
+	return client.SchemaRegistryPassword
+}
+
+// GetAvroSubjectNamingStrategy returns the Avro subject naming strategy
+func (client *KafkaClient) GetAvroSubjectNamingStrategy() string {
+	return client.AvroSubjectNamingStrategy
 }

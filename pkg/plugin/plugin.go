@@ -39,6 +39,12 @@ type KafkaClientAPI interface {
 	NewStreamReader(ctx context.Context, topic string, partition int32, autoOffsetReset string, lastN int32) (*kafka.Reader, error)
 	ConsumerPull(ctx context.Context, reader *kafka.Reader) (kafka_client.KafkaMessage, error)
 	Dispose()
+	// Avro-related methods
+	GetMessageFormat() string
+	GetSchemaRegistryUrl() string
+	GetSchemaRegistryUsername() string
+	GetSchemaRegistryPassword() string
+	GetAvroSubjectNamingStrategy() string
 }
 
 var (
@@ -82,6 +88,14 @@ func getDatasourceSettings(s backend.DataSourceInstanceSettings) (*kafka_client.
 	}
 	if clientKey, exists := s.DecryptedSecureJSONData["tlsClientKey"]; exists {
 		settings.TLSClientKey = clientKey
+	}
+
+	// Schema Registry authentication fields from secure JSON data
+	if schemaRegistryUsername, exists := s.DecryptedSecureJSONData["schemaRegistryUsername"]; exists {
+		settings.SchemaRegistryUsername = schemaRegistryUsername
+	}
+	if schemaRegistryPassword, exists := s.DecryptedSecureJSONData["schemaRegistryPassword"]; exists {
+		settings.SchemaRegistryPassword = schemaRegistryPassword
 	}
 
 	// Parse the JSONData to handle specific field types
@@ -145,6 +159,10 @@ type queryModel struct {
 	AutoOffsetReset string      `json:"autoOffsetReset"`
 	TimestampMode   string      `json:"timestampMode"`
 	LastN           int32       `json:"lastN"`
+	// Avro Configuration
+	MessageFormat    string `json:"messageFormat"`
+	AvroSchemaSource string `json:"avroSchemaSource"`
+	AvroSchema       string `json:"avroSchema"`
 }
 
 func (d *KafkaDatasource) query(_ context.Context, pCtx backend.PluginContext, query backend.DataQuery) backend.DataResponse {

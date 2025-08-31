@@ -1,6 +1,6 @@
 import { of } from 'rxjs';
 import { DataSource } from '../datasource';
-import { AutoOffsetReset, TimestampMode, type KafkaQuery } from '../types';
+import { AutoOffsetReset, TimestampMode, MessageFormat, AvroSchemaSource, AvroSubjectNamingStrategy, type KafkaQuery } from '../types';
 
 // Mock @grafana/runtime pieces used by DataSource
 let capturedPath: string | undefined;
@@ -69,6 +69,9 @@ describe('DataSource', () => {
         autoOffsetReset: AutoOffsetReset.LATEST,
         timestampMode: TimestampMode.Message,
         lastN: 100,
+        messageFormat: MessageFormat.JSON,
+        avroSchemaSource: AvroSchemaSource.SCHEMA_REGISTRY,
+        avroSubjectNamingStrategy: AvroSubjectNamingStrategy.TOPIC_NAME,
       });
     });
     it('returns query values with Kafka Message Timestamp mode', () => {
@@ -114,6 +117,7 @@ describe('DataSource', () => {
         autoOffsetReset: AutoOffsetReset.LAST_N,
         timestampMode: TimestampMode.Now,
         lastN: undefined,
+        messageFormat: MessageFormat.JSON,
       };
       const out = ds.applyTemplateVariables(base, {} as any);
       expect(out.topicName).toBe('topic-5');
@@ -133,6 +137,7 @@ describe('DataSource', () => {
         partition: 'all',
         autoOffsetReset: AutoOffsetReset.LATEST,
         timestampMode: TimestampMode.Now,
+        messageFormat: MessageFormat.JSON,
       };
 
       const result = ds.applyTemplateVariables(query, {});
@@ -146,6 +151,7 @@ describe('DataSource', () => {
         partition: '${var}' as any,
         autoOffsetReset: AutoOffsetReset.LATEST,
         timestampMode: TimestampMode.Now,
+        messageFormat: MessageFormat.JSON,
       };
 
       const result = ds.applyTemplateVariables(query, {});
@@ -164,6 +170,7 @@ describe('DataSource', () => {
         partition: 2,
         autoOffsetReset: AutoOffsetReset.LATEST,
         timestampMode: TimestampMode.Now,
+        messageFormat: MessageFormat.JSON,
       };
 
       const result = ds.applyTemplateVariables(query, {});
@@ -182,6 +189,7 @@ describe('DataSource', () => {
         partition: '${invalid}' as any,
         autoOffsetReset: AutoOffsetReset.LATEST,
         timestampMode: TimestampMode.Now,
+        messageFormat: MessageFormat.JSON,
       };
 
       const result = ds.applyTemplateVariables(query, {});
@@ -196,6 +204,7 @@ describe('DataSource', () => {
         autoOffsetReset: AutoOffsetReset.LAST_N,
         timestampMode: TimestampMode.Now,
         lastN: 0,
+        messageFormat: MessageFormat.JSON,
       };
 
       const result = ds.applyTemplateVariables(query, {});
@@ -211,6 +220,7 @@ describe('DataSource', () => {
         autoOffsetReset: AutoOffsetReset.LAST_N,
         timestampMode: TimestampMode.Now,
         lastN: undefined,
+        messageFormat: MessageFormat.JSON,
       };
 
       const withTemplate = { ...query, lastN: undefined } as any;
@@ -228,6 +238,7 @@ describe('DataSource', () => {
         partition: 0,
         autoOffsetReset: AutoOffsetReset.LATEST,
         timestampMode: TimestampMode.Now,
+        messageFormat: MessageFormat.JSON,
       } as any;
 
       // Trigger query which builds the path internally
@@ -240,7 +251,7 @@ describe('DataSource', () => {
             expect(capturedPath).toBe('my%20topic-0-latest');
             // Now with LAST_N
             capturedPath = undefined;
-            const target2: KafkaQuery = { ...target, autoOffsetReset: AutoOffsetReset.LAST_N, lastN: 10 } as any;
+            const target2: KafkaQuery = { ...target, autoOffsetReset: AutoOffsetReset.LAST_N, lastN: 10, messageFormat: MessageFormat.JSON } as any;
             ds.query({ targets: [target2] } as any).subscribe({
               complete: () => {
                 try {
@@ -292,6 +303,7 @@ describe('DataSource', () => {
         partition: 'all',
         autoOffsetReset: AutoOffsetReset.EARLIEST,
         timestampMode: TimestampMode.Now,
+        messageFormat: MessageFormat.JSON,
       } as any;
 
       ds.query({ targets: [target] } as any).subscribe({

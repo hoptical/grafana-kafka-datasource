@@ -24,6 +24,37 @@ func NewStreamManager(client KafkaClientAPI) *StreamManager {
 	return &StreamManager{client: client}
 }
 
+// decodeAvroMessage decodes an Avro message using the appropriate schema
+func (sm *StreamManager) decodeAvroMessage(data []byte, qm queryModel) (interface{}, error) {
+	var schema string
+	var err error
+
+	if qm.AvroSchemaSource == "inlineSchema" && qm.AvroSchema != "" {
+		// Use inline schema
+		schema = qm.AvroSchema
+	} else {
+		// Use Schema Registry
+		schemaRegistryUrl := sm.client.GetSchemaRegistryUrl()
+		if schemaRegistryUrl == "" {
+			return nil, fmt.Errorf("Schema Registry URL not configured")
+		}
+
+		subject := kafka_client.GetSubjectName(qm.Topic, sm.client.GetAvroSubjectNamingStrategy())
+		schemaClient := kafka_client.NewSchemaRegistryClient(
+			schemaRegistryUrl,
+			sm.client.GetSchemaRegistryUsername(),
+			sm.client.GetSchemaRegistryPassword(),
+		)
+		schema, err = schemaClient.GetLatestSchema(subject)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get schema from registry: %w", err)
+		}
+	}
+
+	// Decode the Avro message
+	return kafka_client.DecodeAvroMessage(data, schema)
+}
+
 // ProcessMessage converts a Kafka message into a Grafana data frame.
 func (sm *StreamManager) ProcessMessage(
 	msg kafka_client.KafkaMessage,
@@ -31,6 +62,20 @@ func (sm *StreamManager) ProcessMessage(
 	partitions []int32,
 	qm queryModel,
 ) (*data.Frame, error) {
+	// Check if message needs Avro decoding
+	messageValue := msg.Value
+	if qm.MessageFormat == "avro" && msg.Value == nil && len(msg.RawValue) > 0 {
+		// Try to decode as Avro
+		decoded, err := sm.decodeAvroMessage(msg.RawValue, qm)
+		if err != nil {
+			log.DefaultLogger.Warn("Failed to decode Avro message, falling back to raw bytes", "error", err)
+			// Fall back to treating raw bytes as string
+			messageValue = string(msg.RawValue)
+		} else {
+			messageValue = decoded
+		}
+	}
+
 	frame := data.NewFrame("response")
 
 	// Add time field
@@ -59,8 +104,7 @@ func (sm *StreamManager) ProcessMessage(
 	flat := make(map[string]interface{})
 
 	// Handle top-level arrays by wrapping them in an object
-	messageValue := msg.Value
-	if arr, ok := msg.Value.([]interface{}); ok {
+	if arr, ok := messageValue.([]interface{}); ok {
 		// For top-level arrays, create indexed keys for each element
 		wrappedValue := make(map[string]interface{})
 		for i, element := range arr {

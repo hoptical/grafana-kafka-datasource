@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryEditor } from '../QueryEditor';
-import { AutoOffsetReset, TimestampMode, defaultQuery, type KafkaQuery } from '../types';
+import { AutoOffsetReset, TimestampMode, MessageFormat, defaultQuery, type KafkaQuery } from '../types';
 
 // Mock @grafana/ui components
 jest.mock('@grafana/ui', () => ({
@@ -85,6 +85,7 @@ describe('QueryEditor', () => {
       autoOffsetReset: AutoOffsetReset.LATEST,
       timestampMode: TimestampMode.Message,
       lastN: 100,
+      messageFormat: MessageFormat.JSON,
     });
     expect(() => {
       render(

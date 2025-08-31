@@ -3,7 +3,7 @@ import React, { ChangeEvent, PureComponent } from 'react';
 import { InlineField, InlineFieldRow, Input, Select, Button, Spinner, Alert, InlineLabel } from '@grafana/ui';
 import { QueryEditorProps } from '@grafana/data';
 import { DataSource } from './datasource';
-import { defaultQuery, KafkaDataSourceOptions, KafkaQuery, AutoOffsetReset, TimestampMode } from './types';
+import { defaultQuery, KafkaDataSourceOptions, KafkaQuery, AutoOffsetReset, TimestampMode, AvroSchemaSource, MessageFormat } from './types';
 
 // Constants for Last N messages input
 const LAST_N_MIN = 1;
@@ -19,6 +19,16 @@ const autoResetOffsets: Array<{ label: string; value: AutoOffsetReset }> = [
 const timestampModes: Array<{ label: string; value: TimestampMode }> = [
   { label: 'Kafka Event Time', value: TimestampMode.Message },
   { label: 'Dashboard received time', value: TimestampMode.Now },
+];
+
+const avroSchemaSources: Array<{ label: string; value: AvroSchemaSource }> = [
+  { label: 'Schema Registry', value: AvroSchemaSource.SCHEMA_REGISTRY },
+  { label: 'Inline Schema', value: AvroSchemaSource.INLINE_SCHEMA },
+];
+
+const messageFormats: Array<{ label: string; value: MessageFormat }> = [
+  { label: 'JSON', value: MessageFormat.JSON },
+  { label: 'Avro', value: MessageFormat.AVRO },
 ];
 
 const partitionOptions: Array<{ label: string; value: number | 'all' }> = [{ label: 'All partitions', value: 'all' }];
@@ -201,6 +211,38 @@ export class QueryEditor extends PureComponent<Props, State> {
     onRunQuery();
   };
 
+  onAvroSchemaSourceChanged = (value: AvroSchemaSource) => {
+    const { onChange, query, onRunQuery } = this.props;
+    onChange({ ...query, avroSchemaSource: value });
+    onRunQuery();
+  };
+
+  onAvroSchemaChanged = (event: ChangeEvent<HTMLTextAreaElement>) => {
+    const { onChange, query, onRunQuery } = this.props;
+    onChange({ ...query, avroSchema: event.target.value });
+    onRunQuery();
+  };
+
+  onAvroSchemaFileUpload = (event: ChangeEvent<HTMLInputElement>) => {
+    const { onChange, query, onRunQuery } = this.props;
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const schema = e.target?.result as string;
+        onChange({ ...query, avroSchema: schema });
+        onRunQuery();
+      };
+      reader.readAsText(file);
+    }
+  };
+
+  onMessageFormatChanged = (value: MessageFormat) => {
+    const { onChange, query, onRunQuery } = this.props;
+    onChange({ ...query, messageFormat: value });
+    onRunQuery();
+  };
+
   onTopicSuggestionClick = (topic: string) => {
     const { onChange, query, onRunQuery } = this.props;
     onChange({ ...query, topicName: topic });
@@ -230,7 +272,7 @@ export class QueryEditor extends PureComponent<Props, State> {
 
   render() {
     const query = { ...defaultQuery, ...this.props.query };
-    const { topicName, partition, autoOffsetReset, timestampMode, lastN } = query;
+    const { topicName, partition, autoOffsetReset, timestampMode, lastN, messageFormat } = query;
 
     return (
       <>
@@ -387,6 +429,74 @@ export class QueryEditor extends PureComponent<Props, State> {
             />
           </InlineField>
         </InlineFieldRow>
+
+        <InlineFieldRow>
+          <InlineField 
+            label="Message Format" 
+            labelWidth={20} 
+            tooltip="Format of the Kafka messages (JSON or Avro)"
+          >
+            <Select
+              width={25}
+              value={messageFormat || MessageFormat.JSON}
+              options={messageFormats}
+              onChange={(value) => this.onMessageFormatChanged(value.value as MessageFormat)}
+            />
+          </InlineField>
+        </InlineFieldRow>
+
+        {/* Avro Configuration */}
+        {messageFormat === MessageFormat.AVRO && (
+          <>
+            <InlineFieldRow>
+              <InlineField
+                label="Avro Schema Source"
+                labelWidth={20}
+                tooltip="Source of the Avro schema for deserialization"
+              >
+                <Select
+                  width={25}
+                  value={query.avroSchemaSource || AvroSchemaSource.SCHEMA_REGISTRY}
+                  options={avroSchemaSources}
+                  onChange={(value) => this.onAvroSchemaSourceChanged(value.value as AvroSchemaSource)}
+                />
+              </InlineField>
+            </InlineFieldRow>
+
+            {query.avroSchemaSource === AvroSchemaSource.INLINE_SCHEMA && (
+              <InlineFieldRow>
+                <InlineField
+                  label="Avro Schema"
+                  labelWidth={20}
+                  tooltip="Upload or paste your Avro schema (.avsc file)"
+                  style={{ minWidth: 400 }}
+                >
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: 400 }}>
+                    <input
+                      type="file"
+                      accept=".avsc,.json"
+                      onChange={this.onAvroSchemaFileUpload}
+                      style={{ marginBottom: '8px' }}
+                    />
+                    <textarea
+                      value={query.avroSchema || ''}
+                      onChange={this.onAvroSchemaChanged}
+                      placeholder="Paste your Avro schema JSON here..."
+                      rows={8}
+                      style={{
+                        width: '100%',
+                        fontFamily: 'monospace',
+                        fontSize: '12px',
+                        resize: 'vertical',
+                      }}
+                    />
+                  </div>
+                </InlineField>
+              </InlineFieldRow>
+            )}
+          </>
+        )}
+
         {autoOffsetReset !== AutoOffsetReset.LATEST && (
           <div style={{ marginTop: 8 }}>
             <Alert severity="warning" title="Potential higher load">
