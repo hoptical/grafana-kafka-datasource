@@ -37,6 +37,21 @@ const mockInstanceSettings = {
 };
 
 describe('DataSource', () => {
+  it('does not mutate frozen query props', () => {
+    const frozenQuery = Object.freeze({
+      topicName: 'test-topic',
+      partition: 'all',
+      autoOffsetReset: AutoOffsetReset.LATEST,
+      timestampMode: TimestampMode.Message,
+      lastN: 100,
+      refId: 'A',
+    });
+    ds = new DataSource(mockInstanceSettings as any);
+    expect(() => {
+      ds.filterQuery(frozenQuery as KafkaQuery);
+      ds.applyTemplateVariables(frozenQuery as KafkaQuery, {});
+    }).not.toThrow();
+  });
   let ds: DataSource;
 
   beforeEach(() => {

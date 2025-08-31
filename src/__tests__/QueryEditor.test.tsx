@@ -77,6 +77,27 @@ const renderEditor = (query?: Partial<KafkaQuery>) =>
   );
 
 describe('QueryEditor', () => {
+  it('does not mutate frozen props', () => {
+    const frozenQuery: KafkaQuery = Object.freeze({
+      refId: 'A',
+      topicName: '',
+      partition: 'all',
+      autoOffsetReset: AutoOffsetReset.LATEST,
+      timestampMode: TimestampMode.Message,
+      lastN: 100,
+    });
+    expect(() => {
+      render(
+        <QueryEditor
+          datasource={mockDs}
+          onChange={onChange}
+          onRunQuery={onRunQuery}
+          query={frozenQuery}
+          app={'explore' as any}
+        />
+      );
+    }).not.toThrow();
+  });
   it('disables browser autocomplete on topic input and shows suggestions panel', async () => {
     renderEditor({ topicName: '' });
     const input = screen.getByPlaceholderText('Enter topic name') as HTMLInputElement;
