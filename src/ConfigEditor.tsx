@@ -385,7 +385,7 @@ export const ConfigEditor = (props: Props) => {
       <ConfigSection title="Schema Registry" description="Configure Confluent Schema Registry for Avro message decoding">
         <InlineField
           label="Schema Registry URL"
-          labelWidth={20}
+          labelWidth={25}
           tooltip="URL of the Confluent Schema Registry (e.g., http://localhost:8081)"
           grow
         >
@@ -400,7 +400,7 @@ export const ConfigEditor = (props: Props) => {
 
         <InlineField
           label="Username"
-          labelWidth={20}
+          labelWidth={25}
           tooltip="Schema Registry authentication username (optional)"
           grow
         >
@@ -415,7 +415,7 @@ export const ConfigEditor = (props: Props) => {
 
         <InlineField
           label="Password"
-          labelWidth={20}
+          labelWidth={25}
           tooltip="Schema Registry authentication password (optional)"
           grow
         >

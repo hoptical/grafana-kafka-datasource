@@ -433,7 +433,7 @@ export class QueryEditor extends PureComponent<Props, State> {
         <InlineFieldRow>
           <InlineField 
             label="Message Format" 
-            labelWidth={20} 
+            labelWidth={25} 
             tooltip="Format of the Kafka messages (JSON or Avro)"
           >
             <Select
@@ -451,7 +451,7 @@ export class QueryEditor extends PureComponent<Props, State> {
             <InlineFieldRow>
               <InlineField
                 label="Avro Schema Source"
-                labelWidth={20}
+                labelWidth={25}
                 tooltip="Source of the Avro schema for deserialization"
               >
                 <Select
