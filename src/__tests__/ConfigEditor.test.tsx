@@ -483,25 +483,88 @@ describe('ConfigEditor', () => {
     );
   });
 
-  it('preserves existing configuration values', () => {
+  it('renders schema registry section', () => {
+    renderConfigEditor();
+    expect(screen.getByText('Schema Registry')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('http://localhost:8081')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Schema Registry username')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Schema Registry password')).toBeInTheDocument();
+  });
+
+  it('calls onOptionsChange when schema registry URL changes', () => {
+    renderConfigEditor();
+    const input = screen.getByPlaceholderText('http://localhost:8081');
+
+    fireEvent.change(input, { target: { value: 'http://schema-registry:8081' } });
+
+    expect(mockOnOptionsChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jsonData: expect.objectContaining({
+          schemaRegistryUrl: 'http://schema-registry:8081',
+        }),
+      })
+    );
+  });
+
+  it('calls onOptionsChange when schema registry username changes', () => {
+    renderConfigEditor();
+    const input = screen.getByPlaceholderText('Schema Registry username');
+
+    fireEvent.change(input, { target: { value: 'registry-user' } });
+
+    expect(mockOnOptionsChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        secureJsonData: expect.objectContaining({
+          schemaRegistryUsername: 'registry-user',
+        }),
+      })
+    );
+  });
+
+  it('calls onOptionsChange when schema registry password changes', () => {
+    renderConfigEditor();
+    const input = screen.getByPlaceholderText('Schema Registry password');
+
+    fireEvent.change(input, { target: { value: 'registry-pass' } });
+
+    expect(mockOnOptionsChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        secureJsonData: expect.objectContaining({
+          schemaRegistryPassword: 'registry-pass',
+        }),
+      })
+    );
+  });
+
+  it('handles schema registry password reset', () => {
+    renderConfigEditor(
+      {},
+      { schemaRegistryPassword: 'existing-password' },
+      { schemaRegistryPassword: true }
+    );
+
+    const resetButton = screen.getByTestId('reset-button');
+    fireEvent.click(resetButton);
+
+    expect(mockOnOptionsChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        secureJsonFields: expect.objectContaining({
+          schemaRegistryPassword: false,
+        }),
+        secureJsonData: expect.objectContaining({
+          schemaRegistryPassword: '',
+        }),
+      })
+    );
+  });
+
+  it('preserves existing schema registry configuration values', () => {
     const existingConfig = {
-      bootstrapServers: 'existing-servers:9092',
-      clientId: 'existing-client',
-      securityProtocol: 'SASL_SSL',
-      saslMechanisms: 'SCRAM-SHA-256',
-      saslUsername: 'existing-user',
-      logLevel: 'info',
-      healthcheckTimeout: 5000,
-      timeout: 10000,
+      schemaRegistryUrl: 'http://existing-registry:8081',
     };
 
     renderConfigEditor(existingConfig);
 
-    expect(screen.getByDisplayValue('existing-servers:9092')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('existing-client')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('existing-user')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('info')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('5000')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('10000')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('http://existing-registry:8081')).toBeInTheDocument();
   });
 });

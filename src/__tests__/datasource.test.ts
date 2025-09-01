@@ -1,6 +1,6 @@
 import { of } from 'rxjs';
 import { DataSource } from '../datasource';
-import { AutoOffsetReset, TimestampMode, MessageFormat, AvroSchemaSource, AvroSubjectNamingStrategy, type KafkaQuery } from '../types';
+import { AutoOffsetReset, TimestampMode, MessageFormat, AvroSchemaSource, type KafkaQuery } from '../types';
 
 // Mock @grafana/runtime pieces used by DataSource
 let capturedPath: string | undefined;
@@ -71,7 +71,6 @@ describe('DataSource', () => {
         lastN: 100,
         messageFormat: MessageFormat.JSON,
         avroSchemaSource: AvroSchemaSource.SCHEMA_REGISTRY,
-        avroSubjectNamingStrategy: AvroSubjectNamingStrategy.TOPIC_NAME,
       });
     });
     it('returns query values with Kafka Message Timestamp mode', () => {

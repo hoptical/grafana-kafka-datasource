@@ -29,22 +29,12 @@ export enum AvroSchemaSource {
   INLINE_SCHEMA = 'inlineSchema',
 }
 
-export enum AvroSubjectNamingStrategy {
-  TOPIC_NAME = 'topicName',
-  RECORD_NAME = 'recordName',
-  TOPIC_RECORD_NAME = 'topicRecordName',
-}
-
 export type MessageFormatInterface = {
   [key in MessageFormat]: string;
 };
 
 export type AvroSchemaSourceInterface = {
   [key in AvroSchemaSource]: string;
-};
-
-export type AvroSubjectNamingStrategyInterface = {
-  [key in AvroSubjectNamingStrategy]: string;
 };
 
 export interface KafkaDataSourceOptions extends DataSourceJsonData {
@@ -105,7 +95,6 @@ export interface KafkaQuery extends DataQuery {
   // Avro Configuration
   avroSchemaSource?: AvroSchemaSource;
   avroSchema?: string;
-  avroSubjectNamingStrategy?: AvroSubjectNamingStrategy;
 }
 
 export const defaultQuery: Partial<KafkaQuery> = {
@@ -115,5 +104,4 @@ export const defaultQuery: Partial<KafkaQuery> = {
   lastN: 100,
   messageFormat: MessageFormat.JSON,
   avroSchemaSource: AvroSchemaSource.SCHEMA_REGISTRY,
-  avroSubjectNamingStrategy: AvroSubjectNamingStrategy.TOPIC_NAME,
 };
