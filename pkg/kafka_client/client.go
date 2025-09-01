@@ -50,11 +50,10 @@ type Options struct {
 	// Advanced settings
 	Timeout int32 `json:"timeout"` // ms; primary timeout
 	// Avro Configuration
-	MessageFormat             string `json:"messageFormat"`
-	SchemaRegistryUrl         string `json:"schemaRegistryUrl"`
-	SchemaRegistryUsername    string `json:"schemaRegistryUsername"`
-	SchemaRegistryPassword    string `json:"schemaRegistryPassword"`
-	AvroSubjectNamingStrategy string `json:"avroSubjectNamingStrategy"`
+	MessageFormat          string `json:"messageFormat"`
+	SchemaRegistryUrl      string `json:"schemaRegistryUrl"`
+	SchemaRegistryUsername string `json:"schemaRegistryUsername"`
+	SchemaRegistryPassword string `json:"schemaRegistryPassword"`
 }
 
 type KafkaClient struct {
@@ -81,11 +80,10 @@ type KafkaClient struct {
 	// Advanced settings
 	Timeout int32 // effective timeout (ms)
 	// Avro Configuration
-	MessageFormat             string
-	SchemaRegistryUrl         string
-	SchemaRegistryUsername    string
-	SchemaRegistryPassword    string
-	AvroSubjectNamingStrategy string
+	MessageFormat          string
+	SchemaRegistryUrl      string
+	SchemaRegistryUsername string
+	SchemaRegistryPassword string
 }
 
 type KafkaMessage struct {
@@ -133,11 +131,10 @@ func NewKafkaClient(options Options) KafkaClient {
 		TLSClientKey:      options.TLSClientKey,
 		Timeout:           effectiveTimeoutMs,
 		// Avro Configuration
-		MessageFormat:             options.MessageFormat,
-		SchemaRegistryUrl:         options.SchemaRegistryUrl,
-		SchemaRegistryUsername:    options.SchemaRegistryUsername,
-		SchemaRegistryPassword:    options.SchemaRegistryPassword,
-		AvroSubjectNamingStrategy: options.AvroSubjectNamingStrategy,
+		MessageFormat:          options.MessageFormat,
+		SchemaRegistryUrl:      options.SchemaRegistryUrl,
+		SchemaRegistryUsername: options.SchemaRegistryUsername,
+		SchemaRegistryPassword: options.SchemaRegistryPassword,
 	}
 }
 
@@ -460,5 +457,5 @@ func (client *KafkaClient) GetSchemaRegistryPassword() string {
 
 // GetAvroSubjectNamingStrategy returns the Avro subject naming strategy
 func (client *KafkaClient) GetAvroSubjectNamingStrategy() string {
-	return client.AvroSubjectNamingStrategy
+	return "topicName" // Default strategy
 }

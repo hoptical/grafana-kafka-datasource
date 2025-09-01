@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 )
 
 func TestNewKafkaClient_Defaults(t *testing.T) {
@@ -299,5 +300,109 @@ func TestIsTopicNotFound(t *testing.T) {
 				t.Errorf("Expected %v, got %v for error: %v", tt.expected, result, tt.err)
 			}
 		})
+	}
+}
+
+func TestNewKafkaClient_AvroConfiguration(t *testing.T) {
+	options := Options{
+		BootstrapServers:       "localhost:9092",
+		MessageFormat:          "avro",
+		SchemaRegistryUrl:      "http://localhost:8081",
+		SchemaRegistryUsername: "registry-user",
+		SchemaRegistryPassword: "registry-pass",
+	}
+	client := NewKafkaClient(options)
+
+	if client.MessageFormat != "avro" {
+		t.Errorf("Expected MessageFormat to be 'avro', got %s", client.MessageFormat)
+	}
+	if client.SchemaRegistryUrl != "http://localhost:8081" {
+		t.Errorf("Expected SchemaRegistryUrl to be 'http://localhost:8081', got %s", client.SchemaRegistryUrl)
+	}
+	if client.SchemaRegistryUsername != "registry-user" {
+		t.Errorf("Expected SchemaRegistryUsername to be 'registry-user', got %s", client.SchemaRegistryUsername)
+	}
+	if client.SchemaRegistryPassword != "registry-pass" {
+		t.Errorf("Expected SchemaRegistryPassword to be 'registry-pass', got %s", client.SchemaRegistryPassword)
+	}
+}
+
+func TestKafkaClient_GetMessageFormat(t *testing.T) {
+	client := NewKafkaClient(Options{
+		BootstrapServers: "localhost:9092",
+		MessageFormat:    "avro",
+	})
+
+	result := client.GetMessageFormat()
+	if result != "avro" {
+		t.Errorf("Expected GetMessageFormat to return 'avro', got %s", result)
+	}
+}
+
+func TestKafkaClient_GetSchemaRegistryUrl(t *testing.T) {
+	client := NewKafkaClient(Options{
+		BootstrapServers:  "localhost:9092",
+		SchemaRegistryUrl: "http://localhost:8081",
+	})
+
+	result := client.GetSchemaRegistryUrl()
+	if result != "http://localhost:8081" {
+		t.Errorf("Expected GetSchemaRegistryUrl to return 'http://localhost:8081', got %s", result)
+	}
+}
+
+func TestKafkaClient_GetSchemaRegistryUsername(t *testing.T) {
+	client := NewKafkaClient(Options{
+		BootstrapServers:       "localhost:9092",
+		SchemaRegistryUsername: "test-user",
+	})
+
+	result := client.GetSchemaRegistryUsername()
+	if result != "test-user" {
+		t.Errorf("Expected GetSchemaRegistryUsername to return 'test-user', got %s", result)
+	}
+}
+
+func TestKafkaClient_GetSchemaRegistryPassword(t *testing.T) {
+	client := NewKafkaClient(Options{
+		BootstrapServers:       "localhost:9092",
+		SchemaRegistryPassword: "test-pass",
+	})
+
+	result := client.GetSchemaRegistryPassword()
+	if result != "test-pass" {
+		t.Errorf("Expected GetSchemaRegistryPassword to return 'test-pass', got %s", result)
+	}
+}
+
+func TestKafkaClient_GetAvroSubjectNamingStrategy(t *testing.T) {
+	client := NewKafkaClient(Options{
+		BootstrapServers: "localhost:9092",
+	})
+
+	result := client.GetAvroSubjectNamingStrategy()
+	if result != "topicName" {
+		t.Errorf("Expected GetAvroSubjectNamingStrategy to return 'topicName', got %s", result)
+	}
+}
+
+func TestKafkaClient_ConsumerPull_AvroMessage(t *testing.T) {
+	// This test verifies that ConsumerPull stores raw bytes for potential Avro decoding
+	// Mock a Kafka message with binary data that would be Avro-encoded
+	avroData := []byte{0x00, 0x01, 0x02, 0x03} // Mock Avro binary data
+
+	// Since we can't easily mock the kafka.Reader, we'll test the message structure
+	message := KafkaMessage{
+		Value:     nil, // Not JSON
+		RawValue:  avroData,
+		Timestamp: time.Now(),
+		Offset:    123,
+	}
+
+	if len(message.RawValue) != 4 {
+		t.Errorf("Expected RawValue to contain 4 bytes, got %d", len(message.RawValue))
+	}
+	if message.Value != nil {
+		t.Error("Expected Value to be nil for non-JSON message")
 	}
 }

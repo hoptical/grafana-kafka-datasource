@@ -50,6 +50,13 @@ func (m *mockStreamClient) ConsumerPull(ctx context.Context, reader *kafka.Reade
 	return msg, nil
 }
 
+// Avro-related methods
+func (m *mockStreamClient) GetMessageFormat() string             { return "json" }
+func (m *mockStreamClient) GetSchemaRegistryUrl() string         { return "" }
+func (m *mockStreamClient) GetSchemaRegistryUsername() string    { return "" }
+func (m *mockStreamClient) GetSchemaRegistryPassword() string    { return "" }
+func (m *mockStreamClient) GetAvroSubjectNamingStrategy() string { return "topicName" }
+
 func TestStreamManager_ValidateAndGetPartitions(t *testing.T) {
 	tests := []struct {
 		name          string

@@ -32,6 +32,12 @@ type mockKafkaClient struct {
 	streamReaderErr  error
 	consumerMessages []kafka_client.KafkaMessage
 	consumerErr      error
+	// Avro-related fields
+	messageFormat             string
+	schemaRegistryUrl         string
+	schemaRegistryUsername    string
+	schemaRegistryPassword    string
+	avroSubjectNamingStrategy string
 }
 
 func (m *mockKafkaClient) NewConnection() error { return m.newConnErr }
@@ -63,6 +69,13 @@ func (m *mockKafkaClient) ConsumerPull(ctx context.Context, reader *kafka.Reader
 	return msg, nil
 }
 func (m *mockKafkaClient) Dispose() {}
+
+// Avro-related methods
+func (m *mockKafkaClient) GetMessageFormat() string             { return m.messageFormat }
+func (m *mockKafkaClient) GetSchemaRegistryUrl() string         { return m.schemaRegistryUrl }
+func (m *mockKafkaClient) GetSchemaRegistryUsername() string    { return m.schemaRegistryUsername }
+func (m *mockKafkaClient) GetSchemaRegistryPassword() string    { return m.schemaRegistryPassword }
+func (m *mockKafkaClient) GetAvroSubjectNamingStrategy() string { return m.avroSubjectNamingStrategy }
 
 func TestQueryData(t *testing.T) {
 	ds := plugin.NewWithClient(&mockKafkaClient{})
@@ -375,3 +388,29 @@ func TestPublishStream(t *testing.T) {
 
 // Note: getDatasourceSettings is unexported; higher coverage would require moving
 // it or adding a test shim inside the plugin package. Skipping for now.
+
+func TestMockKafkaClient_AvroMethods(t *testing.T) {
+	mc := &mockKafkaClient{
+		messageFormat:             "avro",
+		schemaRegistryUrl:         "http://localhost:8081",
+		schemaRegistryUsername:    "test-user",
+		schemaRegistryPassword:    "test-pass",
+		avroSubjectNamingStrategy: "topicName",
+	}
+
+	if mc.GetMessageFormat() != "avro" {
+		t.Errorf("Expected GetMessageFormat to return 'avro', got %s", mc.GetMessageFormat())
+	}
+	if mc.GetSchemaRegistryUrl() != "http://localhost:8081" {
+		t.Errorf("Expected GetSchemaRegistryUrl to return 'http://localhost:8081', got %s", mc.GetSchemaRegistryUrl())
+	}
+	if mc.GetSchemaRegistryUsername() != "test-user" {
+		t.Errorf("Expected GetSchemaRegistryUsername to return 'test-user', got %s", mc.GetSchemaRegistryUsername())
+	}
+	if mc.GetSchemaRegistryPassword() != "test-pass" {
+		t.Errorf("Expected GetSchemaRegistryPassword to return 'test-pass', got %s", mc.GetSchemaRegistryPassword())
+	}
+	if mc.GetAvroSubjectNamingStrategy() != "topicName" {
+		t.Errorf("Expected GetAvroSubjectNamingStrategy to return 'topicName', got %s", mc.GetAvroSubjectNamingStrategy())
+	}
+}
