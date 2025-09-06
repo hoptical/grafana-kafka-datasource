@@ -1,55 +1,73 @@
 {
-  "id": null,
-  "title": "Server Monitoring Dashboard",
-  "tags": ["kafka", "monitoring", "server"],
-  "timezone": "browser",
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": 1,
+  "links": [],
   "panels": [
     {
-      "id": 1,
-      "title": "CPU Load Over Time",
-      "type": "timeseries",
-      "targets": [
-        {
-          "refId": "A",
-          "topicName": "test",
-          "partition": "all",
-          "autoOffsetReset": "latest",
-          "timestampMode": "message",
-          "lastN": 100
-        }
-      ],
+      "datasource": {
+        "type": "hamedkarbasi93-kafka-datasource",
+        "uid": "P488B1143A72A2A3E"
+      },
       "fieldConfig": {
         "defaults": {
-          "custom": {
-            "drawStyle": "line",
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "fillOpacity": 0,
-            "gradientMode": "none",
-            "spanNulls": false,
-            "showPoints": "auto",
-            "pointSize": 5,
-            "stacking": {
-              "mode": "none",
-              "group": "A"
-            },
-            "axisPlacement": "auto",
-            "axisLabel": "",
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "hideFrom": {
-              "vis": false,
-              "tooltip": false,
-              "legend": false
-            }
-          },
           "color": {
             "mode": "palette-classic"
           },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "vis": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
           "mappings": [],
           "thresholds": {
-            "mode": "absolute",
+            "mode": "percentage",
             "steps": [
               {
                 "color": "green",
@@ -57,10 +75,11 @@
               },
               {
                 "color": "red",
-                "value": 80
+                "value": 90
               }
             ]
-          }
+          },
+          "unit": "percentunit"
         },
         "overrides": []
       },
@@ -70,59 +89,94 @@
         "x": 0,
         "y": 0
       },
+      "id": 1,
       "options": {
-        "tooltip": {
-          "mode": "single"
-        },
         "legend": {
+          "calcs": [],
           "displayMode": "list",
-          "placement": "bottom"
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
         }
       },
-      "datasource": "kafka-provisioned"
-    },
-    {
-      "id": 2,
-      "title": "Memory Usage",
-      "type": "timeseries",
+      "pluginVersion": "11.5.3",
       "targets": [
         {
-          "refId": "A",
-          "topicName": "test",
-          "partition": "all",
           "autoOffsetReset": "latest",
+          "datasource": {
+            "type": "hamedkarbasi93-kafka-datasource",
+            "uid": "P488B1143A72A2A3E"
+          },
+          "lastN": 100,
+          "partition": "all",
+          "refId": "A",
           "timestampMode": "message",
-          "lastN": 100
+          "topicName": "test"
         }
       ],
+      "title": "CPU Load Over Time",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "time",
+                "metrics.cpu.load"
+              ]
+            }
+          }
+        }
+      ],
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "hamedkarbasi93-kafka-datasource",
+        "uid": "P488B1143A72A2A3E"
+      },
       "fieldConfig": {
         "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
             "fillOpacity": 10,
             "gradientMode": "none",
-            "spanNulls": false,
-            "showPoints": "auto",
-            "pointSize": 5,
-            "stacking": {
-              "mode": "none",
-              "group": "A"
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "vis": false,
+              "viz": false
             },
-            "axisPlacement": "auto",
-            "axisLabel": "",
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
             "scaleDistribution": {
               "type": "linear"
             },
-            "hideFrom": {
-              "vis": false,
-              "tooltip": false,
-              "legend": false
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
             }
-          },
-          "color": {
-            "mode": "palette-classic"
           },
           "mappings": [],
           "thresholds": {
@@ -137,7 +191,8 @@
                 "value": 80
               }
             ]
-          }
+          },
+          "unit": "decmbytes"
         },
         "overrides": []
       },
@@ -147,34 +202,64 @@
         "x": 12,
         "y": 0
       },
+      "id": 2,
       "options": {
-        "tooltip": {
-          "mode": "single"
-        },
         "legend": {
+          "calcs": [],
           "displayMode": "list",
-          "placement": "bottom"
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
         }
       },
-      "datasource": "kafka-provisioned"
-    },
-    {
-      "id": 3,
-      "title": "Current CPU Load",
-      "type": "gauge",
+      "pluginVersion": "11.5.3",
       "targets": [
         {
-          "refId": "A",
-          "topicName": "test",
-          "partition": "all",
           "autoOffsetReset": "latest",
+          "datasource": {
+            "type": "hamedkarbasi93-kafka-datasource",
+            "uid": "P488B1143A72A2A3E"
+          },
+          "lastN": 100,
+          "partition": "all",
+          "refId": "A",
           "timestampMode": "message",
-          "lastN": 1
+          "topicName": "test"
         }
       ],
+      "title": "Memory Usage",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "time",
+                "metrics.mem.free",
+                "metrics.mem.used"
+              ]
+            }
+          }
+        }
+      ],
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "hamedkarbasi93-kafka-datasource",
+        "uid": "P488B1143A72A2A3E"
+      },
       "fieldConfig": {
         "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
           "mappings": [],
+          "max": 100,
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -188,9 +273,7 @@
               }
             ]
           },
-          "color": {
-            "mode": "thresholds"
-          }
+          "unit": "percentunit"
         },
         "overrides": []
       },
@@ -200,39 +283,65 @@
         "x": 0,
         "y": 8
       },
+      "id": 3,
       "options": {
+        "minVizHeight": 75,
+        "minVizWidth": 75,
         "orientation": "auto",
         "reduceOptions": {
-          "values": false,
           "calcs": [
             "lastNotNull"
           ],
-          "fields": ""
+          "fields": "",
+          "values": false
         },
         "showThresholdLabels": false,
-        "showThresholdMarkers": true
+        "showThresholdMarkers": true,
+        "sizing": "auto"
       },
-      "datasource": "kafka-provisioned"
-    },
-    {
-      "id": 4,
-      "title": "Alerts Table",
-      "type": "table",
+      "pluginVersion": "11.5.3",
       "targets": [
         {
-          "refId": "A",
-          "topicName": "test",
-          "partition": "all",
           "autoOffsetReset": "latest",
+          "datasource": {
+            "type": "hamedkarbasi93-kafka-datasource",
+            "uid": "P488B1143A72A2A3E"
+          },
+          "lastN": 1,
+          "partition": "all",
+          "refId": "A",
           "timestampMode": "message",
-          "lastN": 50
+          "topicName": "test"
         }
       ],
+      "title": "Current CPU Load",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "metrics.cpu.load"
+              ]
+            }
+          }
+        }
+      ],
+      "type": "gauge"
+    },
+    {
+      "datasource": {
+        "type": "hamedkarbasi93-kafka-datasource",
+        "uid": "P488B1143A72A2A3E"
+      },
       "fieldConfig": {
         "defaults": {
           "custom": {
             "align": "auto",
-            "displayMode": "auto"
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
           },
           "mappings": [],
           "thresholds": {
@@ -257,53 +366,92 @@
         "x": 8,
         "y": 8
       },
+      "id": 4,
       "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
         "showHeader": true
       },
-      "datasource": "kafka-provisioned"
-    },
-    {
-      "id": 5,
-      "title": "Value1 and Value2",
-      "type": "timeseries",
+      "pluginVersion": "11.5.3",
       "targets": [
         {
-          "refId": "A",
-          "topicName": "test",
-          "partition": "all",
           "autoOffsetReset": "latest",
+          "datasource": {
+            "type": "hamedkarbasi93-kafka-datasource",
+            "uid": "P488B1143A72A2A3E"
+          },
+          "lastN": 50,
+          "partition": "all",
+          "refId": "A",
           "timestampMode": "message",
-          "lastN": 100
+          "topicName": "test"
         }
       ],
+      "title": "Alerts Table",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "alerts"
+              ]
+            }
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "hamedkarbasi93-kafka-datasource",
+        "uid": "P488B1143A72A2A3E"
+      },
       "fieldConfig": {
         "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
             "fillOpacity": 0,
             "gradientMode": "none",
-            "spanNulls": false,
-            "showPoints": "auto",
-            "pointSize": 5,
-            "stacking": {
-              "mode": "none",
-              "group": "A"
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "vis": false,
+              "viz": false
             },
-            "axisPlacement": "auto",
-            "axisLabel": "",
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
             "scaleDistribution": {
               "type": "linear"
             },
-            "hideFrom": {
-              "vis": false,
-              "tooltip": false,
-              "legend": false
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
             }
-          },
-          "color": {
-            "mode": "palette-classic"
           },
           "mappings": [],
           "thresholds": {
@@ -328,33 +476,62 @@
         "x": 0,
         "y": 16
       },
+      "id": 5,
       "options": {
-        "tooltip": {
-          "mode": "single"
-        },
         "legend": {
+          "calcs": [],
           "displayMode": "list",
-          "placement": "bottom"
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
         }
       },
-      "datasource": "kafka-provisioned"
-    },
-    {
-      "id": 6,
-      "title": "Average Value1",
-      "type": "stat",
+      "pluginVersion": "11.5.3",
       "targets": [
         {
-          "refId": "A",
-          "topicName": "test",
-          "partition": "all",
           "autoOffsetReset": "latest",
+          "datasource": {
+            "type": "hamedkarbasi93-kafka-datasource",
+            "uid": "P488B1143A72A2A3E"
+          },
+          "lastN": 100,
+          "partition": "all",
+          "refId": "A",
           "timestampMode": "message",
-          "lastN": 100
+          "topicName": "test"
         }
       ],
+      "title": "Value1 and Value2",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "time",
+                "value2",
+                "value1"
+              ]
+            }
+          }
+        }
+      ],
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "hamedkarbasi93-kafka-datasource",
+        "uid": "P488B1143A72A2A3E"
+      },
       "fieldConfig": {
         "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
@@ -368,9 +545,6 @@
                 "value": 80
               }
             ]
-          },
-          "color": {
-            "mode": "thresholds"
           }
         },
         "overrides": []
@@ -381,39 +555,86 @@
         "x": 12,
         "y": 16
       },
+      "id": 6,
       "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
         "orientation": "auto",
+        "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "values": false,
           "calcs": [
             "mean"
           ],
-          "fields": ""
+          "fields": "",
+          "values": false
         },
+        "showPercentChange": false,
         "showThresholdLabels": false,
-        "showThresholdMarkers": true
+        "showThresholdMarkers": true,
+        "textMode": "auto",
+        "wideLayout": true
       },
-      "datasource": "kafka-provisioned"
-    },
-    {
-      "id": 7,
-      "title": "Host Information",
-      "type": "table",
+      "pluginVersion": "11.5.3",
       "targets": [
         {
-          "refId": "A",
-          "topicName": "test",
-          "partition": "all",
           "autoOffsetReset": "latest",
+          "datasource": {
+            "type": "hamedkarbasi93-kafka-datasource",
+            "uid": "P488B1143A72A2A3E"
+          },
+          "lastN": 100,
+          "partition": "all",
+          "refId": "A",
           "timestampMode": "message",
-          "lastN": 10
+          "topicName": "test"
         }
       ],
+      "title": "Average Value1",
+      "transformations": [
+        {
+          "id": "calculateField",
+          "options": {
+            "alias": "Moving Window Value 1 (Mean)",
+            "mode": "windowFunctions",
+            "reduce": {
+              "reducer": "mean"
+            },
+            "window": {
+              "field": "value1",
+              "reducer": "mean",
+              "windowAlignment": "trailing",
+              "windowSize": 0.1,
+              "windowSizeMode": "percentage"
+            }
+          }
+        },
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "Moving Window Value 1 (Mean)"
+              ]
+            }
+          }
+        }
+      ],
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "hamedkarbasi93-kafka-datasource",
+        "uid": "P488B1143A72A2A3E"
+      },
       "fieldConfig": {
         "defaults": {
           "custom": {
             "align": "auto",
-            "displayMode": "auto"
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
           },
           "mappings": [],
           "thresholds": {
@@ -438,25 +659,85 @@
         "x": 18,
         "y": 16
       },
+      "id": 7,
       "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
         "showHeader": true
       },
-      "datasource": "kafka-provisioned"
+      "pluginVersion": "11.5.3",
+      "targets": [
+        {
+          "autoOffsetReset": "latest",
+          "datasource": {
+            "type": "hamedkarbasi93-kafka-datasource",
+            "uid": "P488B1143A72A2A3E"
+          },
+          "lastN": 10,
+          "partition": "all",
+          "refId": "A",
+          "timestampMode": "message",
+          "topicName": "test"
+        }
+      ],
+      "title": "Host Information",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "host.ip",
+                "host.name"
+              ]
+            }
+          }
+        },
+        {
+          "id": "groupBy",
+          "options": {
+            "fields": {
+              "host.ip": {
+                "aggregations": [],
+                "operation": "groupby"
+              },
+              "host.name": {
+                "aggregations": [],
+                "operation": "groupby"
+              }
+            }
+          }
+        }
+      ],
+      "type": "table"
     }
   ],
+  "preload": false,
+  "refresh": "5s",
+  "schemaVersion": 40,
+  "tags": [
+    "kafka",
+    "monitoring",
+    "server"
+  ],
+  "templating": {
+    "list": []
+  },
   "time": {
     "from": "now-1h",
     "to": "now"
   },
   "timepicker": {},
-  "templating": {
-    "list": []
-  },
-  "annotations": {
-    "list": []
-  },
-  "refresh": "5s",
-  "schemaVersion": 27,
-  "version": 0,
-  "links": []
+  "timezone": "browser",
+  "title": "Server Monitoring Dashboard",
+  "uid": "bexaf8oyoju9sc",
+  "version": 2,
+  "weekStart": ""
 }
