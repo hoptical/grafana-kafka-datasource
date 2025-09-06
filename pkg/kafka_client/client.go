@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	grafanalog "github.com/grafana/grafana-plugin-sdk-go/backend/log"
 	"github.com/segmentio/kafka-go/sasl"
 	"github.com/segmentio/kafka-go/sasl/plain"
 	"github.com/segmentio/kafka-go/sasl/scram"
@@ -293,36 +294,81 @@ func (client *KafkaClient) NewStreamReader(ctx context.Context, topic string, pa
 	return reader, nil
 }
 
-func (client *KafkaClient) ConsumerPull(ctx context.Context, reader *kafka.Reader) (KafkaMessage, error) {
+func (client *KafkaClient) ConsumerPull(ctx context.Context, reader *kafka.Reader, messageFormat string) (KafkaMessage, error) {
 	var message KafkaMessage
 	msg, err := reader.ReadMessage(ctx)
 	if err != nil {
 		return message, fmt.Errorf("error reading message from Kafka: %w", err)
 	}
 
+	grafanalog.DefaultLogger.Debug("Received Kafka message",
+		"topic", msg.Topic,
+		"partition", msg.Partition,
+		"offset", msg.Offset,
+		"valueLength", len(msg.Value),
+		"timestamp", msg.Time,
+		"messageFormat", messageFormat)
+
 	// Store raw bytes for potential Avro decoding
 	message.RawValue = msg.Value
 
-	// Try to decode as JSON first (for backward compatibility)
-	var doc interface{}
-	dec := json.NewDecoder(bytes.NewReader(msg.Value))
-	dec.UseNumber()
-	if err := dec.Decode(&doc); err != nil {
-		// If JSON decoding fails, we'll handle it later (could be Avro)
-		message.Value = nil
-	} else {
-		// Accept both objects and arrays at the top level
-		switch v := doc.(type) {
-		case map[string]interface{}, []interface{}:
-			message.Value = v
-		default:
-			// If it's not a valid JSON object/array, it might be Avro
-			message.Value = nil
+	// Log first few bytes for debugging
+	if len(msg.Value) > 0 {
+		preview := msg.Value
+		if len(preview) > 20 {
+			preview = preview[:20]
 		}
+		grafanalog.DefaultLogger.Debug("Message content preview",
+			"firstBytes", fmt.Sprintf("%x", preview),
+			"firstChars", string(preview))
+	}
+
+	// Only try JSON decoding if message format is not explicitly Avro
+	if messageFormat != "avro" {
+		// Try to decode as JSON first (for backward compatibility)
+		var doc interface{}
+		dec := json.NewDecoder(bytes.NewReader(msg.Value))
+		dec.UseNumber()
+		if err := dec.Decode(&doc); err != nil {
+			previewLen := 10
+			if len(msg.Value) < previewLen {
+				previewLen = len(msg.Value)
+			}
+			grafanalog.DefaultLogger.Debug("JSON decoding failed, message may be binary",
+				"error", err,
+				"valueLength", len(msg.Value),
+				"errorType", fmt.Sprintf("%T", err),
+				"firstBytes", fmt.Sprintf("%x", msg.Value[:previewLen]))
+			// If JSON decoding fails, we'll handle it later
+			message.Value = nil
+		} else {
+			// Accept both objects and arrays at the top level
+			switch v := doc.(type) {
+			case map[string]interface{}, []interface{}:
+				grafanalog.DefaultLogger.Debug("JSON decoding successful",
+					"decodedType", fmt.Sprintf("%T", v))
+				message.Value = v
+			default:
+				grafanalog.DefaultLogger.Debug("JSON decoded but not object/array",
+					"decodedType", fmt.Sprintf("%T", v))
+				// If it's not a valid JSON object/array, leave as nil
+				message.Value = nil
+			}
+		}
+	} else {
+		grafanalog.DefaultLogger.Debug("Skipping JSON decoding for Avro format message",
+			"valueLength", len(msg.Value))
+		// For Avro format, don't attempt JSON parsing
+		message.Value = nil
 	}
 
 	message.Offset = msg.Offset
 	message.Timestamp = msg.Time
+
+	grafanalog.DefaultLogger.Debug("Message processing complete",
+		"hasParsedValue", message.Value != nil,
+		"rawValueLength", len(message.RawValue))
+
 	return message, nil
 }
 

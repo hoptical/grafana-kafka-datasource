@@ -44,22 +44,22 @@ services:
   # Redpanda Console to have a UI for Kafka topics and messages
   # Uncomment the following section to enable Redpanda Console
   # Note: This is not required for the Kafka datasource to work, but can be useful for development and testing.
-  # console:
-  #   container_name: redpanda-console
-  #   image: docker.redpanda.com/redpandadata/console:v2.8.5
-  #   restart: always
-  #   entrypoint: /bin/sh
-  #   command: -c 'echo "$$CONSOLE_CONFIG_FILE" > /tmp/config.yml && echo "$$CONSOLE_ROLEBINDINGS_CONFIG_FILE" > /tmp/role-bindings.yml && /app/console'
-  #   volumes:
-  #     - ./config:/tmp/config/
-  #   environment:
-  #     CONFIG_FILEPATH: ${CONFIG_FILEPATH:-/tmp/config.yml}
-  #     CONSOLE_CONFIG_FILE: |
-  #       kafka:
-  #         brokers: ["kafka:9092"]
-  #       login:
-  #         enabled: false
-  #   ports:
-  #     - 8080:8080
-  #   depends_on:
-  #     - kafka
+  console:
+    container_name: redpanda-console
+    image: docker.redpanda.com/redpandadata/console:v2.8.5
+    restart: always
+    entrypoint: /bin/sh
+    command: -c 'echo "$$CONSOLE_CONFIG_FILE" > /tmp/config.yml && echo "$$CONSOLE_ROLEBINDINGS_CONFIG_FILE" > /tmp/role-bindings.yml && /app/console'
+    volumes:
+      - ./config:/tmp/config/
+    environment:
+      CONFIG_FILEPATH: ${CONFIG_FILEPATH:-/tmp/config.yml}
+      CONSOLE_CONFIG_FILE: |
+        kafka:
+          brokers: ["kafka:9092"]
+        login:
+          enabled: false
+    ports:
+      - 8080:8080
+    depends_on:
+      - kafka

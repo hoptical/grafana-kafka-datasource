@@ -20,19 +20,24 @@ go get github.com/segmentio/kafka-go
 Then, run the producer:
 
 ```bash
-go run producer.go -broker <broker> -topic <topic> -interval <interval ms> -num-partitions <partitions> -shape <flat|nested|list>
+go run producer.go -broker <broker> -topic <topic> -interval <interval ms> -num-partitions <partitions> -shape <flat|nested|list> -format <json|avro>
 ```
 
 > Note: The producer will create the topic if it does not exist.
 
 #### Example: produce nested JSON messages to `test` topic on `localhost:9094` with 3 partitions every 500ms
 ```bash
-go run producer.go -broker localhost:9094 -topic test -interval 500 -num-partitions 3 -shape nested
+go run producer.go -broker localhost:9094 -topic test -interval 500 -num-partitions 3 -shape nested -format json
+```
+
+#### Example: produce flat Avro messages to `test` topic on `localhost:9094` every 1 second
+```bash
+go run producer.go -broker localhost:9094 -topic test -interval 1000 -shape flat -format avro
 ```
 
 ### Supported Shapes
 
-- `flat`: Flat key-value JSON
+- `flat`: Flat key-value JSON (also supported in Avro)
 	```json
 	{
 		"host.name": "srv-01",
@@ -40,7 +45,7 @@ go run producer.go -broker localhost:9094 -topic test -interval 500 -num-partiti
 		"tags": ["prod", "edge"]
 	}
 	```
-- `nested`: Nested JSON objects, arrays, metrics, alerts
+- `nested`: Nested JSON objects, arrays, metrics, alerts (also supported in Avro)
 	```json
 	{
 		"host": {"name": "srv-01", "ip": "127.0.0.1"},
@@ -48,7 +53,7 @@ go run producer.go -broker localhost:9094 -topic test -interval 500 -num-partiti
 		"alerts": [{"type": "cpu_high", "value": 95}]
 	}
 	```
-- `list`: Top-level array of records (metrics, events, logs)
+- `list`: Top-level array of records (metrics, events, logs) - JSON only
 	```json
 	[
 		{"id": 1, "type": "metric", "value": 0.95},
@@ -56,9 +61,10 @@ go run producer.go -broker localhost:9094 -topic test -interval 500 -num-partiti
 	]
 	```
 
-All shapes are supported by the plugin and help test flattening, array handling, and nested data.
+All shapes are supported by the plugin and help test flattening, array handling, and nested data. Avro format supports `flat` and `nested` shapes only.
 
 #### Other options
+- `-format <json|avro>`: Message format (default: json)
 - `-values-offset <float>`: Offset for generated values
 - `-connect-timeout <ms>`: Broker connect timeout
 

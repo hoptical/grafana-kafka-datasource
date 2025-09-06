@@ -38,7 +38,7 @@ func (m *mockStreamClient) NewStreamReader(ctx context.Context, topic string, pa
 	return nil, m.readerErr
 }
 
-func (m *mockStreamClient) ConsumerPull(ctx context.Context, reader *kafka.Reader) (kafka_client.KafkaMessage, error) {
+func (m *mockStreamClient) ConsumerPull(ctx context.Context, reader *kafka.Reader, messageFormat string) (kafka_client.KafkaMessage, error) {
 	if m.pullErr != nil {
 		return kafka_client.KafkaMessage{}, m.pullErr
 	}

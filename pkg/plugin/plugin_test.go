@@ -57,7 +57,7 @@ func (m *mockKafkaClient) HealthCheck() error { return m.healthErr }
 func (m *mockKafkaClient) NewStreamReader(ctx context.Context, topic string, partition int32, autoOffsetReset string, lastN int32) (*kafka.Reader, error) {
 	return nil, m.streamReaderErr
 }
-func (m *mockKafkaClient) ConsumerPull(ctx context.Context, reader *kafka.Reader) (kafka_client.KafkaMessage, error) {
+func (m *mockKafkaClient) ConsumerPull(ctx context.Context, reader *kafka.Reader, messageFormat string) (kafka_client.KafkaMessage, error) {
 	if m.consumerErr != nil {
 		return kafka_client.KafkaMessage{}, m.consumerErr
 	}

@@ -26,33 +26,79 @@ func NewStreamManager(client KafkaClientAPI) *StreamManager {
 
 // decodeAvroMessage decodes an Avro message using the appropriate schema
 func (sm *StreamManager) decodeAvroMessage(data []byte, qm queryModel) (interface{}, error) {
+	log.DefaultLogger.Info("Starting Avro message decoding",
+		"dataLength", len(data),
+		"topic", qm.Topic,
+		"avroSchemaSource", qm.AvroSchemaSource,
+		"avroSchemaLength", len(qm.AvroSchema),
+		"partition", qm.Partition)
+
 	var schema string
 	var err error
 
 	if qm.AvroSchemaSource == "inlineSchema" && qm.AvroSchema != "" {
 		// Use inline schema
 		schema = qm.AvroSchema
+		log.DefaultLogger.Info("Using inline Avro schema",
+			"schemaLength", len(schema),
+			"schemaPreview", func() string {
+				if len(schema) > 100 {
+					return schema[:100] + "..."
+				}
+				return schema
+			}())
 	} else {
+		log.DefaultLogger.Warn("Falling back to Schema Registry",
+			"avroSchemaSource", qm.AvroSchemaSource,
+			"avroSchemaEmpty", qm.AvroSchema == "",
+			"reason", "Either avroSchemaSource is not 'inlineSchema' or avroSchema is empty")
 		// Use Schema Registry
 		schemaRegistryUrl := sm.client.GetSchemaRegistryUrl()
+		log.DefaultLogger.Debug("Attempting to get schema from registry",
+			"schemaRegistryUrl", schemaRegistryUrl,
+			"hasUsername", sm.client.GetSchemaRegistryUsername() != "",
+			"hasPassword", sm.client.GetSchemaRegistryPassword() != "",
+			"topic", qm.Topic)
+
 		if schemaRegistryUrl == "" {
-			return nil, fmt.Errorf("Schema Registry URL not configured")
+			log.DefaultLogger.Error("Schema Registry URL not configured")
+			return nil, fmt.Errorf("schema registry URL not configured")
 		}
 
 		subject := kafka_client.GetSubjectName(qm.Topic, sm.client.GetAvroSubjectNamingStrategy())
+		log.DefaultLogger.Debug("Generated subject name",
+			"subject", subject,
+			"strategy", sm.client.GetAvroSubjectNamingStrategy())
+
 		schemaClient := kafka_client.NewSchemaRegistryClient(
 			schemaRegistryUrl,
 			sm.client.GetSchemaRegistryUsername(),
 			sm.client.GetSchemaRegistryPassword(),
 		)
+
+		log.DefaultLogger.Debug("Fetching latest schema from registry", "subject", subject)
 		schema, err = schemaClient.GetLatestSchema(subject)
 		if err != nil {
+			log.DefaultLogger.Error("Failed to get schema from registry",
+				"subject", subject,
+				"error", err)
 			return nil, fmt.Errorf("failed to get schema from registry: %w", err)
 		}
+		log.DefaultLogger.Debug("Successfully retrieved schema from registry",
+			"subject", subject,
+			"schemaLength", len(schema))
 	}
 
 	// Decode the Avro message
-	return kafka_client.DecodeAvroMessage(data, schema)
+	log.DefaultLogger.Debug("Decoding Avro message with schema")
+	decoded, err := kafka_client.DecodeAvroMessage(data, schema)
+	if err != nil {
+		log.DefaultLogger.Error("Avro decoding failed", "error", err)
+		return nil, err
+	}
+
+	log.DefaultLogger.Debug("Avro message decoded successfully", "decodedType", fmt.Sprintf("%T", decoded))
+	return decoded, nil
 }
 
 // ProcessMessage converts a Kafka message into a Grafana data frame.
@@ -62,18 +108,49 @@ func (sm *StreamManager) ProcessMessage(
 	partitions []int32,
 	qm queryModel,
 ) (*data.Frame, error) {
+	log.DefaultLogger.Debug("Processing message",
+		"partition", partition,
+		"offset", msg.Offset,
+		"messageFormat", qm.MessageFormat,
+		"rawValueLength", len(msg.RawValue),
+		"hasParsedValue", msg.Value != nil)
+
 	// Check if message needs Avro decoding
 	messageValue := msg.Value
 	if qm.MessageFormat == "avro" && msg.Value == nil && len(msg.RawValue) > 0 {
+		log.DefaultLogger.Info("Attempting Avro decoding for message",
+			"partition", partition,
+			"offset", msg.Offset,
+			"rawValueLength", len(msg.RawValue),
+			"topic", qm.Topic,
+			"avroSchemaSource", qm.AvroSchemaSource)
+
 		// Try to decode as Avro
 		decoded, err := sm.decodeAvroMessage(msg.RawValue, qm)
 		if err != nil {
-			log.DefaultLogger.Warn("Failed to decode Avro message, falling back to raw bytes", "error", err)
+			log.DefaultLogger.Error("Failed to decode Avro message, falling back to raw bytes",
+				"error", err,
+				"rawValueLength", len(msg.RawValue),
+				"partition", partition,
+				"offset", msg.Offset)
 			// Fall back to treating raw bytes as string
 			messageValue = string(msg.RawValue)
 		} else {
+			log.DefaultLogger.Info("Avro decoding successful",
+				"partition", partition,
+				"offset", msg.Offset,
+				"decodedType", fmt.Sprintf("%T", decoded))
 			messageValue = decoded
 		}
+	} else if qm.MessageFormat == "avro" {
+		log.DefaultLogger.Debug("Avro format specified but message already parsed or no raw data",
+			"hasParsedValue", msg.Value != nil,
+			"rawValueLength", len(msg.RawValue))
+	} else {
+		log.DefaultLogger.Debug("Using non-Avro message format",
+			"messageFormat", qm.MessageFormat,
+			"hasParsedValue", msg.Value != nil,
+			"rawValueLength", len(msg.RawValue))
 	}
 
 	frame := data.NewFrame("response")
@@ -114,7 +191,24 @@ func (sm *StreamManager) ProcessMessage(
 		messageValue = wrappedValue
 	}
 
+	log.DefaultLogger.Debug("Processing message value for flattening",
+		"messageValueType", fmt.Sprintf("%T", messageValue),
+		"isMap", fmt.Sprintf("%t", func() bool {
+			_, ok := messageValue.(map[string]interface{})
+			return ok
+		}()))
+
 	FlattenJSON("", messageValue, flat, 0, defaultFlattenMaxDepth, defaultFlattenFieldCap)
+
+	log.DefaultLogger.Debug("Flattened message data",
+		"flattenedFieldCount", len(flat),
+		"flattenedKeys", func() []string {
+			keys := make([]string, 0, len(flat))
+			for k := range flat {
+				keys = append(keys, k)
+			}
+			return keys
+		}())
 
 	fieldBuilder := NewFieldBuilder()
 	fieldIndex := len(frame.Fields)
@@ -154,6 +248,12 @@ func (sm *StreamManager) readFromPartition(
 	qm queryModel,
 	messagesCh chan<- messageWithPartition,
 ) {
+	log.DefaultLogger.Info("Starting partition reader",
+		"topic", qm.Topic,
+		"partition", partition,
+		"autoOffsetReset", qm.AutoOffsetReset,
+		"lastN", qm.LastN)
+
 	reader, err := sm.client.NewStreamReader(ctx, qm.Topic, partition, qm.AutoOffsetReset, qm.LastN)
 	if err != nil {
 		log.DefaultLogger.Error("Failed to create stream reader", "topic", qm.Topic, "partition", partition, "error", err)
@@ -165,16 +265,31 @@ func (sm *StreamManager) readFromPartition(
 	}
 	defer reader.Close()
 
+	messageCount := 0
 	for {
 		select {
 		case <-ctx.Done():
+			log.DefaultLogger.Info("Partition reader stopping",
+				"partition", partition,
+				"totalMessages", messageCount)
 			return
 		default:
-			msg, err := sm.client.ConsumerPull(ctx, reader)
+			log.DefaultLogger.Debug("Attempting to read message from partition", "partition", partition)
+			msg, err := sm.client.ConsumerPull(ctx, reader, qm.MessageFormat)
 			if err != nil {
-				log.DefaultLogger.Error("Error reading from partition", "partition", partition, "error", err)
+				log.DefaultLogger.Error("Error reading from partition",
+					"partition", partition,
+					"error", err)
 				continue
 			}
+
+			messageCount++
+			log.DefaultLogger.Debug("Successfully read message from partition",
+				"partition", partition,
+				"messageCount", messageCount,
+				"offset", msg.Offset,
+				"hasParsedValue", msg.Value != nil,
+				"rawValueLength", len(msg.RawValue))
 
 			select {
 			case messagesCh <- messageWithPartition{msg: msg, partition: partition}:

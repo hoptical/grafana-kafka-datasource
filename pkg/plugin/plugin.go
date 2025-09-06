@@ -37,7 +37,7 @@ type KafkaClientAPI interface {
 	GetTopics(ctx context.Context, prefix string, limit int) ([]string, error)
 	HealthCheck() error
 	NewStreamReader(ctx context.Context, topic string, partition int32, autoOffsetReset string, lastN int32) (*kafka.Reader, error)
-	ConsumerPull(ctx context.Context, reader *kafka.Reader) (kafka_client.KafkaMessage, error)
+	ConsumerPull(ctx context.Context, reader *kafka.Reader, messageFormat string) (kafka_client.KafkaMessage, error)
 	Dispose()
 	// Avro-related methods
 	GetMessageFormat() string
@@ -327,7 +327,12 @@ func (d *KafkaDatasource) SubscribeStream(ctx context.Context, req *backend.Subs
 }
 
 func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamRequest, sender *backend.StreamSender) error {
-	log.DefaultLogger.Debug("RunStream called", "path", req.Path)
+	log.DefaultLogger.Debug("RunStream called", "path", req.Path, "dataLength", len(req.Data))
+
+	// Log the raw request data for debugging
+	if len(req.Data) > 0 {
+		log.DefaultLogger.Debug("RunStream raw request data", "data", string(req.Data))
+	}
 
 	var qm queryModel
 	err := json.Unmarshal(req.Data, &qm)
@@ -335,6 +340,15 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 		log.DefaultLogger.Error("RunStream unmarshal error", "error", err)
 		return err
 	}
+
+	log.DefaultLogger.Info("Starting Kafka stream with configuration",
+		"topic", qm.Topic,
+		"partition", qm.Partition,
+		"messageFormat", qm.MessageFormat,
+		"avroSchemaSource", qm.AvroSchemaSource,
+		"avroSchemaLength", len(qm.AvroSchema),
+		"autoOffsetReset", qm.AutoOffsetReset,
+		"timestampMode", qm.TimestampMode)
 
 	// Create connection
 	if err := d.client.NewConnection(); err != nil {
@@ -356,12 +370,21 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 	streamManager.StartPartitionReaders(ctx, partitions, qm, messagesCh)
 
 	// Main processing loop
+	messageCount := 0
 	for {
 		select {
 		case <-ctx.Done():
-			log.DefaultLogger.Debug("Context done, finish streaming", "path", req.Path)
+			log.DefaultLogger.Info("Stream context done, finishing",
+				"path", req.Path,
+				"totalMessages", messageCount)
 			return nil
 		case msgWithPartition := <-messagesCh:
+			messageCount++
+			log.DefaultLogger.Debug("Processing message from channel",
+				"messageNumber", messageCount,
+				"partition", msgWithPartition.partition,
+				"offset", msgWithPartition.msg.Offset)
+
 			frame, err := streamManager.ProcessMessage(
 				msgWithPartition.msg,
 				msgWithPartition.partition,
@@ -369,7 +392,11 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 				qm,
 			)
 			if err != nil {
-				log.DefaultLogger.Error("Error processing message", "error", err)
+				log.DefaultLogger.Error("Error processing message",
+					"messageNumber", messageCount,
+					"partition", msgWithPartition.partition,
+					"offset", msgWithPartition.msg.Offset,
+					"error", err)
 				continue
 			}
 
@@ -381,6 +408,7 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 			}
 
 			log.DefaultLogger.Debug("Message frame sent",
+				"messageNumber", messageCount,
 				"partition", msgWithPartition.partition,
 				"offset", msgWithPartition.msg.Offset,
 				"timestamp", frame.Fields[0].At(0),
@@ -388,9 +416,16 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 
 			err = sender.SendFrame(frame, data.IncludeAll)
 			if err != nil {
-				log.DefaultLogger.Error("Error sending frame", "error", err)
+				log.DefaultLogger.Error("Error sending frame",
+					"messageNumber", messageCount,
+					"error", err)
 				continue
 			}
+
+			log.DefaultLogger.Debug("Successfully sent frame to Grafana",
+				"messageNumber", messageCount,
+				"frameFields", len(frame.Fields),
+				"frameName", frame.Name)
 		}
 	}
 }
