@@ -2,6 +2,7 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryEditor } from '../QueryEditor';
 import { AutoOffsetReset, TimestampMode, defaultQuery, type KafkaQuery } from '../types';
+import { deepFreeze } from '../test-utils/test-helpers';
 
 // Mock @grafana/ui components
 jest.mock('@grafana/ui', () => ({
@@ -78,7 +79,7 @@ const renderEditor = (query?: Partial<KafkaQuery>) =>
 
 describe('QueryEditor', () => {
   it('does not mutate frozen props', () => {
-    const frozenQuery: KafkaQuery = Object.freeze({
+    const frozenQuery: KafkaQuery = deepFreeze({
       refId: 'A',
       topicName: '',
       partition: 'all',

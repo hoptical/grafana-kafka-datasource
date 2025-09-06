@@ -3,6 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { ConfigEditor } from '../ConfigEditor';
 import { defaultDataSourceOptions, type KafkaDataSourceOptions, type KafkaSecureJsonData } from '../types';
 import type { DataSourcePluginOptionsEditorProps } from '@grafana/data';
+import { deepFreeze } from '../test-utils/test-helpers';
 
 // Mock @grafana/ui components
 jest.mock('@grafana/ui', () => ({
@@ -101,29 +102,33 @@ const mockOnOptionsChange = jest.fn();
 const createMockOptions = (
   jsonData?: Partial<KafkaDataSourceOptions>,
   secureJsonData?: Partial<KafkaSecureJsonData>,
-  secureJsonFields?: any
-): DataSourcePluginOptionsEditorProps<KafkaDataSourceOptions>['options'] => ({
-  id: 1,
-  uid: 'test-uid',
-  orgId: 1,
-  name: 'Test Kafka',
-  type: 'kafka',
-  access: 'proxy',
-  url: '',
-  basicAuth: false,
-  basicAuthUser: '',
-  database: '',
-  user: '',
-  isDefault: false,
-  readOnly: false,
-  withCredentials: false,
-  typeName: 'kafka',
-  typeLogoUrl: '',
-  jsonData: { ...defaultDataSourceOptions, ...jsonData } as KafkaDataSourceOptions,
-  secureJsonData: secureJsonData || {},
-  secureJsonFields: secureJsonFields || {},
-  version: 1,
-});
+  secureJsonFields?: any,
+  freeze = false
+): DataSourcePluginOptionsEditorProps<KafkaDataSourceOptions>['options'] => {
+  const options = {
+    id: 1,
+    uid: 'test-uid',
+    orgId: 1,
+    name: 'Test Kafka',
+    type: 'kafka',
+    access: 'proxy',
+    url: '',
+    basicAuth: false,
+    basicAuthUser: '',
+    database: '',
+    user: '',
+    isDefault: false,
+    readOnly: false,
+    withCredentials: false,
+    typeName: 'kafka',
+    typeLogoUrl: '',
+    jsonData: { ...defaultDataSourceOptions, ...jsonData } as KafkaDataSourceOptions,
+    secureJsonData: secureJsonData || {},
+    secureJsonFields: secureJsonFields || {},
+    version: 1,
+  };
+  return freeze ? deepFreeze(options) : options;
+};
 
 const renderConfigEditor = (
   jsonData?: Partial<KafkaDataSourceOptions>,
@@ -140,7 +145,7 @@ beforeEach(() => {
 
 describe('ConfigEditor', () => {
   it('does not mutate frozen props', () => {
-    const frozenOptions = Object.freeze(createMockOptions());
+    const frozenOptions = createMockOptions({}, {}, {}, true);
     expect(() => {
       render(<ConfigEditor options={frozenOptions} onOptionsChange={mockOnOptionsChange} />);
     }).not.toThrow();
