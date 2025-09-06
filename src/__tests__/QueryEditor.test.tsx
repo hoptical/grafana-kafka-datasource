@@ -47,6 +47,16 @@ jest.mock('@grafana/ui', () => ({
   InlineLabel: ({ children }: any) => <label>{children}</label>,
 }));
 
+const deepFreeze = (obj: any): any => {
+  Object.freeze(obj);
+  Object.getOwnPropertyNames(obj).forEach(prop => {
+    if (obj[prop] !== null && typeof obj[prop] === 'object' && !Object.isFrozen(obj[prop])) {
+      deepFreeze(obj[prop]);
+    }
+  });
+  return obj;
+};
+
 // Enhanced DataSource mock
 const mockDs = {
   getTopicPartitions: jest.fn().mockResolvedValue([0, 1, 2]),
@@ -78,7 +88,7 @@ const renderEditor = (query?: Partial<KafkaQuery>) =>
 
 describe('QueryEditor', () => {
   it('does not mutate frozen props', () => {
-    const frozenQuery: KafkaQuery = Object.freeze({
+    const frozenQuery: KafkaQuery = deepFreeze({
       refId: 'A',
       topicName: '',
       partition: 'all',

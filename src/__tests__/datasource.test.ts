@@ -24,6 +24,16 @@ jest.mock('@grafana/runtime', () => {
   } as any;
 });
 
+const deepFreeze = (obj: any): any => {
+  Object.freeze(obj);
+  Object.getOwnPropertyNames(obj).forEach(prop => {
+    if (obj[prop] !== null && typeof obj[prop] === 'object' && !Object.isFrozen(obj[prop])) {
+      deepFreeze(obj[prop]);
+    }
+  });
+  return obj;
+};
+
 const mockInstanceSettings = {
   id: 1,
   uid: 'test-kafka-uid',
@@ -38,7 +48,7 @@ const mockInstanceSettings = {
 
 describe('DataSource', () => {
   it('does not mutate frozen query props', () => {
-    const frozenQuery = Object.freeze({
+    const frozenQuery = deepFreeze({
       topicName: 'test-topic',
       partition: 'all',
       autoOffsetReset: AutoOffsetReset.LATEST,
