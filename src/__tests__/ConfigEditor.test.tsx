@@ -3,6 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { ConfigEditor } from '../ConfigEditor';
 import { defaultDataSourceOptions, type KafkaDataSourceOptions, type KafkaSecureJsonData } from '../types';
 import type { DataSourcePluginOptionsEditorProps } from '@grafana/data';
+import { deepFreeze } from '../test-utils/test-helpers';
 
 // Mock @grafana/ui components
 jest.mock('@grafana/ui', () => ({
@@ -97,16 +98,6 @@ jest.mock('lodash', () => ({
 }));
 
 const mockOnOptionsChange = jest.fn();
-
-const deepFreeze = (obj: any): any => {
-  Object.freeze(obj);
-  Object.getOwnPropertyNames(obj).forEach(prop => {
-    if (obj[prop] !== null && typeof obj[prop] === 'object' && !Object.isFrozen(obj[prop])) {
-      deepFreeze(obj[prop]);
-    }
-  });
-  return obj;
-};
 
 const createMockOptions = (
   jsonData?: Partial<KafkaDataSourceOptions>,

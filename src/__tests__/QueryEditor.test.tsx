@@ -2,6 +2,7 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryEditor } from '../QueryEditor';
 import { AutoOffsetReset, TimestampMode, defaultQuery, type KafkaQuery } from '../types';
+import { deepFreeze } from '../test-utils/test-helpers';
 
 // Mock @grafana/ui components
 jest.mock('@grafana/ui', () => ({
@@ -46,16 +47,6 @@ jest.mock('@grafana/ui', () => ({
   ),
   InlineLabel: ({ children }: any) => <label>{children}</label>,
 }));
-
-const deepFreeze = (obj: any): any => {
-  Object.freeze(obj);
-  Object.getOwnPropertyNames(obj).forEach(prop => {
-    if (obj[prop] !== null && typeof obj[prop] === 'object' && !Object.isFrozen(obj[prop])) {
-      deepFreeze(obj[prop]);
-    }
-  });
-  return obj;
-};
 
 // Enhanced DataSource mock
 const mockDs = {

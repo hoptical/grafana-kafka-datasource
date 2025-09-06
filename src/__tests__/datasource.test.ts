@@ -1,6 +1,7 @@
 import { of } from 'rxjs';
 import { DataSource } from '../datasource';
 import { AutoOffsetReset, TimestampMode, type KafkaQuery } from '../types';
+import { deepFreeze } from '../test-utils/test-helpers';
 
 // Mock @grafana/runtime pieces used by DataSource
 let capturedPath: string | undefined;
@@ -23,16 +24,6 @@ jest.mock('@grafana/runtime', () => {
     },
   } as any;
 });
-
-const deepFreeze = (obj: any): any => {
-  Object.freeze(obj);
-  Object.getOwnPropertyNames(obj).forEach(prop => {
-    if (obj[prop] !== null && typeof obj[prop] === 'object' && !Object.isFrozen(obj[prop])) {
-      deepFreeze(obj[prop]);
-    }
-  });
-  return obj;
-};
 
 const mockInstanceSettings = {
   id: 1,
