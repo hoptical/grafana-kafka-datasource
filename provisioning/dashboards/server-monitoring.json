@@ -1,4 +1,53 @@
 {
+  "__inputs": [
+    {
+      "name": "kafka-provisioned",
+      "label": "kafka-provisioned",
+      "description": "",
+      "type": "datasource",
+      "pluginId": "hamedkarbasi93-kafka-datasource",
+      "pluginName": "Kafka"
+    }
+  ],
+  "__elements": {},
+  "__requires": [
+    {
+      "type": "panel",
+      "id": "gauge",
+      "name": "Gauge",
+      "version": ""
+    },
+    {
+      "type": "grafana",
+      "id": "grafana",
+      "name": "Grafana",
+      "version": "11.5.3"
+    },
+    {
+      "type": "datasource",
+      "id": "hamedkarbasi93-kafka-datasource",
+      "name": "Kafka",
+      "version": "1.0.1"
+    },
+    {
+      "type": "panel",
+      "id": "stat",
+      "name": "Stat",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "table",
+      "name": "Table",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "timeseries",
+      "name": "Time series",
+      "version": ""
+    }
+  ],
   "annotations": {
     "list": [
       {
@@ -18,13 +67,13 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 1,
+  "id": null,
   "links": [],
   "panels": [
     {
       "datasource": {
         "type": "hamedkarbasi93-kafka-datasource",
-        "uid": "P488B1143A72A2A3E"
+        "uid": "kafka-provisioned"
       },
       "fieldConfig": {
         "defaults": {
@@ -109,7 +158,7 @@
           "autoOffsetReset": "latest",
           "datasource": {
             "type": "hamedkarbasi93-kafka-datasource",
-            "uid": "P488B1143A72A2A3E"
+            "uid": "kafka-provisioned"
           },
           "lastN": 100,
           "partition": "all",
@@ -137,7 +186,7 @@
     {
       "datasource": {
         "type": "hamedkarbasi93-kafka-datasource",
-        "uid": "P488B1143A72A2A3E"
+        "uid": "kafka-provisioned"
       },
       "fieldConfig": {
         "defaults": {
@@ -222,7 +271,7 @@
           "autoOffsetReset": "latest",
           "datasource": {
             "type": "hamedkarbasi93-kafka-datasource",
-            "uid": "P488B1143A72A2A3E"
+            "uid": "kafka-provisioned"
           },
           "lastN": 100,
           "partition": "all",
@@ -251,7 +300,7 @@
     {
       "datasource": {
         "type": "hamedkarbasi93-kafka-datasource",
-        "uid": "P488B1143A72A2A3E"
+        "uid": "kafka-provisioned"
       },
       "fieldConfig": {
         "defaults": {
@@ -305,7 +354,7 @@
           "autoOffsetReset": "latest",
           "datasource": {
             "type": "hamedkarbasi93-kafka-datasource",
-            "uid": "P488B1143A72A2A3E"
+            "uid": "kafka-provisioned"
           },
           "lastN": 1,
           "partition": "all",
@@ -332,7 +381,7 @@
     {
       "datasource": {
         "type": "hamedkarbasi93-kafka-datasource",
-        "uid": "P488B1143A72A2A3E"
+        "uid": "kafka-provisioned"
       },
       "fieldConfig": {
         "defaults": {
@@ -385,7 +434,7 @@
           "autoOffsetReset": "latest",
           "datasource": {
             "type": "hamedkarbasi93-kafka-datasource",
-            "uid": "P488B1143A72A2A3E"
+            "uid": "kafka-provisioned"
           },
           "lastN": 50,
           "partition": "all",
@@ -412,7 +461,7 @@
     {
       "datasource": {
         "type": "hamedkarbasi93-kafka-datasource",
-        "uid": "P488B1143A72A2A3E"
+        "uid": "kafka-provisioned"
       },
       "fieldConfig": {
         "defaults": {
@@ -496,7 +545,7 @@
           "autoOffsetReset": "latest",
           "datasource": {
             "type": "hamedkarbasi93-kafka-datasource",
-            "uid": "P488B1143A72A2A3E"
+            "uid": "kafka-provisioned"
           },
           "lastN": 100,
           "partition": "all",
@@ -525,7 +574,7 @@
     {
       "datasource": {
         "type": "hamedkarbasi93-kafka-datasource",
-        "uid": "P488B1143A72A2A3E"
+        "uid": "kafka-provisioned"
       },
       "fieldConfig": {
         "defaults": {
@@ -581,7 +630,7 @@
           "autoOffsetReset": "latest",
           "datasource": {
             "type": "hamedkarbasi93-kafka-datasource",
-            "uid": "P488B1143A72A2A3E"
+            "uid": "kafka-provisioned"
           },
           "lastN": 100,
           "partition": "all",
@@ -625,7 +674,7 @@
     {
       "datasource": {
         "type": "hamedkarbasi93-kafka-datasource",
-        "uid": "P488B1143A72A2A3E"
+        "uid": "kafka-provisioned"
       },
       "fieldConfig": {
         "defaults": {
@@ -678,7 +727,7 @@
           "autoOffsetReset": "latest",
           "datasource": {
             "type": "hamedkarbasi93-kafka-datasource",
-            "uid": "P488B1143A72A2A3E"
+            "uid": "kafka-provisioned"
           },
           "lastN": 10,
           "partition": "all",
@@ -719,7 +768,6 @@
       "type": "table"
     }
   ],
-  "preload": false,
   "refresh": "5s",
   "schemaVersion": 40,
   "tags": [
@@ -731,13 +779,13 @@
     "list": []
   },
   "time": {
-    "from": "now-1h",
+    "from": "now-5m",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "browser",
   "title": "Server Monitoring Dashboard",
   "uid": "bexaf8oyoju9sc",
-  "version": 2,
+  "version": 1,
   "weekStart": ""
 }
