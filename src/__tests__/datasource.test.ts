@@ -2,6 +2,8 @@ import { of } from 'rxjs';
 import { DataSource } from '../datasource';
 import { AutoOffsetReset, TimestampMode, MessageFormat, AvroSchemaSource, type KafkaQuery } from '../types';
 
+import { deepFreeze } from '../test-utils/test-helpers';
+
 // Mock @grafana/runtime pieces used by DataSource
 let capturedPath: string | undefined;
 // Allow tests to override template replacement logic dynamically
@@ -38,7 +40,7 @@ const mockInstanceSettings = {
 
 describe('DataSource', () => {
   it('does not mutate frozen query props', () => {
-    const frozenQuery = Object.freeze({
+    const frozenQuery = deepFreeze({
       topicName: 'test-topic',
       partition: 'all',
       autoOffsetReset: AutoOffsetReset.LATEST,
