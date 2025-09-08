@@ -414,3 +414,125 @@ func TestMockKafkaClient_AvroMethods(t *testing.T) {
 		t.Errorf("Expected GetAvroSubjectNamingStrategy to return 'topicName', got %s", mc.GetAvroSubjectNamingStrategy())
 	}
 }
+
+func TestNewKafkaInstance(t *testing.T) {
+	tests := []struct {
+		name        string
+		settings    backend.DataSourceInstanceSettings
+		expectError bool
+	}{
+		{
+			name: "valid settings",
+			settings: backend.DataSourceInstanceSettings{
+				JSONData: []byte(`{
+					"bootstrapServers": "localhost:9092",
+					"clientId": "test-client",
+					"timeout": 5000
+				}`),
+				DecryptedSecureJSONData: map[string]string{
+					"saslPassword": "test-password",
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "invalid JSON",
+			settings: backend.DataSourceInstanceSettings{
+				JSONData: []byte(`invalid json`),
+			},
+			expectError: true,
+		},
+		{
+			name: "empty settings",
+			settings: backend.DataSourceInstanceSettings{
+				JSONData: []byte(`{}`),
+			},
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			instance, err := plugin.NewKafkaInstance(context.Background(), tt.settings)
+
+			if tt.expectError {
+				if err == nil {
+					t.Error("Expected error but got none")
+				}
+				if instance != nil {
+					t.Error("Expected nil instance when error occurs")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Expected no error but got: %v", err)
+				}
+				if instance == nil {
+					t.Error("Expected non-nil instance")
+				}
+
+				// Verify it's a KafkaDatasource
+				if _, ok := instance.(*plugin.KafkaDatasource); !ok {
+					t.Errorf("Expected *plugin.KafkaDatasource, got %T", instance)
+				}
+			}
+		})
+	}
+}
+
+func TestNewKafkaInstance_CompleteSettings(t *testing.T) {
+	settings := backend.DataSourceInstanceSettings{
+		JSONData: []byte(`{
+			"bootstrapServers": "localhost:9092",
+			"clientId": "test-client",
+			"securityProtocol": "SASL_SSL",
+			"saslMechanisms": "PLAIN",
+			"saslUsername": "test-user",
+			"tlsSkipVerify": true,
+			"tlsAuthWithCACert": true,
+			"tlsAuth": true,
+			"timeout": 5000,
+			"messageFormat": "json",
+			"schemaRegistryUrl": "http://localhost:8081"
+		}`),
+		DecryptedSecureJSONData: map[string]string{
+			"saslPassword":           "test-password",
+			"tlsCACert":              "test-ca-cert",
+			"tlsClientCert":          "test-client-cert",
+			"tlsClientKey":           "test-client-key",
+			"schemaRegistryUsername": "registry-user",
+			"schemaRegistryPassword": "registry-pass",
+		},
+	}
+
+	instance, err := plugin.NewKafkaInstance(context.Background(), settings)
+	if err != nil {
+		t.Errorf("Expected no error but got: %v", err)
+	}
+	if instance == nil {
+		t.Error("Expected non-nil instance")
+	}
+
+	// Verify it's a KafkaDatasource
+	if _, ok := instance.(*plugin.KafkaDatasource); !ok {
+		t.Errorf("Expected *plugin.KafkaDatasource, got %T", instance)
+	}
+}
+
+func TestNewKafkaInstance_BooleanAsStrings(t *testing.T) {
+	settings := backend.DataSourceInstanceSettings{
+		JSONData: []byte(`{
+			"bootstrapServers": "localhost:9092",
+			"tlsSkipVerify": true,
+			"tlsAuthWithCACert": true,
+			"tlsAuth": true
+		}`),
+	}
+
+	instance, err := plugin.NewKafkaInstance(context.Background(), settings)
+	if err != nil {
+		t.Errorf("Expected no error but got: %v", err)
+	}
+	if instance == nil {
+		t.Error("Expected non-nil instance")
+	}
+}

@@ -35,7 +35,16 @@ func (m *mockStreamClient) GetTopicPartitions(ctx context.Context, topicName str
 }
 
 func (m *mockStreamClient) NewStreamReader(ctx context.Context, topic string, partition int32, autoOffsetReset string, lastN int32) (*kafka.Reader, error) {
-	return nil, m.readerErr
+	if m.readerErr != nil {
+		return nil, m.readerErr
+	}
+	// Return a minimal kafka.Reader that can be safely closed
+	// We create it with invalid config so it won't actually connect, but Close() will work
+	reader := kafka.NewReader(kafka.ReaderConfig{
+		Brokers: []string{"invalid-broker"},
+		Topic:   "invalid-topic",
+	})
+	return reader, nil
 }
 
 func (m *mockStreamClient) ConsumerPull(ctx context.Context, reader *kafka.Reader, messageFormat string) (kafka_client.KafkaMessage, error) {
@@ -334,5 +343,126 @@ func TestStreamManager_HandleTopicError(t *testing.T) {
 	}
 	if !errors.Is(err, generalErr) {
 		t.Error("Expected wrapped general error")
+	}
+}
+
+func TestStreamManager_readFromPartition_ReaderError(t *testing.T) {
+	mockClient := &mockStreamClient{
+		readerErr: errors.New("failed to create reader"),
+	}
+
+	sm := NewStreamManager(mockClient)
+	qm := queryModel{
+		Topic:           "test-topic",
+		AutoOffsetReset: "earliest",
+		LastN:           10,
+		MessageFormat:   "json",
+	}
+
+	ctx := context.Background()
+	messagesCh := make(chan messageWithPartition, 10)
+
+	// This should not panic and should exit gracefully
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("readFromPartition panicked: %v", r)
+		}
+	}()
+
+	sm.readFromPartition(ctx, 0, qm, messagesCh)
+
+	// Channel should remain empty
+	select {
+	case <-messagesCh:
+		t.Error("Expected no messages due to reader error")
+	default:
+		// Expected - no messages should be sent
+	}
+}
+
+func TestStreamManager_readFromPartition_PullError(t *testing.T) {
+	mockClient := &mockStreamClient{
+		pullErr: errors.New("failed to pull message"),
+	}
+
+	sm := NewStreamManager(mockClient)
+	qm := queryModel{
+		Topic:           "test-topic",
+		AutoOffsetReset: "earliest",
+		LastN:           10,
+		MessageFormat:   "json",
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	messagesCh := make(chan messageWithPartition, 10)
+
+	// Start the partition reader
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("readFromPartition panicked: %v", r)
+		}
+	}()
+
+	go sm.readFromPartition(ctx, 0, qm, messagesCh)
+
+	// Wait a bit and check that no messages are received
+	time.Sleep(60 * time.Millisecond)
+
+	select {
+	case <-messagesCh:
+		t.Error("Expected no messages due to pull error")
+	default:
+		// Expected - no messages should be sent due to error
+	}
+}
+
+func TestStreamManager_readFromPartition_ContextCancellation(t *testing.T) {
+	mockClient := &mockStreamClient{
+		pullMessages: []kafka_client.KafkaMessage{
+			{
+				Value:     map[string]interface{}{"key": "value"},
+				RawValue:  []byte(`{"key": "value"}`),
+				Timestamp: time.Now(),
+				Offset:    1,
+			},
+		},
+	}
+
+	sm := NewStreamManager(mockClient)
+	qm := queryModel{
+		Topic:           "test-topic",
+		AutoOffsetReset: "earliest",
+		LastN:           10,
+		MessageFormat:   "json",
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	messagesCh := make(chan messageWithPartition, 10)
+
+	// Start the partition reader
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("readFromPartition panicked: %v", r)
+		}
+	}()
+
+	go sm.readFromPartition(ctx, 0, qm, messagesCh)
+
+	// Cancel context immediately
+	cancel()
+
+	// Wait a bit and check that the reader stops
+	time.Sleep(50 * time.Millisecond)
+
+	// Should be able to receive at most one message before cancellation
+	select {
+	case msg := <-messagesCh:
+		if msg.partition != 0 {
+			t.Errorf("Expected partition 0, got %d", msg.partition)
+		}
+	default:
+		// It's also acceptable if no message was received before cancellation
 	}
 }

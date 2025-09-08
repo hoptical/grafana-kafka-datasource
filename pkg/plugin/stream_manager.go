@@ -24,96 +24,48 @@ func NewStreamManager(client KafkaClientAPI) *StreamManager {
 	return &StreamManager{client: client}
 }
 
-// decodeAvroMessage decodes an Avro message using the appropriate schema
-func (sm *StreamManager) decodeAvroMessage(data []byte, qm queryModel) (interface{}, error) {
-	log.DefaultLogger.Info("Starting Avro message decoding",
-		"dataLength", len(data),
-		"topic", qm.Topic,
-		"avroSchemaSource", qm.AvroSchemaSource,
-		"avroSchemaLength", len(qm.AvroSchema),
-		"partition", qm.Partition)
-
-	var schema string
-	var err error
-
-	if qm.AvroSchemaSource == "inlineSchema" && qm.AvroSchema != "" {
-		// Use inline schema
-		schema = qm.AvroSchema
-		log.DefaultLogger.Info("Using inline Avro schema",
-			"schemaLength", len(schema),
-			"schemaPreview", func() string {
-				if len(schema) > 100 {
-					return schema[:100] + "..."
-				}
-				return schema
-			}())
-	} else {
-		log.DefaultLogger.Warn("Falling back to Schema Registry",
-			"avroSchemaSource", qm.AvroSchemaSource,
-			"avroSchemaEmpty", qm.AvroSchema == "",
-			"reason", "Either avroSchemaSource is not 'inlineSchema' or avroSchema is empty")
-		// Use Schema Registry
-		schemaRegistryUrl := sm.client.GetSchemaRegistryUrl()
-		log.DefaultLogger.Debug("Attempting to get schema from registry",
-			"schemaRegistryUrl", schemaRegistryUrl,
-			"hasUsername", sm.client.GetSchemaRegistryUsername() != "",
-			"hasPassword", sm.client.GetSchemaRegistryPassword() != "",
-			"topic", qm.Topic)
-
-		if schemaRegistryUrl == "" {
-			log.DefaultLogger.Error("Schema Registry URL not configured")
-			return nil, fmt.Errorf("schema registry URL not configured")
-		}
-
-		subject := kafka_client.GetSubjectName(qm.Topic, sm.client.GetAvroSubjectNamingStrategy())
-		log.DefaultLogger.Debug("Generated subject name",
-			"subject", subject,
-			"strategy", sm.client.GetAvroSubjectNamingStrategy())
-
-		schemaClient := kafka_client.NewSchemaRegistryClient(
-			schemaRegistryUrl,
-			sm.client.GetSchemaRegistryUsername(),
-			sm.client.GetSchemaRegistryPassword(),
-		)
-
-		log.DefaultLogger.Debug("Fetching latest schema from registry", "subject", subject)
-		schema, err = schemaClient.GetLatestSchema(subject)
-		if err != nil {
-			log.DefaultLogger.Error("Failed to get schema from registry",
-				"subject", subject,
-				"error", err)
-			return nil, fmt.Errorf("failed to get schema from registry: %w", err)
-		}
-		log.DefaultLogger.Debug("Successfully retrieved schema from registry",
-			"subject", subject,
-			"schemaLength", len(schema))
-	}
-
-	// Decode the Avro message
-	log.DefaultLogger.Debug("Decoding Avro message with schema")
-	decoded, err := kafka_client.DecodeAvroMessage(data, schema)
-	if err != nil {
-		log.DefaultLogger.Error("Avro decoding failed", "error", err)
-		return nil, err
-	}
-
-	log.DefaultLogger.Debug("Avro message decoded successfully", "decodedType", fmt.Sprintf("%T", decoded))
-	return decoded, nil
-}
-
-// ProcessMessage converts a Kafka message into a Grafana data frame.
-func (sm *StreamManager) ProcessMessage(
-	msg kafka_client.KafkaMessage,
-	partition int32,
-	partitions []int32,
-	qm queryModel,
-) (*data.Frame, error) {
+// ProcessMessageToFrame converts a Kafka message into a Grafana data frame.
+// This is a shared function that can be used by both streaming and data query handlers.
+func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage, partition int32, partitions []int32, qm queryModel) (*data.Frame, error) {
 	log.DefaultLogger.Debug("Processing message",
 		"partition", partition,
 		"offset", msg.Offset,
 		"messageFormat", qm.MessageFormat,
 		"rawValueLength", len(msg.RawValue),
-		"hasParsedValue", msg.Value != nil)
+		"hasParsedValue", msg.Value != nil,
+		"hasError", msg.Error != nil)
+
+	// If there's an error in the message, create a frame with error information
+	if msg.Error != nil {
+		log.DefaultLogger.Warn("Processing message with error",
+			"partition", partition,
+			"offset", msg.Offset,
+			"error", msg.Error)
+
+		frame := data.NewFrame("response")
+
+		// Add time field
+		frame.Fields = append(frame.Fields, data.NewField("time", nil, make([]time.Time, 1)))
+		frame.Fields[0].Set(0, msg.Timestamp)
+
+		// Add partition field when consuming from multiple partitions
+		if len(partitions) > 1 {
+			frame.Fields = append(frame.Fields, data.NewField("partition", nil, make([]int32, 1)))
+			frame.Fields[1].Set(0, partition)
+		}
+
+		// Add offset field
+		offsetFieldIndex := len(frame.Fields)
+		frame.Fields = append(frame.Fields, data.NewField("offset", nil, make([]int64, 1)))
+		frame.Fields[offsetFieldIndex].Set(0, msg.Offset)
+
+		// Add error field
+		errorFieldIndex := len(frame.Fields)
+		frame.Fields = append(frame.Fields, data.NewField("error", nil, make([]string, 1)))
+		frame.Fields[errorFieldIndex].Set(0, msg.Error.Error())
+
+		return frame, nil
+	}
 
 	// Check if message needs Avro decoding
 	messageValue := msg.Value
@@ -126,7 +78,7 @@ func (sm *StreamManager) ProcessMessage(
 			"avroSchemaSource", qm.AvroSchemaSource)
 
 		// Try to decode as Avro
-		decoded, err := sm.decodeAvroMessage(msg.RawValue, qm)
+		decoded, err := decodeAvroMessage(client, msg.RawValue, qm)
 		if err != nil {
 			log.DefaultLogger.Error("Failed to decode Avro message, falling back to raw bytes",
 				"error", err,
@@ -229,6 +181,93 @@ func (sm *StreamManager) ProcessMessage(
 	return frame, nil
 }
 
+// decodeAvroMessage decodes an Avro message using the appropriate schema
+func decodeAvroMessage(client KafkaClientAPI, data []byte, qm queryModel) (interface{}, error) {
+	log.DefaultLogger.Info("Starting Avro message decoding",
+		"dataLength", len(data),
+		"topic", qm.Topic,
+		"avroSchemaSource", qm.AvroSchemaSource,
+		"avroSchemaLength", len(qm.AvroSchema),
+		"partition", qm.Partition)
+
+	var schema string
+	var err error
+
+	if qm.AvroSchemaSource == "inlineSchema" && qm.AvroSchema != "" {
+		// Use inline schema
+		schema = qm.AvroSchema
+		log.DefaultLogger.Info("Using inline Avro schema",
+			"schemaLength", len(schema),
+			"schemaPreview", func() string {
+				if len(schema) > 100 {
+					return schema[:100] + "..."
+				}
+				return schema
+			}())
+	} else {
+		log.DefaultLogger.Warn("Falling back to Schema Registry",
+			"avroSchemaSource", qm.AvroSchemaSource,
+			"avroSchemaEmpty", qm.AvroSchema == "",
+			"reason", "Either avroSchemaSource is not 'inlineSchema' or avroSchema is empty")
+		// Use Schema Registry
+		schemaRegistryUrl := client.GetSchemaRegistryUrl()
+		log.DefaultLogger.Debug("Attempting to get schema from registry",
+			"schemaRegistryUrl", schemaRegistryUrl,
+			"hasUsername", client.GetSchemaRegistryUsername() != "",
+			"hasPassword", client.GetSchemaRegistryPassword() != "",
+			"topic", qm.Topic)
+
+		if schemaRegistryUrl == "" {
+			log.DefaultLogger.Error("Schema Registry URL not configured")
+			return nil, fmt.Errorf("schema registry URL not configured")
+		}
+
+		subject := kafka_client.GetSubjectName(qm.Topic, client.GetAvroSubjectNamingStrategy())
+		log.DefaultLogger.Debug("Generated subject name",
+			"subject", subject,
+			"strategy", client.GetAvroSubjectNamingStrategy())
+
+		schemaClient := kafka_client.NewSchemaRegistryClient(
+			schemaRegistryUrl,
+			client.GetSchemaRegistryUsername(),
+			client.GetSchemaRegistryPassword(),
+		)
+
+		log.DefaultLogger.Debug("Fetching latest schema from registry", "subject", subject)
+		schema, err = schemaClient.GetLatestSchema(subject)
+		if err != nil {
+			log.DefaultLogger.Error("Failed to get schema from registry",
+				"subject", subject,
+				"error", err)
+			return nil, fmt.Errorf("failed to get schema from registry: %w", err)
+		}
+		log.DefaultLogger.Debug("Successfully retrieved schema from registry",
+			"subject", subject,
+			"schemaLength", len(schema))
+	}
+
+	// Decode the Avro message
+	log.DefaultLogger.Debug("Decoding Avro message with schema")
+	decoded, err := kafka_client.DecodeAvroMessage(data, schema)
+	if err != nil {
+		log.DefaultLogger.Error("Avro decoding failed", "error", err)
+		return nil, err
+	}
+
+	log.DefaultLogger.Debug("Avro message decoded successfully", "decodedType", fmt.Sprintf("%T", decoded))
+	return decoded, nil
+}
+
+// ProcessMessage converts a Kafka message into a Grafana data frame.
+func (sm *StreamManager) ProcessMessage(
+	msg kafka_client.KafkaMessage,
+	partition int32,
+	partitions []int32,
+	qm queryModel,
+) (*data.Frame, error) {
+	return ProcessMessageToFrame(sm.client, msg, partition, partitions, qm)
+}
+
 // StartPartitionReaders starts goroutines to read from each partition and sends messages to the channel.
 func (sm *StreamManager) StartPartitionReaders(
 	ctx context.Context,
@@ -263,7 +302,11 @@ func (sm *StreamManager) readFromPartition(
 		log.DefaultLogger.Error("Stream reader is nil", "topic", qm.Topic, "partition", partition)
 		return
 	}
-	defer reader.Close()
+	defer func() {
+		if reader != nil {
+			reader.Close()
+		}
+	}()
 
 	messageCount := 0
 	for {

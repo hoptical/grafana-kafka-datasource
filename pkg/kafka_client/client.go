@@ -92,10 +92,84 @@ type KafkaMessage struct {
 	RawValue  []byte      // Raw message bytes for Avro decoding
 	Timestamp time.Time
 	Offset    int64
+	Error     error // Error if decoding failed
 }
 
 // ErrTopicNotFound indicates the requested topic does not exist.
 var ErrTopicNotFound = errors.New("topic not found")
+
+// decodeMessageValue decodes the message value based on the specified format.
+// For "avro", it returns nil (decoding deferred).
+// For "json", it attempts JSON decoding and returns an error if it fails.
+// For other formats, it attempts JSON decoding but doesn't return an error on failure.
+func (client *KafkaClient) decodeMessageValue(data []byte, format string) (interface{}, error) {
+	if format == "avro" {
+		grafanalog.DefaultLogger.Debug("Skipping JSON decoding for Avro format message",
+			"valueLength", len(data))
+		// For Avro format, don't attempt JSON parsing
+		return nil, nil
+	} else if format == "json" {
+		// For JSON format, require successful JSON decoding
+		var doc interface{}
+		dec := json.NewDecoder(bytes.NewReader(data))
+		dec.UseNumber()
+		if err := dec.Decode(&doc); err != nil {
+			previewLen := 10
+			if len(data) < previewLen {
+				previewLen = len(data)
+			}
+			grafanalog.DefaultLogger.Error("JSON decoding failed for JSON format message",
+				"error", err,
+				"valueLength", len(data),
+				"errorType", fmt.Sprintf("%T", err),
+				"firstBytes", fmt.Sprintf("%x", data[:previewLen]))
+			return nil, fmt.Errorf("failed to decode message as JSON: %w", err)
+		} else {
+			// Accept both objects and arrays at the top level
+			switch v := doc.(type) {
+			case map[string]interface{}, []interface{}:
+				grafanalog.DefaultLogger.Debug("JSON decoding successful",
+					"decodedType", fmt.Sprintf("%T", v))
+				return v, nil
+			default:
+				grafanalog.DefaultLogger.Error("JSON decoded but not object/array for JSON format",
+					"decodedType", fmt.Sprintf("%T", v))
+				return nil, fmt.Errorf("decoded JSON is not a valid object or array: %T", v)
+			}
+		}
+	} else {
+		// For other formats or unspecified, try JSON for backward compatibility but don't fail
+		var doc interface{}
+		dec := json.NewDecoder(bytes.NewReader(data))
+		dec.UseNumber()
+		if err := dec.Decode(&doc); err != nil {
+			previewLen := 10
+			if len(data) < previewLen {
+				previewLen = len(data)
+			}
+			grafanalog.DefaultLogger.Debug("JSON decoding failed, message may be binary",
+				"error", err,
+				"valueLength", len(data),
+				"errorType", fmt.Sprintf("%T", err),
+				"firstBytes", fmt.Sprintf("%x", data[:previewLen]))
+			// If JSON decoding fails, we'll handle it later
+			return nil, nil
+		} else {
+			// Accept both objects and arrays at the top level
+			switch v := doc.(type) {
+			case map[string]interface{}, []interface{}:
+				grafanalog.DefaultLogger.Debug("JSON decoding successful",
+					"decodedType", fmt.Sprintf("%T", v))
+				return v, nil
+			default:
+				grafanalog.DefaultLogger.Debug("JSON decoded but not object/array",
+					"decodedType", fmt.Sprintf("%T", v))
+				// If it's not a valid JSON object/array, leave as nil
+				return nil, nil
+			}
+		}
+	}
+}
 
 func NewKafkaClient(options Options) KafkaClient {
 	// Build broker slice once
@@ -323,43 +397,13 @@ func (client *KafkaClient) ConsumerPull(ctx context.Context, reader *kafka.Reade
 			"firstChars", string(preview))
 	}
 
-	// Only try JSON decoding if message format is not explicitly Avro
-	if messageFormat != "avro" {
-		// Try to decode as JSON first (for backward compatibility)
-		var doc interface{}
-		dec := json.NewDecoder(bytes.NewReader(msg.Value))
-		dec.UseNumber()
-		if err := dec.Decode(&doc); err != nil {
-			previewLen := 10
-			if len(msg.Value) < previewLen {
-				previewLen = len(msg.Value)
-			}
-			grafanalog.DefaultLogger.Debug("JSON decoding failed, message may be binary",
-				"error", err,
-				"valueLength", len(msg.Value),
-				"errorType", fmt.Sprintf("%T", err),
-				"firstBytes", fmt.Sprintf("%x", msg.Value[:previewLen]))
-			// If JSON decoding fails, we'll handle it later
-			message.Value = nil
-		} else {
-			// Accept both objects and arrays at the top level
-			switch v := doc.(type) {
-			case map[string]interface{}, []interface{}:
-				grafanalog.DefaultLogger.Debug("JSON decoding successful",
-					"decodedType", fmt.Sprintf("%T", v))
-				message.Value = v
-			default:
-				grafanalog.DefaultLogger.Debug("JSON decoded but not object/array",
-					"decodedType", fmt.Sprintf("%T", v))
-				// If it's not a valid JSON object/array, leave as nil
-				message.Value = nil
-			}
-		}
-	} else {
-		grafanalog.DefaultLogger.Debug("Skipping JSON decoding for Avro format message",
-			"valueLength", len(msg.Value))
-		// For Avro format, don't attempt JSON parsing
+	// Decode message value based on format
+	value, err := client.decodeMessageValue(msg.Value, messageFormat)
+	if err != nil {
+		message.Error = err
 		message.Value = nil
+	} else {
+		message.Value = value
 	}
 
 	message.Offset = msg.Offset
