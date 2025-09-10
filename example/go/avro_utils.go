@@ -269,7 +269,7 @@ func getMapKeys(m map[string]interface{}) []string {
 }
 
 // EncodeAvroMessage encodes a message using Avro
-func EncodeAvroMessage(shape string, data interface{}, schemaRegistryURL string, verbose bool) ([]byte, error) {
+func EncodeAvroMessage(shape string, data interface{}, schemaRegistryURL string, topic string, verbose bool) ([]byte, error) {
 	if verbose {
 		fmt.Printf("[PRODUCER DEBUG] Starting Avro encoding for shape: %s\n", shape)
 		if schemaRegistryURL != "" {
@@ -296,12 +296,12 @@ func EncodeAvroMessage(shape string, data interface{}, schemaRegistryURL string,
 
 	// If schema registry URL is provided, use schema registry
 	if schemaRegistryURL != "" {
-		if verbose {
-			fmt.Printf("[PRODUCER DEBUG] Registering schema with registry...\n")
-		}
-
 		client := NewSchemaRegistryClient(schemaRegistryURL)
-		subject := fmt.Sprintf("%s-value", shape) // Kafka convention: topic-value
+		subject := fmt.Sprintf("%s-value", topic) // Kafka convention: topic-value
+
+		if verbose {
+			fmt.Printf("[PRODUCER DEBUG] Registering schema with registry for topic: %s, subject: %s\n", topic, subject)
+		}
 
 		schemaID, err := client.RegisterSchema(subject, schema.Schema)
 		if err != nil {

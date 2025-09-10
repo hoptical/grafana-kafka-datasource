@@ -547,5 +547,5 @@ func (client *KafkaClient) GetSchemaRegistryPassword() string {
 
 // GetAvroSubjectNamingStrategy returns the Avro subject naming strategy
 func (client *KafkaClient) GetAvroSubjectNamingStrategy() string {
-	return "topicName" // Default strategy
+	return "recordName" // Use topic-value convention to match producer
 }

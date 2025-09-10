@@ -383,8 +383,8 @@ func TestKafkaClient_GetAvroSubjectNamingStrategy(t *testing.T) {
 	})
 
 	result := client.GetAvroSubjectNamingStrategy()
-	if result != "topicName" {
-		t.Errorf("Expected GetAvroSubjectNamingStrategy to return 'topicName', got %s", result)
+	if result != "recordName" {
+		t.Errorf("Expected GetAvroSubjectNamingStrategy to return 'recordName', got %s", result)
 	}
 }
 

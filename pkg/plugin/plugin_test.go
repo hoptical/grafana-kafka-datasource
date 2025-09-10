@@ -406,7 +406,7 @@ func TestMockKafkaClient_AvroMethods(t *testing.T) {
 		schemaRegistryUrl:         "http://localhost:8081",
 		schemaRegistryUsername:    "test-user",
 		schemaRegistryPassword:    "test-pass",
-		avroSubjectNamingStrategy: "topicName",
+		avroSubjectNamingStrategy: "recordName",
 	}
 
 	if mc.GetMessageFormat() != "avro" {
@@ -421,8 +421,8 @@ func TestMockKafkaClient_AvroMethods(t *testing.T) {
 	if mc.GetSchemaRegistryPassword() != "test-pass" {
 		t.Errorf("Expected GetSchemaRegistryPassword to return 'test-pass', got %s", mc.GetSchemaRegistryPassword())
 	}
-	if mc.GetAvroSubjectNamingStrategy() != "topicName" {
-		t.Errorf("Expected GetAvroSubjectNamingStrategy to return 'topicName', got %s", mc.GetAvroSubjectNamingStrategy())
+	if mc.GetAvroSubjectNamingStrategy() != "recordName" {
+		t.Errorf("Expected GetAvroSubjectNamingStrategy to return 'recordName', got %s", mc.GetAvroSubjectNamingStrategy())
 	}
 }
 

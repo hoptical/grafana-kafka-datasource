@@ -645,6 +645,7 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 					msgWithPartition.partition,
 					partitions,
 					d.streamConfig,
+					d.currentTopic,
 				)
 				if err != nil {
 					log.DefaultLogger.Error("Error processing message",

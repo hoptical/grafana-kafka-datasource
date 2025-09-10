@@ -64,7 +64,7 @@ func (m *mockStreamClient) GetMessageFormat() string             { return "json"
 func (m *mockStreamClient) GetSchemaRegistryUrl() string         { return "" }
 func (m *mockStreamClient) GetSchemaRegistryUsername() string    { return "" }
 func (m *mockStreamClient) GetSchemaRegistryPassword() string    { return "" }
-func (m *mockStreamClient) GetAvroSubjectNamingStrategy() string { return "topicName" }
+func (m *mockStreamClient) GetAvroSubjectNamingStrategy() string { return "recordName" }
 
 func TestStreamManager_ValidateAndGetPartitions(t *testing.T) {
 	tests := []struct {
@@ -260,7 +260,7 @@ func TestStreamManager_ProcessMessage(t *testing.T) {
 				TimestampMode:    tt.timestampMode,
 			}
 
-			frame, err := sm.ProcessMessage(tt.message, tt.partition, tt.partitions, config)
+			frame, err := sm.ProcessMessage(tt.message, tt.partition, tt.partitions, config, "test")
 			if err != nil {
 				t.Errorf("Unexpected error: %v", err)
 				return
@@ -527,7 +527,7 @@ func TestStreamManager_ProcessMessage_RuntimeConfigChange_JSON(t *testing.T) {
 	}
 
 	// Process message with JSON format
-	frame, err := sm.ProcessMessage(msg, 0, []int32{0}, config)
+	frame, err := sm.ProcessMessage(msg, 0, []int32{0}, config, "test")
 	if err != nil {
 		t.Fatalf("Expected no error processing JSON message, got: %v", err)
 	}
@@ -564,7 +564,7 @@ func TestStreamManager_ProcessMessage_RuntimeConfigChange_Avro(t *testing.T) {
 	}
 
 	// Process message with Avro format - should return error frame since Avro decoding will fail
-	frame, err := sm.ProcessMessage(msg, 0, []int32{0}, config)
+	frame, err := sm.ProcessMessage(msg, 0, []int32{0}, config, "test")
 	if err != nil {
 		t.Fatalf("Expected no error (error should be in frame), got: %v", err)
 	}
@@ -609,7 +609,7 @@ func TestStreamManager_ProcessMessage_ConfigChangeReflection(t *testing.T) {
 	}
 
 	// Process message with initial JSON format
-	frame1, err := sm.ProcessMessage(msg, 0, []int32{0}, config)
+	frame1, err := sm.ProcessMessage(msg, 0, []int32{0}, config, "test")
 	if err != nil {
 		t.Fatalf("Expected no error processing initial message, got: %v", err)
 	}
@@ -618,7 +618,7 @@ func TestStreamManager_ProcessMessage_ConfigChangeReflection(t *testing.T) {
 	sm.UpdateStreamConfig(config, "avro")
 
 	// Process same message with updated Avro format
-	frame2, err := sm.ProcessMessage(msg, 0, []int32{0}, config)
+	frame2, err := sm.ProcessMessage(msg, 0, []int32{0}, config, "test")
 	if err != nil {
 		t.Fatalf("Expected no error processing message with updated config, got: %v", err)
 	}
@@ -799,7 +799,7 @@ func TestStreamManager_ProcessMessage_ErrorHandling_JSON(t *testing.T) {
 	}
 
 	// Process message - should return error frame
-	frame, err := sm.ProcessMessage(msg, 0, []int32{0}, config)
+	frame, err := sm.ProcessMessage(msg, 0, []int32{0}, config, "test")
 	if err != nil {
 		t.Fatalf("Expected no error (error should be in frame), got: %v", err)
 	}
@@ -839,7 +839,7 @@ func TestStreamManager_ProcessMessage_ErrorHandling_Avro(t *testing.T) {
 	}
 
 	// Process message - should return error frame
-	frame, err := sm.ProcessMessage(msg, 0, []int32{0}, config)
+	frame, err := sm.ProcessMessage(msg, 0, []int32{0}, config, "test")
 	if err != nil {
 		t.Fatalf("Expected no error (error should be in frame), got: %v", err)
 	}

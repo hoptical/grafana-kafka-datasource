@@ -75,7 +75,7 @@ func (sm *StreamManager) UpdateStreamConfig(config *StreamConfig, newMessageForm
 
 // ProcessMessageToFrame converts a Kafka message into a Grafana data frame.
 // This is a shared function that can be used by both streaming and data query handlers.
-func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage, partition int32, partitions []int32, config *StreamConfig) (*data.Frame, error) {
+func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage, partition int32, partitions []int32, config *StreamConfig, topic string) (*data.Frame, error) {
 	log.DefaultLogger.Debug("Processing message",
 		"partition", partition,
 		"offset", msg.Offset,
@@ -122,11 +122,11 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 			"partition", partition,
 			"offset", msg.Offset,
 			"rawValueLength", len(msg.RawValue),
-			"topic", "streaming", // Note: topic not available in config
+			"topic", topic,
 			"avroSchemaSource", config.AvroSchemaSource)
 
 		// Try to decode as Avro
-		decoded, err := decodeAvroMessage(client, msg.RawValue, config)
+		decoded, err := decodeAvroMessage(client, msg.RawValue, config, topic)
 		if err != nil {
 			log.DefaultLogger.Error("Failed to decode Avro message",
 				"error", err,
@@ -265,10 +265,10 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 }
 
 // decodeAvroMessage decodes an Avro message using the appropriate schema
-func decodeAvroMessage(client KafkaClientAPI, data []byte, config *StreamConfig) (interface{}, error) {
+func decodeAvroMessage(client KafkaClientAPI, data []byte, config *StreamConfig, topic string) (interface{}, error) {
 	log.DefaultLogger.Info("Starting Avro message decoding",
 		"dataLength", len(data),
-		"topic", "streaming", // Note: topic not available in config
+		"topic", topic,
 		"avroSchemaSource", config.AvroSchemaSource,
 		"avroSchemaLength", len(config.AvroSchema),
 		"partition", "unknown") // Note: partition not available here
@@ -298,14 +298,14 @@ func decodeAvroMessage(client KafkaClientAPI, data []byte, config *StreamConfig)
 			"schemaRegistryUrl", schemaRegistryUrl,
 			"hasUsername", client.GetSchemaRegistryUsername() != "",
 			"hasPassword", client.GetSchemaRegistryPassword() != "",
-			"topic", "streaming") // Note: topic not available in config
+			"topic", topic)
 
 		if schemaRegistryUrl == "" {
 			log.DefaultLogger.Error("Schema Registry URL not configured")
 			return nil, fmt.Errorf("schema registry URL not configured")
 		}
 
-		subject := kafka_client.GetSubjectName("streaming", client.GetAvroSubjectNamingStrategy()) // Note: using placeholder topic
+		subject := kafka_client.GetSubjectName(topic, client.GetAvroSubjectNamingStrategy()) // Note: using actual topic
 		log.DefaultLogger.Debug("Generated subject name",
 			"subject", subject,
 			"strategy", client.GetAvroSubjectNamingStrategy())
@@ -347,8 +347,9 @@ func (sm *StreamManager) ProcessMessage(
 	partition int32,
 	partitions []int32,
 	config *StreamConfig,
+	topic string,
 ) (*data.Frame, error) {
-	return ProcessMessageToFrame(sm.client, msg, partition, partitions, config)
+	return ProcessMessageToFrame(sm.client, msg, partition, partitions, config, topic)
 }
 
 // StartPartitionReaders starts goroutines to read from each partition and sends messages to the channel.

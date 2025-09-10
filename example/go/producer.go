@@ -180,7 +180,7 @@ func main() {
 					"processes": []string{"nginx", "mysql", "redis"},
 				}
 			}
-			messageData, err = EncodeAvroMessage(*shape, payload, *schemaRegistryURL, *verbose)
+			messageData, err = EncodeAvroMessage(*shape, payload, *schemaRegistryURL, *topic, *verbose)
 		}
 
 		if err != nil {
