@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
@@ -132,12 +133,53 @@ func getDatasourceSettings(s backend.DataSourceInstanceSettings) (*kafka_client.
 	return settings, nil
 }
 
-type KafkaDatasource struct{ client KafkaClientAPI }
+type KafkaDatasource struct {
+	client            KafkaClientAPI
+	streamManager     *StreamManager
+	streamConfig      *StreamConfig
+	currentTopic      string
+	currentPartitions []int32
+	streamCtx         context.Context
+	streamCancel      context.CancelFunc
+}
+
+// configChanged checks if the new query model differs from the current stream configuration
+// Note: Topic changes are handled separately and should not be included here
+func (d *KafkaDatasource) configChanged(qm queryModel) bool {
+	if d.streamConfig == nil {
+		return true
+	}
+
+	return d.streamConfig.MessageFormat != qm.MessageFormat ||
+		d.streamConfig.AvroSchemaSource != qm.AvroSchemaSource ||
+		d.streamConfig.AvroSchema != qm.AvroSchema ||
+		d.streamConfig.AutoOffsetReset != qm.AutoOffsetReset ||
+		d.streamConfig.TimestampMode != qm.TimestampMode
+}
+
+// partitionsChanged checks if the partitions have changed
+func (d *KafkaDatasource) partitionsChanged(qm queryModel, partitions []int32) bool {
+	if len(d.currentPartitions) != len(partitions) {
+		return true
+	}
+
+	// Check if partition list has changed
+	for i, p := range partitions {
+		if i >= len(d.currentPartitions) || d.currentPartitions[i] != p {
+			return true
+		}
+	}
+
+	return false
+}
 
 func (d *KafkaDatasource) Dispose() { d.client.Dispose() }
 
 // NewWithClient allows injecting a custom KafkaClientAPI (primarily for tests).
-func NewWithClient(c KafkaClientAPI) *KafkaDatasource { return &KafkaDatasource{client: c} }
+// NewWithClient allows injecting a custom KafkaClientAPI (primarily for tests).
+func NewWithClient(c KafkaClientAPI) *KafkaDatasource {
+	return &KafkaDatasource{client: c}
+}
 
 func (d *KafkaDatasource) QueryData(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
 	log.DefaultLogger.Debug("QueryData called", "request", req)
@@ -193,6 +235,12 @@ func (d *KafkaDatasource) CallResource(ctx context.Context, req *backend.CallRes
 	}
 	if req.Path == "topics" && req.Method == "GET" {
 		return d.handleSearchTopics(ctx, req, sender)
+	}
+	if req.Path == "validate-schema-registry" && req.Method == "GET" {
+		return d.handleValidateSchemaRegistry(ctx, req, sender)
+	}
+	if req.Path == "validate-avro-schema" && req.Method == "POST" {
+		return d.handleValidateAvroSchema(ctx, req, sender)
 	}
 	return sendJSON(sender, 404, map[string]string{"error": "Not found"})
 }
@@ -271,6 +319,167 @@ func (d *KafkaDatasource) handleSearchTopics(ctx context.Context, req *backend.C
 		"prefix": prefix,
 		"limit":  limit,
 	})
+}
+
+func (d *KafkaDatasource) handleValidateSchemaRegistry(ctx context.Context, req *backend.CallResourceRequest, sender backend.CallResourceResponseSender) error {
+	result, err := d.ValidateSchemaRegistry(ctx)
+	if err != nil {
+		return sendJSON(sender, 500, map[string]string{"error": err.Error()})
+	}
+
+	status := 200
+	if result.Status == backend.HealthStatusError {
+		status = 400
+	}
+
+	return sendJSON(sender, status, map[string]interface{}{
+		"status":  result.Status,
+		"message": result.Message,
+	})
+}
+
+func (d *KafkaDatasource) handleValidateAvroSchema(ctx context.Context, req *backend.CallResourceRequest, sender backend.CallResourceResponseSender) error {
+	// Parse the request body to get the schema
+	var requestBody struct {
+		Schema string `json:"schema"`
+	}
+
+	if err := json.Unmarshal(req.Body, &requestBody); err != nil {
+		return sendJSON(sender, 400, map[string]string{"error": "Invalid JSON in request body"})
+	}
+
+	result, err := d.ValidateAvroSchema(requestBody.Schema)
+	if err != nil {
+		return sendJSON(sender, 500, map[string]string{"error": err.Error()})
+	}
+
+	status := 200
+	if result.Status == backend.HealthStatusError {
+		status = 400
+	}
+
+	return sendJSON(sender, status, map[string]interface{}{
+		"status":  result.Status,
+		"message": result.Message,
+	})
+}
+
+// ValidateSchemaRegistry validates the schema registry configuration
+func (d *KafkaDatasource) ValidateSchemaRegistry(ctx context.Context) (*backend.CheckHealthResult, error) {
+	schemaRegistryUrl := d.client.GetSchemaRegistryUrl()
+	if schemaRegistryUrl == "" {
+		return &backend.CheckHealthResult{
+			Status:  backend.HealthStatusError,
+			Message: "Schema registry URL is not configured",
+		}, nil
+	}
+
+	// Parse and validate URL format
+	parsedUrl, err := url.Parse(schemaRegistryUrl)
+	if err != nil {
+		return &backend.CheckHealthResult{
+			Status:  backend.HealthStatusError,
+			Message: fmt.Sprintf("Invalid schema registry URL format: %s", err.Error()),
+		}, nil
+	}
+
+	// Check if it's a valid HTTP/HTTPS URL
+	if parsedUrl.Scheme != "http" && parsedUrl.Scheme != "https" {
+		return &backend.CheckHealthResult{
+			Status:  backend.HealthStatusError,
+			Message: "Schema registry URL must use HTTP or HTTPS protocol",
+		}, nil
+	}
+
+	// Try to connect to schema registry by attempting to get a schema
+	// Use a dummy subject that likely doesn't exist to test connectivity
+	schemaClient := kafka_client.NewSchemaRegistryClient(
+		schemaRegistryUrl,
+		d.client.GetSchemaRegistryUsername(),
+		d.client.GetSchemaRegistryPassword(),
+	)
+
+	testSubject := "_test_connectivity_subject_"
+	_, err = schemaClient.GetLatestSchema(testSubject)
+	// We expect this to fail with a 404 (subject not found), which means the connection works
+	// Any other error indicates a connection problem
+	if err != nil && !isSubjectNotFoundError(err) {
+		return &backend.CheckHealthResult{
+			Status:  backend.HealthStatusError,
+			Message: fmt.Sprintf("Cannot connect to schema registry: %s", err.Error()),
+		}, nil
+	}
+
+	return &backend.CheckHealthResult{
+		Status:  backend.HealthStatusOk,
+		Message: "Schema registry is accessible",
+	}, nil
+}
+
+// ValidateAvroSchema validates an Avro schema string
+func (d *KafkaDatasource) ValidateAvroSchema(schema string) (*backend.CheckHealthResult, error) {
+	if schema == "" {
+		return &backend.CheckHealthResult{
+			Status:  backend.HealthStatusError,
+			Message: "Schema cannot be empty",
+		}, nil
+	}
+
+	// Basic JSON validation
+	var schemaObj interface{}
+	if err := json.Unmarshal([]byte(schema), &schemaObj); err != nil {
+		return &backend.CheckHealthResult{
+			Status:  backend.HealthStatusError,
+			Message: fmt.Sprintf("Invalid JSON format: %s", err.Error()),
+		}, nil
+	}
+
+	// Check if it's a valid Avro schema structure
+	schemaMap, ok := schemaObj.(map[string]interface{})
+	if !ok {
+		return &backend.CheckHealthResult{
+			Status:  backend.HealthStatusError,
+			Message: "Schema must be a JSON object",
+		}, nil
+	}
+
+	// Check for required Avro schema fields
+	if _, hasType := schemaMap["type"]; !hasType {
+		return &backend.CheckHealthResult{
+			Status:  backend.HealthStatusError,
+			Message: "Avro schema must have a 'type' field",
+		}, nil
+	}
+
+	// For record types, check for required fields
+	if schemaType, ok := schemaMap["type"].(string); ok && schemaType == "record" {
+		if _, hasName := schemaMap["name"]; !hasName {
+			return &backend.CheckHealthResult{
+				Status:  backend.HealthStatusError,
+				Message: "Record schema must have a 'name' field",
+			}, nil
+		}
+		if _, hasFields := schemaMap["fields"]; !hasFields {
+			return &backend.CheckHealthResult{
+				Status:  backend.HealthStatusError,
+				Message: "Record schema must have a 'fields' field",
+			}, nil
+		}
+	}
+
+	return &backend.CheckHealthResult{
+		Status:  backend.HealthStatusOk,
+		Message: "Schema is valid",
+	}, nil
+}
+
+// isSubjectNotFoundError checks if the error indicates a subject not found (404)
+func isSubjectNotFoundError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := err.Error()
+	return strings.Contains(errStr, "404") || strings.Contains(errStr, "Subject not found")
 }
 
 func (d *KafkaDatasource) CheckHealth(_ context.Context, req *backend.CheckHealthRequest) (*backend.CheckHealthResult, error) {
@@ -365,68 +574,120 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 
 	log.DefaultLogger.Debug("RunStream partitions", "topic", qm.Topic, "partitions", partitions)
 
-	// Create message channel and start partition readers
-	messagesCh := make(chan messageWithPartition, streamMessageBuffer)
-	streamManager.StartPartitionReaders(ctx, partitions, qm, messagesCh)
+	// Create new stream configuration
+	newStreamConfig := &StreamConfig{
+		MessageFormat:    qm.MessageFormat,
+		AvroSchemaSource: qm.AvroSchemaSource,
+		AvroSchema:       qm.AvroSchema,
+		AutoOffsetReset:  qm.AutoOffsetReset,
+		TimestampMode:    qm.TimestampMode,
+	}
 
-	// Main processing loop
-	messageCount := 0
-	for {
-		select {
-		case <-ctx.Done():
-			log.DefaultLogger.Info("Stream context done, finishing",
-				"path", req.Path,
-				"totalMessages", messageCount)
-			return nil
-		case msgWithPartition := <-messagesCh:
-			messageCount++
-			log.DefaultLogger.Debug("Processing message from channel",
-				"messageNumber", messageCount,
-				"partition", msgWithPartition.partition,
-				"offset", msgWithPartition.msg.Offset)
+	// Check if we need to restart the stream or just update configuration
+	topicChanged := d.currentTopic != qm.Topic
+	partitionsChanged := d.partitionsChanged(qm, partitions)
+	configChanged := d.configChanged(qm)
 
-			frame, err := streamManager.ProcessMessage(
-				msgWithPartition.msg,
-				msgWithPartition.partition,
-				partitions,
-				qm,
-			)
-			if err != nil {
-				log.DefaultLogger.Error("Error processing message",
+	log.DefaultLogger.Info("Stream change detection",
+		"topicChanged", topicChanged,
+		"partitionsChanged", partitionsChanged,
+		"configChanged", configChanged,
+		"hasExistingStream", d.streamManager != nil)
+
+	// If topic, partitions, or configuration changed, or no existing stream, start fresh
+	if topicChanged || partitionsChanged || configChanged || d.streamManager == nil {
+		// Stop existing stream if running
+		if d.streamCancel != nil {
+			reason := "topic/partition changes"
+			if configChanged && !topicChanged && !partitionsChanged {
+				reason = "configuration changes"
+			}
+			log.DefaultLogger.Info("Stopping existing stream due to " + reason)
+			d.streamCancel()
+			d.streamCancel = nil
+		}
+
+		// Clear all previous state to ensure fresh start
+		d.streamManager = nil
+		d.streamConfig = nil
+
+		// Update persistent state with new configuration
+		d.streamManager = streamManager
+		d.streamConfig = newStreamConfig
+		d.currentTopic = qm.Topic
+		d.currentPartitions = partitions
+		d.streamCtx, d.streamCancel = context.WithCancel(ctx) // Create message channel and start partition readers
+		messagesCh := make(chan messageWithPartition, streamMessageBuffer)
+		d.streamManager.StartPartitionReaders(d.streamCtx, partitions, qm, d.streamConfig, messagesCh)
+
+		log.DefaultLogger.Info("Started new stream",
+			"topic", qm.Topic,
+			"partitions", partitions)
+
+		// Main processing loop
+		messageCount := 0
+		for {
+			select {
+			case <-d.streamCtx.Done():
+				log.DefaultLogger.Info("Stream context done, finishing",
+					"path", req.Path,
+					"totalMessages", messageCount)
+				return nil
+			case msgWithPartition := <-messagesCh:
+				messageCount++
+				log.DefaultLogger.Debug("Processing message from channel",
+					"messageNumber", messageCount,
+					"partition", msgWithPartition.partition,
+					"offset", msgWithPartition.msg.Offset)
+
+				frame, err := d.streamManager.ProcessMessage(
+					msgWithPartition.msg,
+					msgWithPartition.partition,
+					partitions,
+					d.streamConfig,
+				)
+				if err != nil {
+					log.DefaultLogger.Error("Error processing message",
+						"messageNumber", messageCount,
+						"partition", msgWithPartition.partition,
+						"offset", msgWithPartition.msg.Offset,
+						"error", err)
+					continue
+				}
+
+				fieldCount := 0
+				if obj, ok := msgWithPartition.msg.Value.(map[string]interface{}); ok {
+					fieldCount = len(obj)
+				} else if arr, ok := msgWithPartition.msg.Value.([]interface{}); ok {
+					fieldCount = len(arr)
+				}
+
+				log.DefaultLogger.Debug("Message frame sent",
 					"messageNumber", messageCount,
 					"partition", msgWithPartition.partition,
 					"offset", msgWithPartition.msg.Offset,
-					"error", err)
-				continue
-			}
+					"timestamp", frame.Fields[0].At(0),
+					"fieldCount", fieldCount)
 
-			fieldCount := 0
-			if obj, ok := msgWithPartition.msg.Value.(map[string]interface{}); ok {
-				fieldCount = len(obj)
-			} else if arr, ok := msgWithPartition.msg.Value.([]interface{}); ok {
-				fieldCount = len(arr)
-			}
+				err = sender.SendFrame(frame, data.IncludeAll)
+				if err != nil {
+					log.DefaultLogger.Error("Error sending frame",
+						"messageNumber", messageCount,
+						"error", err)
+					continue
+				}
 
-			log.DefaultLogger.Debug("Message frame sent",
-				"messageNumber", messageCount,
-				"partition", msgWithPartition.partition,
-				"offset", msgWithPartition.msg.Offset,
-				"timestamp", frame.Fields[0].At(0),
-				"fieldCount", fieldCount)
-
-			err = sender.SendFrame(frame, data.IncludeAll)
-			if err != nil {
-				log.DefaultLogger.Error("Error sending frame",
+				log.DefaultLogger.Debug("Successfully sent frame to Grafana",
 					"messageNumber", messageCount,
-					"error", err)
-				continue
+					"frameFields", len(frame.Fields),
+					"frameName", frame.Name)
 			}
-
-			log.DefaultLogger.Debug("Successfully sent frame to Grafana",
-				"messageNumber", messageCount,
-				"frameFields", len(frame.Fields),
-				"frameName", frame.Name)
 		}
+	} else {
+		// No changes, just wait for context cancellation
+		log.DefaultLogger.Info("No changes detected, waiting for context cancellation")
+		<-ctx.Done()
+		return nil
 	}
 }
 

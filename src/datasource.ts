@@ -116,4 +116,34 @@ export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourc
     const response = await this.getResource('topics', { prefix, limit: String(limit) });
     return response.topics || [];
   }
+
+  async validateSchemaRegistry(): Promise<{ status: string; message: string }> {
+    try {
+      const response = await this.getResource('validate-schema-registry') as any;
+      return {
+        status: response.status || 'ok',
+        message: response.message || 'Schema registry is accessible',
+      };
+    } catch (err: any) {
+      return {
+        status: 'error',
+        message: err?.message || 'Failed to validate schema registry',
+      };
+    }
+  }
+
+  async validateAvroSchema(schema: string): Promise<{ status: string; message: string }> {
+    try {
+      const response = await this.postResource('validate-avro-schema', { schema }) as any;
+      return {
+        status: response.status || 'ok',
+        message: response.message || 'Schema is valid',
+      };
+    } catch (err: any) {
+      return {
+        status: 'error',
+        message: err?.message || 'Failed to validate schema',
+      };
+    }
+  }
 }

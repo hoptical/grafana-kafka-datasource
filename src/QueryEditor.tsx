@@ -41,6 +41,14 @@ interface State {
   showingSuggestions: boolean;
   loadingPartitions: boolean;
   partitionSuccess?: string;
+  schemaValidation?: {
+    status: 'valid' | 'invalid' | 'loading';
+    message?: string;
+  };
+  schemaRegistryValidation?: {
+    status: 'valid' | 'invalid' | 'loading';
+    message?: string;
+  };
 }
 
 export class QueryEditor extends PureComponent<Props, State> {
@@ -48,6 +56,7 @@ export class QueryEditor extends PureComponent<Props, State> {
   private lastCommittedTopic = '';
   private fetchPartitionsTimeoutId?: ReturnType<typeof setTimeout>;
   private topicBlurTimeout?: ReturnType<typeof setTimeout>;
+  private schemaValidationTimeout?: ReturnType<typeof setTimeout>;
 
   constructor(props: Props) {
     super(props);
@@ -219,8 +228,17 @@ export class QueryEditor extends PureComponent<Props, State> {
 
   onAvroSchemaChanged = (event: ChangeEvent<HTMLTextAreaElement>) => {
     const { onChange, query, onRunQuery } = this.props;
-    onChange({ ...query, avroSchema: event.target.value });
+    const newSchema = event.target.value;
+    onChange({ ...query, avroSchema: newSchema });
     onRunQuery();
+
+    // Validate the schema after a short delay
+    if (this.schemaValidationTimeout) {
+      clearTimeout(this.schemaValidationTimeout);
+    }
+    this.schemaValidationTimeout = setTimeout(() => {
+      this.validateAvroSchema(newSchema);
+    }, 500);
   };
 
   onAvroSchemaFileUpload = (event: ChangeEvent<HTMLInputElement>) => {
@@ -234,6 +252,59 @@ export class QueryEditor extends PureComponent<Props, State> {
         onRunQuery();
       };
       reader.readAsText(file);
+    }
+  };
+
+  validateAvroSchema = async (schema: string) => {
+    if (!schema.trim()) {
+      this.setState({
+        schemaValidation: { status: 'invalid', message: 'Schema cannot be empty' },
+      });
+      return;
+    }
+
+    this.setState({
+      schemaValidation: { status: 'loading' },
+    });
+
+    try {
+      const result = await this.props.datasource.validateAvroSchema(schema);
+      this.setState({
+        schemaValidation: {
+          status: result.status === 'error' ? 'invalid' : 'valid',
+          message: result.message,
+        },
+      });
+    } catch (error) {
+      this.setState({
+        schemaValidation: {
+          status: 'invalid',
+          message: 'Failed to validate schema',
+        },
+      });
+    }
+  };
+
+  validateSchemaRegistry = async () => {
+    this.setState({
+      schemaRegistryValidation: { status: 'loading' },
+    });
+
+    try {
+      const result = await this.props.datasource.validateSchemaRegistry();
+      this.setState({
+        schemaRegistryValidation: {
+          status: result.status === 'error' ? 'invalid' : 'valid',
+          message: result.message,
+        },
+      });
+    } catch (error) {
+      this.setState({
+        schemaRegistryValidation: {
+          status: 'invalid',
+          message: 'Failed to validate schema registry',
+        },
+      });
     }
   };
 
@@ -463,6 +534,35 @@ export class QueryEditor extends PureComponent<Props, State> {
               </InlineField>
             </InlineFieldRow>
 
+            {query.avroSchemaSource === AvroSchemaSource.SCHEMA_REGISTRY && (
+              <InlineFieldRow>
+                <InlineField label="Schema Registry" labelWidth={25}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={this.validateSchemaRegistry}
+                      disabled={this.state.schemaRegistryValidation?.status === 'loading'}
+                    >
+                      {this.state.schemaRegistryValidation?.status === 'loading' ? (
+                        <>
+                          <Spinner size={12} />
+                          Validating...
+                        </>
+                      ) : (
+                        'Test Connection'
+                      )}
+                    </Button>
+                    {this.state.schemaRegistryValidation && (
+                      <InlineLabel color={this.state.schemaRegistryValidation.status === 'valid' ? 'green' : 'red'}>
+                        {this.state.schemaRegistryValidation.message}
+                      </InlineLabel>
+                    )}
+                  </div>
+                </InlineField>
+              </InlineFieldRow>
+            )}
+
             {query.avroSchemaSource === AvroSchemaSource.INLINE_SCHEMA && (
               <InlineFieldRow>
                 <InlineField
@@ -490,6 +590,23 @@ export class QueryEditor extends PureComponent<Props, State> {
                         resize: 'vertical',
                       }}
                     />
+                    {this.state.schemaValidation && (
+                      <div style={{ marginTop: '4px' }}>
+                        {this.state.schemaValidation.status === 'loading' ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <Spinner size={12} />
+                            <span style={{ fontSize: '12px', color: '#666' }}>Validating schema...</span>
+                          </div>
+                        ) : (
+                          <InlineLabel
+                            color={this.state.schemaValidation.status === 'valid' ? 'green' : 'red'}
+                            style={{ fontSize: '12px' }}
+                          >
+                            {this.state.schemaValidation.message}
+                          </InlineLabel>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </InlineField>
               </InlineFieldRow>

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 	"github.com/hoptical/grafana-kafka-datasource/pkg/kafka_client"
@@ -55,7 +56,11 @@ func (m *mockKafkaClient) GetTopics(ctx context.Context, prefix string, limit in
 }
 func (m *mockKafkaClient) HealthCheck() error { return m.healthErr }
 func (m *mockKafkaClient) NewStreamReader(ctx context.Context, topic string, partition int32, autoOffsetReset string, lastN int32) (*kafka.Reader, error) {
-	return nil, m.streamReaderErr
+	if m.streamReaderErr != nil {
+		return nil, m.streamReaderErr
+	}
+	// Return nil reader for testing - the code should handle this
+	return nil, nil
 }
 func (m *mockKafkaClient) ConsumerPull(ctx context.Context, reader *kafka.Reader, messageFormat string) (kafka_client.KafkaMessage, error) {
 	if m.consumerErr != nil {
@@ -66,6 +71,12 @@ func (m *mockKafkaClient) ConsumerPull(ctx context.Context, reader *kafka.Reader
 	}
 	msg := m.consumerMessages[0]
 	m.consumerMessages = m.consumerMessages[1:]
+
+	// For Avro format, don't return parsed Value to force Avro decoding
+	if messageFormat == "avro" {
+		msg.Value = nil
+	}
+
 	return msg, nil
 }
 func (m *mockKafkaClient) Dispose() {}
@@ -534,5 +545,216 @@ func TestNewKafkaInstance_BooleanAsStrings(t *testing.T) {
 	}
 	if instance == nil {
 		t.Error("Expected non-nil instance")
+	}
+}
+
+func TestRunStream_RuntimeConfigUpdate_JSON_to_Avro(t *testing.T) {
+	// Create a mock client that can simulate message processing
+	mockClient := &mockKafkaClient{
+		partitions: []int32{0},
+		consumerMessages: []kafka_client.KafkaMessage{
+			{
+				Value:     map[string]interface{}{"key": "test-value"},
+				RawValue:  []byte(`{"key": "test-value"}`),
+				Offset:    1,
+				Timestamp: time.Now(),
+			},
+		},
+	}
+
+	ds := plugin.NewWithClient(mockClient)
+
+	// Initial stream request with JSON format
+	initialData, _ := json.Marshal(map[string]interface{}{
+		"topicName":     "test-topic",
+		"partition":     0,
+		"messageFormat": "json",
+	})
+
+	// Create a custom stream sender to capture frames
+	streamSender := backend.NewStreamSender(nil)
+
+	// Start streaming with JSON format
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	go func() {
+		err := ds.RunStream(ctx, &backend.RunStreamRequest{Data: initialData}, streamSender)
+		if err != nil {
+			t.Errorf("RunStream failed: %v", err)
+		}
+	}()
+
+	// Wait for initial processing
+	time.Sleep(30 * time.Millisecond)
+
+	// Simulate query editor changing format to Avro
+	updatedData, _ := json.Marshal(map[string]interface{}{
+		"topicName":        "test-topic",
+		"partition":        0,
+		"messageFormat":    "avro",
+		"avroSchemaSource": "inlineSchema",
+		"avroSchema":       `{"type": "record", "name": "Test", "fields": [{"name": "key", "type": "string"}]}`,
+	})
+
+	// Start new stream with Avro format (simulating query editor change)
+	streamSender2 := backend.NewStreamSender(nil)
+
+	go func() {
+		err := ds.RunStream(ctx, &backend.RunStreamRequest{Data: updatedData}, streamSender2)
+		if err != nil {
+			t.Errorf("RunStream with updated config failed: %v", err)
+		}
+	}()
+
+	// Wait for processing with new config
+	time.Sleep(30 * time.Millisecond)
+
+	// Test passes if no errors occurred during the configuration changes
+}
+
+func TestRunStream_ConfigChange_AllPartitions(t *testing.T) {
+	// Test configuration changes when streaming from all partitions
+	mockClient := &mockKafkaClient{
+		partitions: []int32{0, 1, 2},
+		consumerMessages: []kafka_client.KafkaMessage{
+			{
+				Value:     map[string]interface{}{"key": "value1"},
+				RawValue:  []byte(`{"key": "value1"}`),
+				Offset:    1,
+				Timestamp: time.Now(),
+			},
+		},
+	}
+
+	ds := plugin.NewWithClient(mockClient)
+
+	// Initial request for all partitions with JSON
+	initialData, _ := json.Marshal(map[string]interface{}{
+		"topicName":     "test-topic",
+		"partition":     "all",
+		"messageFormat": "json",
+	})
+
+	streamSender := backend.NewStreamSender(nil)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	defer cancel()
+
+	go func() {
+		err := ds.RunStream(ctx, &backend.RunStreamRequest{Data: initialData}, streamSender)
+		if err != nil {
+			t.Errorf("RunStream for all partitions failed: %v", err)
+		}
+	}()
+
+	// Wait for initial setup
+	time.Sleep(40 * time.Millisecond)
+
+	// Simulate changing to Avro format for all partitions
+	updatedData, _ := json.Marshal(map[string]interface{}{
+		"topicName":        "test-topic",
+		"partition":        "all",
+		"messageFormat":    "avro",
+		"avroSchemaSource": "inlineSchema",
+		"avroSchema":       `{"type": "record", "name": "Test", "fields": [{"name": "key", "type": "string"}]}`,
+	})
+
+	streamSender2 := backend.NewStreamSender(nil)
+
+	go func() {
+		err := ds.RunStream(ctx, &backend.RunStreamRequest{Data: updatedData}, streamSender2)
+		if err != nil {
+			t.Errorf("RunStream with Avro config failed: %v", err)
+		}
+	}()
+
+	// Wait for processing
+	time.Sleep(40 * time.Millisecond)
+
+	// Test passes if no errors occurred during the configuration changes
+	t.Log("Configuration change test for all partitions completed")
+}
+
+func TestValidateAvroSchema(t *testing.T) {
+	// Create datasource using NewKafkaInstance (the proper way for tests)
+	settings := backend.DataSourceInstanceSettings{
+		JSONData: []byte(`{}`),
+	}
+	instance, err := plugin.NewKafkaInstance(context.Background(), settings)
+	if err != nil {
+		t.Fatalf("Failed to create instance: %v", err)
+	}
+	ds, ok := instance.(*plugin.KafkaDatasource)
+	if !ok {
+		t.Fatalf("Instance is not a KafkaDatasource")
+	}
+
+	tests := []struct {
+		name     string
+		schema   string
+		expected string
+	}{
+		{
+			name:     "Valid record schema",
+			schema:   `{"type": "record", "name": "Test", "fields": [{"name": "id", "type": "string"}]}`,
+			expected: "Schema is valid",
+		},
+		{
+			name:     "Empty schema",
+			schema:   "",
+			expected: "Schema cannot be empty",
+		},
+		{
+			name:     "Invalid JSON",
+			schema:   `{"type": "record", "name":`,
+			expected: "Invalid JSON format: unexpected end of JSON input",
+		},
+		{
+			name:     "Missing type field",
+			schema:   `{"name": "Test", "fields": []}`,
+			expected: "Avro schema must have a 'type' field",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := ds.ValidateAvroSchema(tt.schema)
+			if err != nil {
+				t.Errorf("ValidateAvroSchema() error = %v", err)
+				return
+			}
+			if result.Message != tt.expected {
+				t.Errorf("ValidateAvroSchema() = %v, expected %v", result.Message, tt.expected)
+			}
+		})
+	}
+}
+
+func TestValidateSchemaRegistry(t *testing.T) {
+	// Create datasource using NewKafkaInstance (the proper way for tests)
+	settings := backend.DataSourceInstanceSettings{
+		JSONData: []byte(`{}`),
+	}
+	instance, err := plugin.NewKafkaInstance(context.Background(), settings)
+	if err != nil {
+		t.Fatalf("Failed to create instance: %v", err)
+	}
+	ds, ok := instance.(*plugin.KafkaDatasource)
+	if !ok {
+		t.Fatalf("Instance is not a KafkaDatasource")
+	}
+
+	// Test with no schema registry URL configured
+	result, err := ds.ValidateSchemaRegistry(context.Background())
+	if err != nil {
+		t.Errorf("ValidateSchemaRegistry() error = %v", err)
+		return
+	}
+	if result.Status != backend.HealthStatusError {
+		t.Errorf("Expected error status for missing schema registry URL, got %v", result.Status)
+	}
+	if result.Message != "Schema registry URL is not configured" {
+		t.Errorf("Expected 'Schema registry URL is not configured', got %v", result.Message)
 	}
 }
