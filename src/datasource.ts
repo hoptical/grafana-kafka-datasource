@@ -66,10 +66,17 @@ export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourc
       .map((q) => {
         const interpolatedQuery = this.applyTemplateVariables(q as KafkaQuery, request.scopedVars);
         // Build path from encoded segments without dangling dashes
+        // Include all configuration parameters that should trigger stream restart
         const segments: string[] = [];
         segments.push(encodeURIComponent(String(interpolatedQuery.topicName)));
         segments.push(encodeURIComponent(String(interpolatedQuery.partition)));
         segments.push(encodeURIComponent(String(interpolatedQuery.autoOffsetReset)));
+        segments.push(encodeURIComponent(String(interpolatedQuery.messageFormat || 'json')));
+        segments.push(encodeURIComponent(String(interpolatedQuery.avroSchemaSource || 'schemaRegistry')));
+        // Include a hash of the Avro schema to detect changes
+        const schemaHash = interpolatedQuery.avroSchema ? 
+          String(interpolatedQuery.avroSchema.length) + '_' + interpolatedQuery.avroSchema.slice(0, 10).replace(/[^a-zA-Z0-9]/g, '') : 'none';
+        segments.push(encodeURIComponent(schemaHash));
         if (
           interpolatedQuery.autoOffsetReset === AutoOffsetReset.LAST_N &&
           typeof interpolatedQuery.lastN !== 'undefined'

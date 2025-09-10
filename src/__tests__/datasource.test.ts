@@ -249,14 +249,14 @@ describe('DataSource', () => {
         },
         complete: () => {
           try {
-            expect(capturedPath).toBe('my%20topic-0-latest');
+            expect(capturedPath).toBe('my%20topic-0-latest-json-schemaRegistry-none');
             // Now with LAST_N
             capturedPath = undefined;
             const target2: KafkaQuery = { ...target, autoOffsetReset: AutoOffsetReset.LAST_N, lastN: 10, messageFormat: MessageFormat.JSON } as any;
             ds.query({ targets: [target2] } as any).subscribe({
               complete: () => {
                 try {
-                  expect(capturedPath).toBe('my%20topic-0-lastN-10');
+                  expect(capturedPath).toBe('my%20topic-0-lastN-json-schemaRegistry-none-10');
                   done();
                 } catch (e) {
                   done(e as any);
@@ -280,7 +280,7 @@ describe('DataSource', () => {
       ds.query({ targets } as any).subscribe({
         complete: () => {
           // Only one valid query should have been processed
-          expect(capturedPath).toBe('valid-topic-all-latest');
+          expect(capturedPath).toBe('valid-topic-all-latest-json-schemaRegistry-none');
           done();
         },
       });
@@ -309,7 +309,7 @@ describe('DataSource', () => {
 
       ds.query({ targets: [target] } as any).subscribe({
         complete: () => {
-          expect(capturedPath).toBe('topic%2Fwith-special%3Achars-all-earliest');
+          expect(capturedPath).toBe('topic%2Fwith-special%3Achars-all-earliest-json-schemaRegistry-none');
           done();
         },
       });
