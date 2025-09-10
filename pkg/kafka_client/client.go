@@ -375,7 +375,7 @@ func (client *KafkaClient) ConsumerPull(ctx context.Context, reader *kafka.Reade
 		return message, fmt.Errorf("error reading message from Kafka: %w", err)
 	}
 
-	grafanalog.DefaultLogger.Debug("Received Kafka message",
+	grafanalog.DefaultLogger.Info("Received Kafka message",
 		"topic", msg.Topic,
 		"partition", msg.Partition,
 		"offset", msg.Offset,

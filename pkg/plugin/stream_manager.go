@@ -34,11 +34,9 @@ func createErrorFrame(msg kafka_client.KafkaMessage, partition int32, partitions
 	frame.Fields = append(frame.Fields, data.NewField("time", nil, make([]time.Time, 1)))
 	frame.Fields[0].Set(0, msg.Timestamp)
 
-	// Add partition field when consuming from multiple partitions
-	if len(partitions) > 1 {
-		frame.Fields = append(frame.Fields, data.NewField("partition", nil, make([]int32, 1)))
-		frame.Fields[1].Set(0, partition)
-	}
+	// Add partition field
+	frame.Fields = append(frame.Fields, data.NewField("partition", nil, make([]int32, 1)))
+	frame.Fields[1].Set(0, partition)
 
 	// Add offset field
 	offsetFieldIndex := len(frame.Fields)
@@ -96,11 +94,9 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 		frame.Fields = append(frame.Fields, data.NewField("time", nil, make([]time.Time, 1)))
 		frame.Fields[0].Set(0, msg.Timestamp)
 
-		// Add partition field when consuming from multiple partitions
-		if len(partitions) > 1 {
-			frame.Fields = append(frame.Fields, data.NewField("partition", nil, make([]int32, 1)))
-			frame.Fields[1].Set(0, partition)
-		}
+		// Add partition field
+		frame.Fields = append(frame.Fields, data.NewField("partition", nil, make([]int32, 1)))
+		frame.Fields[1].Set(0, partition)
 
 		// Add offset field
 		offsetFieldIndex := len(frame.Fields)
@@ -201,11 +197,9 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 	}
 	frame.Fields[0].Set(0, frameTime)
 
-	// Add partition field when consuming from multiple partitions
-	if len(partitions) > 1 {
-		frame.Fields = append(frame.Fields, data.NewField("partition", nil, make([]int32, 1)))
-		frame.Fields[1].Set(0, partition)
-	}
+	// Add partition field
+	frame.Fields = append(frame.Fields, data.NewField("partition", nil, make([]int32, 1)))
+	frame.Fields[1].Set(0, partition)
 
 	// Add offset field
 	offsetFieldIndex := len(frame.Fields)
@@ -403,7 +397,7 @@ func (sm *StreamManager) readFromPartition(
 				"totalMessages", messageCount)
 			return
 		default:
-			log.DefaultLogger.Debug("Attempting to read message from partition", "partition", partition)
+			log.DefaultLogger.Info("Attempting to read message from partition", "partition", partition)
 			msg, err := sm.client.ConsumerPull(ctx, reader, config.MessageFormat)
 			if err != nil {
 				log.DefaultLogger.Error("Error reading from partition",
@@ -413,7 +407,7 @@ func (sm *StreamManager) readFromPartition(
 			}
 
 			messageCount++
-			log.DefaultLogger.Debug("Successfully read message from partition",
+			log.DefaultLogger.Info("Successfully read message from partition",
 				"partition", partition,
 				"messageCount", messageCount,
 				"offset", msg.Offset,
@@ -431,6 +425,7 @@ func (sm *StreamManager) readFromPartition(
 
 // ValidateAndGetPartitions validates the query and returns the list of partitions to consume from.
 func (sm *StreamManager) ValidateAndGetPartitions(ctx context.Context, qm queryModel) ([]int32, error) {
+	log.DefaultLogger.Info("ValidateAndGetPartitions called", "topic", qm.Topic, "partition", qm.Partition, "partitionType", fmt.Sprintf("%T", qm.Partition))
 	switch v := qm.Partition.(type) {
 	case float64: // JSON numbers are parsed as float64
 		// Validate topic exists and selected partition is within range
@@ -441,12 +436,16 @@ func (sm *StreamManager) ValidateAndGetPartitions(ctx context.Context, qm queryM
 		if err != nil {
 			return nil, sm.handleTopicError(err, qm.Topic)
 		}
+		log.DefaultLogger.Info("Available partitions", "topic", qm.Topic, "partitions", allPartitions)
 		sel := int32(v)
 		count := int32(len(allPartitions))
+		log.DefaultLogger.Info("Partition validation", "selected", sel, "count", count, "validRange", fmt.Sprintf("[0..%d)", count))
 		if sel < 0 || sel >= count {
 			return nil, fmt.Errorf("partition %d out of range [0..%d) for topic %s", sel, count, qm.Topic)
 		}
-		return []int32{sel}, nil
+		result := []int32{sel}
+		log.DefaultLogger.Info("Returning partitions for single partition", "partitions", result)
+		return result, nil
 	case string:
 		if v == "all" {
 			// Get all partitions for the topic
@@ -454,6 +453,7 @@ func (sm *StreamManager) ValidateAndGetPartitions(ctx context.Context, qm queryM
 			if err != nil {
 				return nil, sm.handleTopicError(err, qm.Topic)
 			}
+			log.DefaultLogger.Info("Returning all partitions", "partitions", allPartitions)
 			return allPartitions, nil
 		} else {
 			return nil, fmt.Errorf("invalid partition value: %s", v)

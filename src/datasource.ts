@@ -65,6 +65,7 @@ export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourc
       .filter((q): q is KafkaQuery => this.filterQuery(q as KafkaQuery))
       .map((q) => {
         const interpolatedQuery = this.applyTemplateVariables(q as KafkaQuery, request.scopedVars);
+        console.log('Interpolated query:', interpolatedQuery);
         // Build path from encoded segments without dangling dashes
         // Include all configuration parameters that should trigger stream restart
         const segments: string[] = [];

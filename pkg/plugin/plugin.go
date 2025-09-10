@@ -550,6 +550,8 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 		return err
 	}
 
+	log.DefaultLogger.Info("Parsed queryModel", "topic", qm.Topic, "partition", qm.Partition, "partitionType", fmt.Sprintf("%T", qm.Partition))
+
 	log.DefaultLogger.Info("Starting Kafka stream with configuration",
 		"topic", qm.Topic,
 		"partition", qm.Partition,
@@ -581,6 +583,20 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 		AvroSchema:       qm.AvroSchema,
 		AutoOffsetReset:  qm.AutoOffsetReset,
 		TimestampMode:    qm.TimestampMode,
+	}
+
+	// Set default values if not provided
+	if newStreamConfig.MessageFormat == "" {
+		newStreamConfig.MessageFormat = "json"
+	}
+	if newStreamConfig.AvroSchemaSource == "" {
+		newStreamConfig.AvroSchemaSource = "schemaRegistry"
+	}
+	if newStreamConfig.AutoOffsetReset == "" {
+		newStreamConfig.AutoOffsetReset = "latest"
+	}
+	if newStreamConfig.TimestampMode == "" {
+		newStreamConfig.TimestampMode = "message"
 	}
 
 	// Check if we need to restart the stream or just update configuration
@@ -632,10 +648,20 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 				log.DefaultLogger.Info("Stream context done, finishing",
 					"path", req.Path,
 					"totalMessages", messageCount)
-				return nil
+				// Drain any remaining messages in the channel to prevent them from being processed
+				// with the wrong configuration when a new stream starts
+				for {
+					select {
+					case <-messagesCh:
+						// Drain the message
+					default:
+						// Channel is empty
+						return nil
+					}
+				}
 			case msgWithPartition := <-messagesCh:
 				messageCount++
-				log.DefaultLogger.Debug("Processing message from channel",
+				log.DefaultLogger.Info("Processing message from channel",
 					"messageNumber", messageCount,
 					"partition", msgWithPartition.partition,
 					"offset", msgWithPartition.msg.Offset)
@@ -663,23 +689,28 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 					fieldCount = len(arr)
 				}
 
-				log.DefaultLogger.Debug("Message frame sent",
+				log.DefaultLogger.Info("Message frame created",
 					"messageNumber", messageCount,
 					"partition", msgWithPartition.partition,
 					"offset", msgWithPartition.msg.Offset,
 					"timestamp", frame.Fields[0].At(0),
 					"fieldCount", fieldCount)
 
+				log.DefaultLogger.Info("Sending frame to Grafana",
+					"messageNumber", messageCount,
+					"partition", msgWithPartition.partition)
 				err = sender.SendFrame(frame, data.IncludeAll)
 				if err != nil {
 					log.DefaultLogger.Error("Error sending frame",
 						"messageNumber", messageCount,
+						"partition", msgWithPartition.partition,
 						"error", err)
 					continue
 				}
 
-				log.DefaultLogger.Debug("Successfully sent frame to Grafana",
+				log.DefaultLogger.Info("Successfully sent frame to Grafana",
 					"messageNumber", messageCount,
+					"partition", msgWithPartition.partition,
 					"frameFields", len(frame.Fields),
 					"frameName", frame.Name)
 			}

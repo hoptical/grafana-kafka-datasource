@@ -187,6 +187,7 @@ export class QueryEditor extends PureComponent<Props, State> {
   };
 
   onPartitionChange = (value: number | 'all') => {
+    console.log('onPartitionChange called with value:', value, 'type:', typeof value);
     const { onChange, query, onRunQuery } = this.props;
     onChange({ ...query, partition: value });
     onRunQuery();
