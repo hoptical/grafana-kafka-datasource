@@ -1,10 +1,102 @@
 package main
 
 import (
+	"bytes"
+	"encoding/binary"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 
 	"github.com/linkedin/goavro/v2"
 )
+
+// SchemaRegistryClient handles communication with Confluent Schema Registry
+type SchemaRegistryClient struct {
+	BaseURL string
+	Client  *http.Client
+}
+
+// NewSchemaRegistryClient creates a new schema registry client
+func NewSchemaRegistryClient(baseURL string) *SchemaRegistryClient {
+	return &SchemaRegistryClient{
+		BaseURL: baseURL,
+		Client:  &http.Client{},
+	}
+}
+
+// RegisterSchema registers a schema with the registry and returns the schema ID
+func (src *SchemaRegistryClient) RegisterSchema(subject string, schema string) (int, error) {
+	payload := map[string]string{
+		"schema": schema,
+	}
+
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return 0, fmt.Errorf("failed to marshal schema: %w", err)
+	}
+
+	url := fmt.Sprintf("%s/subjects/%s/versions", src.BaseURL, subject)
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return 0, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/vnd.schemaregistry.v1+json")
+
+	resp, err := src.Client.Do(req)
+	if err != nil {
+		return 0, fmt.Errorf("failed to register schema: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return 0, fmt.Errorf("schema registration failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return 0, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	id, ok := result["id"].(float64)
+	if !ok {
+		return 0, fmt.Errorf("invalid response format: missing id field")
+	}
+
+	return int(id), nil
+}
+
+// EncodeWithSchemaID encodes data using Confluent wire format with schema ID
+func (src *SchemaRegistryClient) EncodeWithSchemaID(schemaID int, data interface{}, codec *goavro.Codec) ([]byte, error) {
+	// Encode the data using the codec
+	native, ok := data.(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("data must be a map[string]interface{}")
+	}
+
+	binaryData, err := codec.BinaryFromNative(nil, native)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode data: %w", err)
+	}
+
+	// Create Confluent wire format: magic byte (0) + schema ID (4 bytes) + avro data
+	var buf bytes.Buffer
+
+	// Magic byte
+	buf.WriteByte(0)
+
+	// Schema ID (big endian)
+	schemaIDBytes := make([]byte, 4)
+	binary.BigEndian.PutUint32(schemaIDBytes, uint32(schemaID))
+	buf.Write(schemaIDBytes)
+
+	// Avro data
+	buf.Write(binaryData)
+
+	return buf.Bytes(), nil
+}
 
 // AvroSchema defines the schema for Avro encoding
 type AvroSchema struct {
@@ -146,17 +238,21 @@ func GetAvroSchema(shape string) (*AvroSchema, error) {
 }
 
 // ConvertToAvroData converts the Go data structure to Avro-compatible format
-func ConvertToAvroData(shape string, data interface{}) (interface{}, error) {
+func ConvertToAvroData(shape string, data interface{}, verbose bool) (interface{}, error) {
 	switch shape {
 	case "flat":
 		if m, ok := data.(map[string]interface{}); ok {
 			// Data should already be in correct Avro format from producer
-			fmt.Printf("[PRODUCER DEBUG] Flat data conversion - input keys: %v\n", getMapKeys(m))
+			if verbose {
+				fmt.Printf("[PRODUCER DEBUG] Flat data conversion - input keys: %v\n", getMapKeys(m))
+			}
 			return m, nil
 		}
 	case "nested":
 		if m, ok := data.(map[string]interface{}); ok {
-			fmt.Printf("[PRODUCER DEBUG] Nested data conversion - input keys: %v\n", getMapKeys(m))
+			if verbose {
+				fmt.Printf("[PRODUCER DEBUG] Nested data conversion - input keys: %v\n", getMapKeys(m))
+			}
 			return m, nil // Already in correct format
 		}
 	}
@@ -173,28 +269,78 @@ func getMapKeys(m map[string]interface{}) []string {
 }
 
 // EncodeAvroMessage encodes a message using Avro
-func EncodeAvroMessage(shape string, data interface{}) ([]byte, error) {
-	fmt.Printf("[PRODUCER DEBUG] Starting Avro encoding for shape: %s\n", shape)
+func EncodeAvroMessage(shape string, data interface{}, schemaRegistryURL string, verbose bool) ([]byte, error) {
+	if verbose {
+		fmt.Printf("[PRODUCER DEBUG] Starting Avro encoding for shape: %s\n", shape)
+		if schemaRegistryURL != "" {
+			fmt.Printf("[PRODUCER DEBUG] Using schema registry: %s\n", schemaRegistryURL)
+		} else {
+			fmt.Printf("[PRODUCER DEBUG] Using inline schema\n")
+		}
+	}
 
+	// Get the inline schema first
 	schema, err := GetAvroSchema(shape)
 	if err != nil {
 		return nil, err
 	}
 
-	avroData, err := ConvertToAvroData(shape, data)
+	avroData, err := ConvertToAvroData(shape, data, verbose)
 	if err != nil {
 		return nil, err
 	}
 
-	fmt.Printf("[PRODUCER DEBUG] Avro data prepared, type: %T\n", avroData)
+	if verbose {
+		fmt.Printf("[PRODUCER DEBUG] Avro data prepared, type: %T\n", avroData)
+	}
 
+	// If schema registry URL is provided, use schema registry
+	if schemaRegistryURL != "" {
+		if verbose {
+			fmt.Printf("[PRODUCER DEBUG] Registering schema with registry...\n")
+		}
+
+		client := NewSchemaRegistryClient(schemaRegistryURL)
+		subject := fmt.Sprintf("%s-value", shape) // Kafka convention: topic-value
+
+		schemaID, err := client.RegisterSchema(subject, schema.Schema)
+		if err != nil {
+			if verbose {
+				fmt.Printf("[PRODUCER DEBUG] Schema registry registration failed: %v\n", err)
+				fmt.Printf("[PRODUCER DEBUG] Falling back to inline schema\n")
+			}
+			// Fall back to inline encoding
+			return schema.Encode(avroData)
+		}
+
+		if verbose {
+			fmt.Printf("[PRODUCER DEBUG] Schema registered with ID: %d\n", schemaID)
+		}
+
+		// Encode with Confluent wire format
+		encoded, err := client.EncodeWithSchemaID(schemaID, avroData, schema.Codec)
+		if err != nil {
+			return nil, fmt.Errorf("failed to encode with schema registry: %w", err)
+		}
+
+		if verbose {
+			fmt.Printf("[PRODUCER DEBUG] Schema registry encoding successful, encoded length: %d bytes\n", len(encoded))
+			fmt.Printf("[PRODUCER DEBUG] First 20 bytes: %x\n", encoded[:min(20, len(encoded))])
+		}
+
+		return encoded, nil
+	}
+
+	// Use inline schema encoding
 	encoded, err := schema.Encode(avroData)
 	if err != nil {
 		return nil, err
 	}
 
-	fmt.Printf("[PRODUCER DEBUG] Avro encoding successful, encoded length: %d bytes\n", len(encoded))
-	fmt.Printf("[PRODUCER DEBUG] First 20 bytes: %x\n", encoded[:min(20, len(encoded))])
+	if verbose {
+		fmt.Printf("[PRODUCER DEBUG] Inline Avro encoding successful, encoded length: %d bytes\n", len(encoded))
+		fmt.Printf("[PRODUCER DEBUG] First 20 bytes: %x\n", encoded[:min(20, len(encoded))])
+	}
 
 	return encoded, nil
 }

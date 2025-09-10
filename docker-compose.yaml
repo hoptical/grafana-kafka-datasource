@@ -41,6 +41,18 @@ services:
     volumes:
       - ./tests/certs:/bitnami/kafka/config/certs:ro
 
+  schema-registry:
+    image: bitnami/schema-registry:7.6
+    container_name: schema-registry
+    environment:
+      - SCHEMA_REGISTRY_KAFKA_BROKERS=PLAINTEXT://kafka:9092
+      - SCHEMA_REGISTRY_LISTENERS=http://0.0.0.0:8081
+      - SCHEMA_REGISTRY_HOST_NAME=schema-registry
+    ports:
+      - '8081:8081'
+    depends_on:
+      - kafka
+
   # Redpanda Console to have a UI for Kafka topics and messages
   # Uncomment the following section to enable Redpanda Console
   # Note: This is not required for the Kafka datasource to work, but can be useful for development and testing.
@@ -57,6 +69,10 @@ services:
       CONSOLE_CONFIG_FILE: |
         kafka:
           brokers: ["kafka:9092"]
+          schemaRegistry:
+            enabled: true
+            urls:
+              - "http://schema-registry:8081"
         login:
           enabled: false
     ports:
