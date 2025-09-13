@@ -323,6 +323,11 @@ func (client *KafkaClient) NewStreamReader(ctx context.Context, topic string, pa
 		if n <= 0 {
 			n = 100
 		}
+		grafanalog.DefaultLogger.Info("Setting up lastN reader",
+			"topic", topic,
+			"partition", partition,
+			"requestedLastN", lastN,
+			"effectiveLastN", n)
 		if len(client.Brokers) == 0 {
 			reader.Close()
 			return nil, fmt.Errorf("no brokers configured to read offsets")
@@ -355,6 +360,13 @@ func (client *KafkaClient) NewStreamReader(ctx context.Context, topic string, pa
 		if start < earliest {
 			start = earliest
 		}
+		grafanalog.DefaultLogger.Info("LastN offset calculation",
+			"topic", topic,
+			"partition", partition,
+			"earliest", earliest,
+			"latest", latest,
+			"requestedLastN", n,
+			"calculatedStart", start)
 		if err := reader.SetOffset(start); err != nil {
 			reader.Close()
 			return nil, fmt.Errorf("unable to set lastN start offset: %w", err)

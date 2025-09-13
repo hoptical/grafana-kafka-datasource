@@ -9,7 +9,7 @@ import {
 import { DataSourceWithBackend, getGrafanaLiveSrv, getTemplateSrv } from '@grafana/runtime';
 import { Observable, merge, throwError, of } from 'rxjs';
 import { catchError, startWith } from 'rxjs/operators';
-import { KafkaDataSourceOptions, KafkaQuery, AutoOffsetReset, defaultQuery } from './types';
+import { KafkaDataSourceOptions, KafkaQuery, AutoOffsetReset, defaultQuery, MessageFormat, AvroSchemaSource, TimestampMode } from './types';
 
 export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourceOptions> {
   constructor(instanceSettings: DataSourceInstanceSettings<KafkaDataSourceOptions>) {
@@ -31,6 +31,7 @@ export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourc
   }
 
   applyTemplateVariables(query: KafkaQuery, scopedVars: ScopedVars) {
+    console.log('applyTemplateVariables input query:', query);
     const templateSrv = getTemplateSrv();
     const topicName = templateSrv.replace(query.topicName, scopedVars);
     let partition: number | 'all' = query.partition;
@@ -57,7 +58,19 @@ export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourc
       const n = Number.isFinite(parsed) && parsed > 0 ? parsed : 100;
       lastN = n;
     }
-    return { ...query, topicName, partition, lastN };
+    const result = { 
+      ...query, 
+      topicName, 
+      partition, 
+      lastN,
+      // Ensure these fields are preserved with defaults if undefined
+      autoOffsetReset: query.autoOffsetReset || AutoOffsetReset.LATEST,
+      messageFormat: query.messageFormat || MessageFormat.JSON,
+      avroSchemaSource: query.avroSchemaSource || AvroSchemaSource.SCHEMA_REGISTRY,
+      timestampMode: query.timestampMode || TimestampMode.Message
+    };
+    console.log('applyTemplateVariables result:', result);
+    return result;
   }
 
   query(request: DataQueryRequest<KafkaQuery>): Observable<DataQueryResponse> {
@@ -78,6 +91,7 @@ export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourc
         const schemaHash = interpolatedQuery.avroSchema ? 
           String(interpolatedQuery.avroSchema.length) + '_' + interpolatedQuery.avroSchema.slice(0, 10).replace(/[^a-zA-Z0-9]/g, '') : 'none';
         segments.push(encodeURIComponent(schemaHash));
+        
         if (
           interpolatedQuery.autoOffsetReset === AutoOffsetReset.LAST_N &&
           typeof interpolatedQuery.lastN !== 'undefined'
@@ -85,6 +99,14 @@ export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourc
           segments.push(encodeURIComponent(String(interpolatedQuery.lastN)));
         }
         const path = segments.join('-');
+        console.log('Generated stream path:', path, 'for query:', interpolatedQuery);
+
+        console.log('Creating Grafana Live stream with:', {
+          scope: LiveChannelScope.DataSource,
+          namespace: this.uid,
+          path,
+          data: interpolatedQuery,
+        });
 
         return getGrafanaLiveSrv()
           .getDataStream({
@@ -98,7 +120,7 @@ export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourc
           .pipe(
             startWith({ data: [] }),
             catchError((err) => {
-              console.error('Stream error:', err);
+              console.error('Stream error for path:', path, 'error:', err);
               return throwError(() => ({
                 message: `Error connecting to Kafka topic ${interpolatedQuery.topicName}: ${err.message}`,
                 status: 'error',

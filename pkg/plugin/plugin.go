@@ -154,7 +154,8 @@ func (d *KafkaDatasource) configChanged(qm queryModel) bool {
 		d.streamConfig.AvroSchemaSource != qm.AvroSchemaSource ||
 		d.streamConfig.AvroSchema != qm.AvroSchema ||
 		d.streamConfig.AutoOffsetReset != qm.AutoOffsetReset ||
-		d.streamConfig.TimestampMode != qm.TimestampMode
+		d.streamConfig.TimestampMode != qm.TimestampMode ||
+		d.streamConfig.LastN != qm.LastN // Added LastN to config change detection
 }
 
 // partitionsChanged checks if the partitions have changed
@@ -536,11 +537,11 @@ func (d *KafkaDatasource) SubscribeStream(ctx context.Context, req *backend.Subs
 }
 
 func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamRequest, sender *backend.StreamSender) error {
-	log.DefaultLogger.Debug("RunStream called", "path", req.Path, "dataLength", len(req.Data))
+	log.DefaultLogger.Info("RunStream called", "path", req.Path, "dataLength", len(req.Data))
 
 	// Log the raw request data for debugging
 	if len(req.Data) > 0 {
-		log.DefaultLogger.Debug("RunStream raw request data", "data", string(req.Data))
+		log.DefaultLogger.Info("RunStream raw request data", "data", string(req.Data))
 	}
 
 	var qm queryModel
@@ -583,6 +584,7 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 		AvroSchema:       qm.AvroSchema,
 		AutoOffsetReset:  qm.AutoOffsetReset,
 		TimestampMode:    qm.TimestampMode,
+		LastN:            qm.LastN, // Added LastN to stream config
 	}
 
 	// Set default values if not provided
@@ -608,7 +610,21 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 		"topicChanged", topicChanged,
 		"partitionsChanged", partitionsChanged,
 		"configChanged", configChanged,
-		"hasExistingStream", d.streamManager != nil)
+		"hasExistingStream", d.streamManager != nil,
+		"currentMessageFormat", func() string {
+			if d.streamConfig != nil {
+				return d.streamConfig.MessageFormat
+			}
+			return "none"
+		}(),
+		"newMessageFormat", qm.MessageFormat,
+		"currentLastN", func() int32 {
+			if d.streamConfig != nil {
+				return d.streamConfig.LastN
+			}
+			return 0
+		}(),
+		"newLastN", qm.LastN)
 
 	// If topic, partitions, or configuration changed, or no existing stream, start fresh
 	if topicChanged || partitionsChanged || configChanged || d.streamManager == nil {
@@ -618,9 +634,33 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 			if configChanged && !topicChanged && !partitionsChanged {
 				reason = "configuration changes"
 			}
-			log.DefaultLogger.Info("Stopping existing stream due to " + reason)
+			log.DefaultLogger.Info("Stopping existing stream due to "+reason,
+				"oldMessageFormat", func() string {
+					if d.streamConfig != nil {
+						return d.streamConfig.MessageFormat
+					}
+					return "none"
+				}(),
+				"newMessageFormat", qm.MessageFormat)
 			d.streamCancel()
+
+			// Wait for the stream context to be fully cancelled
+			// This ensures the stream processing loop has exited cleanly
+			if d.streamCtx != nil {
+				select {
+				case <-d.streamCtx.Done():
+					log.DefaultLogger.Info("Previous stream context confirmed cancelled")
+				case <-time.After(500 * time.Millisecond):
+					log.DefaultLogger.Warn("Previous stream context cancellation timed out after 500ms")
+				}
+			}
+
 			d.streamCancel = nil
+
+			// Additional delay to ensure all partition readers have stopped
+			// and message channels are drained - increased to 500ms for better reliability
+			time.Sleep(500 * time.Millisecond)
+			log.DefaultLogger.Info("Stream cleanup delay completed - ready for new stream")
 		}
 
 		// Clear all previous state to ensure fresh start
@@ -632,7 +672,16 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 		d.streamConfig = newStreamConfig
 		d.currentTopic = qm.Topic
 		d.currentPartitions = partitions
-		d.streamCtx, d.streamCancel = context.WithCancel(ctx) // Create message channel and start partition readers
+		d.streamCtx, d.streamCancel = context.WithCancel(ctx)
+
+		log.DefaultLogger.Info("Updated stream state with new configuration",
+			"messageFormat", d.streamConfig.MessageFormat,
+			"avroSchemaSource", d.streamConfig.AvroSchemaSource,
+			"autoOffsetReset", d.streamConfig.AutoOffsetReset,
+			"topic", d.currentTopic,
+			"partitions", d.currentPartitions)
+
+		// Create message channel and start partition readers
 		messagesCh := make(chan messageWithPartition, streamMessageBuffer)
 		d.streamManager.StartPartitionReaders(d.streamCtx, partitions, qm, d.streamConfig, messagesCh)
 
@@ -650,12 +699,18 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 					"totalMessages", messageCount)
 				// Drain any remaining messages in the channel to prevent them from being processed
 				// with the wrong configuration when a new stream starts
+				drainedCount := 0
+				drainStart := time.Now()
 				for {
 					select {
 					case <-messagesCh:
-						// Drain the message
-					default:
-						// Channel is empty
+						drainedCount++
+						// Continue draining messages
+					case <-time.After(100 * time.Millisecond):
+						// Stop draining after 100ms to avoid blocking too long
+						log.DefaultLogger.Info("Message channel drain completed",
+							"drainedMessages", drainedCount,
+							"drainDuration", time.Since(drainStart))
 						return nil
 					}
 				}

@@ -58,6 +58,7 @@ type StreamConfig struct {
 	AvroSchema       string
 	AutoOffsetReset  string
 	TimestampMode    string
+	LastN            int32 // Added to track lastN changes
 }
 
 // NewStreamManager creates a new StreamManager instance.
@@ -112,6 +113,12 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 	}
 
 	// Check if message needs Avro decoding
+	log.DefaultLogger.Info("Processing message with configuration",
+		"partition", partition,
+		"offset", msg.Offset,
+		"configMessageFormat", config.MessageFormat,
+		"configAvroSchemaSource", config.AvroSchemaSource)
+
 	messageValue := msg.Value
 	if config.MessageFormat == "avro" && len(msg.RawValue) > 0 {
 		log.DefaultLogger.Info("Attempting Avro decoding for message",
@@ -143,26 +150,25 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 			"hasParsedValue", msg.Value != nil,
 			"rawValueLength", len(msg.RawValue))
 	} else if config.MessageFormat == "json" && msg.Value == nil && len(msg.RawValue) > 0 {
-		log.DefaultLogger.Debug("Attempting JSON decoding for message",
+		log.DefaultLogger.Info("Attempting JSON decoding for message",
 			"partition", partition,
 			"offset", msg.Offset,
 			"rawValueLength", len(msg.RawValue))
 
-		// Try to decode as JSON
-		var doc interface{}
+		// Try to decode as JSON since the consumer didn't parse it
+		var v interface{}
 		dec := json.NewDecoder(bytes.NewReader(msg.RawValue))
 		dec.UseNumber()
-		if err := dec.Decode(&doc); err != nil {
+		if err := dec.Decode(&v); err != nil {
 			log.DefaultLogger.Error("Failed to decode JSON message",
 				"error", err,
 				"rawValueLength", len(msg.RawValue),
 				"partition", partition,
 				"offset", msg.Offset)
-			// Return error frame for JSON decoding failure
 			return createErrorFrame(msg, partition, partitions, fmt.Errorf("json decoding failed: %w", err))
 		} else {
 			// Accept both objects and arrays at the top level
-			switch v := doc.(type) {
+			switch v := v.(type) {
 			case map[string]interface{}, []interface{}:
 				log.DefaultLogger.Debug("JSON decoding successful",
 					"partition", partition,
@@ -178,8 +184,10 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 			}
 		}
 	} else {
-		log.DefaultLogger.Debug("Using non-Avro message format",
-			"messageFormat", config.MessageFormat,
+		log.DefaultLogger.Info("Using pre-decoded message value or non-Avro format",
+			"partition", partition,
+			"offset", msg.Offset,
+			"configMessageFormat", config.MessageFormat,
 			"hasParsedValue", msg.Value != nil,
 			"rawValueLength", len(msg.RawValue))
 	}
@@ -267,6 +275,13 @@ func decodeAvroMessage(client KafkaClientAPI, data []byte, config *StreamConfig,
 		"avroSchemaLength", len(config.AvroSchema),
 		"partition", "unknown") // Note: partition not available here
 
+	// Add detailed debugging for configuration
+	log.DefaultLogger.Info("Detailed Avro config debugging",
+		"AvroSchemaSource", config.AvroSchemaSource,
+		"AvroSchemaSourceType", fmt.Sprintf("%T", config.AvroSchemaSource),
+		"AvroSchemaEmpty", config.AvroSchema == "",
+		"AvroSchemaSourceEquals", config.AvroSchemaSource == "inlineSchema")
+
 	var schema string
 	var err error
 
@@ -281,11 +296,14 @@ func decodeAvroMessage(client KafkaClientAPI, data []byte, config *StreamConfig,
 				}
 				return schema
 			}())
+	} else if config.AvroSchemaSource == "inlineSchema" && config.AvroSchema == "" {
+		// Inline schema was selected but no schema provided - this is an error
+		log.DefaultLogger.Error("Inline Avro schema selected but no schema provided")
+		return nil, fmt.Errorf("inline Avro schema selected but no schema provided - please provide a valid Avro schema")
 	} else {
-		log.DefaultLogger.Warn("Falling back to Schema Registry",
+		log.DefaultLogger.Info("Using Schema Registry for Avro schema",
 			"avroSchemaSource", config.AvroSchemaSource,
-			"avroSchemaEmpty", config.AvroSchema == "",
-			"reason", "Either avroSchemaSource is not 'inlineSchema' or avroSchema is empty")
+			"schemaRegistryConfigured", client.GetSchemaRegistryUrl() != "")
 		// Use Schema Registry
 		schemaRegistryUrl := client.GetSchemaRegistryUrl()
 		log.DefaultLogger.Debug("Attempting to get schema from registry",
@@ -370,10 +388,10 @@ func (sm *StreamManager) readFromPartition(
 	log.DefaultLogger.Info("Starting partition reader",
 		"topic", qm.Topic,
 		"partition", partition,
-		"autoOffsetReset", qm.AutoOffsetReset,
+		"autoOffsetReset", config.AutoOffsetReset,
 		"lastN", qm.LastN)
 
-	reader, err := sm.client.NewStreamReader(ctx, qm.Topic, partition, qm.AutoOffsetReset, qm.LastN)
+	reader, err := sm.client.NewStreamReader(ctx, qm.Topic, partition, config.AutoOffsetReset, qm.LastN)
 	if err != nil {
 		log.DefaultLogger.Error("Failed to create stream reader", "topic", qm.Topic, "partition", partition, "error", err)
 		return
@@ -398,11 +416,44 @@ func (sm *StreamManager) readFromPartition(
 			return
 		default:
 			log.DefaultLogger.Info("Attempting to read message from partition", "partition", partition)
-			msg, err := sm.client.ConsumerPull(ctx, reader, config.MessageFormat)
+
+			// Add a timeout context to prevent infinite blocking
+			msgCtx, msgCancel := context.WithTimeout(ctx, 5*time.Second)
+			msg, err := sm.client.ConsumerPull(msgCtx, reader, config.MessageFormat)
+			msgCancel()
+
 			if err != nil {
 				log.DefaultLogger.Error("Error reading from partition",
 					"partition", partition,
 					"error", err)
+
+				// Check if it's a timeout error - if so, continue to next iteration
+				// to prevent stream from freezing
+				if errors.Is(err, context.DeadlineExceeded) {
+					log.DefaultLogger.Info("Read timeout on partition, continuing to next iteration",
+						"partition", partition)
+					// Brief pause before retrying
+					select {
+					case <-time.After(100 * time.Millisecond):
+					case <-ctx.Done():
+						return
+					}
+					continue
+				}
+
+				// Create an error message to send to the frontend
+				errorMsg := kafka_client.KafkaMessage{
+					Offset:    -1, // Use -1 to indicate this is an error message
+					Timestamp: time.Now(),
+					Error:     err,
+				}
+
+				select {
+				case messagesCh <- messageWithPartition{msg: errorMsg, partition: partition}:
+					log.DefaultLogger.Info("Sent error message to channel", "partition", partition, "error", err)
+				case <-ctx.Done():
+					return
+				}
 				continue
 			}
 

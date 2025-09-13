@@ -406,7 +406,8 @@ func TestStreamManager_readFromPartition_PullError(t *testing.T) {
 	messagesCh := make(chan messageWithPartition, 10)
 
 	config := &StreamConfig{
-		MessageFormat: qm.MessageFormat,
+		MessageFormat:   qm.MessageFormat,
+		AutoOffsetReset: qm.AutoOffsetReset,
 	}
 
 	// Start the partition reader
@@ -418,14 +419,25 @@ func TestStreamManager_readFromPartition_PullError(t *testing.T) {
 
 	go sm.readFromPartition(ctx, 0, qm, config, messagesCh)
 
-	// Wait a bit and check that no messages are received
+	// Wait a bit and check that error messages are received
 	time.Sleep(60 * time.Millisecond)
 
+	// We should receive error messages when pull fails
+	messageReceived := false
 	select {
-	case <-messagesCh:
-		t.Error("Expected no messages due to pull error")
+	case msg := <-messagesCh:
+		messageReceived = true
+		if msg.msg.Error == nil {
+			t.Error("Expected error message due to pull error, but got regular message")
+		} else if msg.msg.Error.Error() != "failed to pull message" {
+			t.Errorf("Expected pull error message, got: %v", msg.msg.Error)
+		}
 	default:
-		// Expected - no messages should be sent due to error
+		// Should not happen - we expect error messages to be sent
+	}
+
+	if !messageReceived {
+		t.Error("Expected error messages to be sent when pull fails")
 	}
 }
 
