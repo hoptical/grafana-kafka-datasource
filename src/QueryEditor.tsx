@@ -117,7 +117,6 @@ export class QueryEditor extends PureComponent<Props, State> {
       
       // Auto-apply "all partitions" if not already set and trigger query
       if (query.partition === undefined || query.partition === null) {
-        console.log('Auto-applying "all partitions" after fetch');
         onChange({ ...query, partition: 'all' });
         onRunQuery();
       }
@@ -202,7 +201,6 @@ export class QueryEditor extends PureComponent<Props, State> {
   };
 
   onPartitionChange = (value: number | 'all') => {
-    console.log('onPartitionChange called with value:', value, 'type:', typeof value);
     const { onChange, query, onRunQuery } = this.props;
     onChange({ ...query, partition: value });
     // For partition changes, run immediately but also schedule debounced version

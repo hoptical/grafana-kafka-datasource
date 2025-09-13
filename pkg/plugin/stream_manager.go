@@ -113,7 +113,7 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 	}
 
 	// Check if message needs Avro decoding
-	log.DefaultLogger.Info("Processing message with configuration",
+	log.DefaultLogger.Debug("Processing message with configuration",
 		"partition", partition,
 		"offset", msg.Offset,
 		"configMessageFormat", config.MessageFormat,
@@ -121,7 +121,7 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 
 	messageValue := msg.Value
 	if config.MessageFormat == "avro" && len(msg.RawValue) > 0 {
-		log.DefaultLogger.Info("Attempting Avro decoding for message",
+		log.DefaultLogger.Debug("Attempting Avro decoding for message",
 			"partition", partition,
 			"offset", msg.Offset,
 			"rawValueLength", len(msg.RawValue),
@@ -139,7 +139,7 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 			// Return error frame instead of falling back to raw bytes
 			return createErrorFrame(msg, partition, partitions, fmt.Errorf("avro decoding failed: %w", err))
 		} else {
-			log.DefaultLogger.Info("Avro decoding successful",
+			log.DefaultLogger.Debug("Avro decoding successful",
 				"partition", partition,
 				"offset", msg.Offset,
 				"decodedType", fmt.Sprintf("%T", decoded))
@@ -150,7 +150,7 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 			"hasParsedValue", msg.Value != nil,
 			"rawValueLength", len(msg.RawValue))
 	} else if config.MessageFormat == "json" && msg.Value == nil && len(msg.RawValue) > 0 {
-		log.DefaultLogger.Info("Attempting JSON decoding for message",
+		log.DefaultLogger.Debug("Attempting JSON decoding for message",
 			"partition", partition,
 			"offset", msg.Offset,
 			"rawValueLength", len(msg.RawValue))
@@ -184,7 +184,7 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 			}
 		}
 	} else {
-		log.DefaultLogger.Info("Using pre-decoded message value or non-Avro format",
+		log.DefaultLogger.Debug("Using pre-decoded message value or non-Avro format",
 			"partition", partition,
 			"offset", msg.Offset,
 			"configMessageFormat", config.MessageFormat,
@@ -268,7 +268,7 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 
 // decodeAvroMessage decodes an Avro message using the appropriate schema
 func decodeAvroMessage(client KafkaClientAPI, data []byte, config *StreamConfig, topic string) (interface{}, error) {
-	log.DefaultLogger.Info("Starting Avro message decoding",
+	log.DefaultLogger.Debug("Starting Avro message decoding",
 		"dataLength", len(data),
 		"topic", topic,
 		"avroSchemaSource", config.AvroSchemaSource,
@@ -276,7 +276,7 @@ func decodeAvroMessage(client KafkaClientAPI, data []byte, config *StreamConfig,
 		"partition", "unknown") // Note: partition not available here
 
 	// Add detailed debugging for configuration
-	log.DefaultLogger.Info("Detailed Avro config debugging",
+	log.DefaultLogger.Debug("Detailed Avro config debugging",
 		"AvroSchemaSource", config.AvroSchemaSource,
 		"AvroSchemaSourceType", fmt.Sprintf("%T", config.AvroSchemaSource),
 		"AvroSchemaEmpty", config.AvroSchema == "",
@@ -288,7 +288,7 @@ func decodeAvroMessage(client KafkaClientAPI, data []byte, config *StreamConfig,
 	if config.AvroSchemaSource == "inlineSchema" && config.AvroSchema != "" {
 		// Use inline schema
 		schema = config.AvroSchema
-		log.DefaultLogger.Info("Using inline Avro schema",
+		log.DefaultLogger.Debug("Using inline Avro schema",
 			"schemaLength", len(schema),
 			"schemaPreview", func() string {
 				if len(schema) > 100 {
@@ -301,7 +301,7 @@ func decodeAvroMessage(client KafkaClientAPI, data []byte, config *StreamConfig,
 		log.DefaultLogger.Error("Inline Avro schema selected but no schema provided")
 		return nil, fmt.Errorf("inline Avro schema selected but no schema provided - please provide a valid Avro schema")
 	} else {
-		log.DefaultLogger.Info("Using Schema Registry for Avro schema",
+		log.DefaultLogger.Debug("Using Schema Registry for Avro schema",
 			"avroSchemaSource", config.AvroSchemaSource,
 			"schemaRegistryConfigured", client.GetSchemaRegistryUrl() != "")
 		// Use Schema Registry
@@ -415,10 +415,10 @@ func (sm *StreamManager) readFromPartition(
 				"totalMessages", messageCount)
 			return
 		default:
-			log.DefaultLogger.Info("Attempting to read message from partition", "partition", partition)
+			log.DefaultLogger.Debug("Attempting to read message from partition", "partition", partition)
 
 			// Add a timeout context to prevent infinite blocking
-			msgCtx, msgCancel := context.WithTimeout(ctx, 5*time.Second)
+			msgCtx, msgCancel := context.WithTimeout(ctx, messageReadTimeout)
 			msg, err := sm.client.ConsumerPull(msgCtx, reader, config.MessageFormat)
 			msgCancel()
 
@@ -430,11 +430,11 @@ func (sm *StreamManager) readFromPartition(
 				// Check if it's a timeout error - if so, continue to next iteration
 				// to prevent stream from freezing
 				if errors.Is(err, context.DeadlineExceeded) {
-					log.DefaultLogger.Info("Read timeout on partition, continuing to next iteration",
+					log.DefaultLogger.Debug("Read timeout on partition, continuing to next iteration",
 						"partition", partition)
 					// Brief pause before retrying
 					select {
-					case <-time.After(100 * time.Millisecond):
+					case <-time.After(retryDelayAfterError):
 					case <-ctx.Done():
 						return
 					}
@@ -458,7 +458,7 @@ func (sm *StreamManager) readFromPartition(
 			}
 
 			messageCount++
-			log.DefaultLogger.Info("Successfully read message from partition",
+			log.DefaultLogger.Debug("Successfully read message from partition",
 				"partition", partition,
 				"messageCount", messageCount,
 				"offset", msg.Offset,

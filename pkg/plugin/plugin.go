@@ -25,6 +25,15 @@ import (
 // yet remains small to keep memory usage low and latency tight.
 const streamMessageBuffer = 100
 
+// Stream management constants
+const (
+	streamCleanupDelay   = 500 * time.Millisecond // Delay to ensure previous stream is fully stopped
+	streamCancelTimeout  = 500 * time.Millisecond // Max time to wait for stream context cancellation
+	messageReadTimeout   = 5 * time.Second        // Timeout for reading individual messages
+	channelDrainTimeout  = 100 * time.Millisecond // Timeout for draining message channels
+	retryDelayAfterError = 100 * time.Millisecond // Brief pause between retries after errors
+)
+
 // Defaults for JSON flattening behavior
 const (
 	defaultFlattenMaxDepth = 5
@@ -606,7 +615,7 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 	partitionsChanged := d.partitionsChanged(qm, partitions)
 	configChanged := d.configChanged(qm)
 
-	log.DefaultLogger.Info("Stream change detection",
+	log.DefaultLogger.Debug("Stream change detection",
 		"topicChanged", topicChanged,
 		"partitionsChanged", partitionsChanged,
 		"configChanged", configChanged,
@@ -650,7 +659,7 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 				select {
 				case <-d.streamCtx.Done():
 					log.DefaultLogger.Info("Previous stream context confirmed cancelled")
-				case <-time.After(500 * time.Millisecond):
+				case <-time.After(streamCancelTimeout):
 					log.DefaultLogger.Warn("Previous stream context cancellation timed out after 500ms")
 				}
 			}
@@ -659,7 +668,7 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 
 			// Additional delay to ensure all partition readers have stopped
 			// and message channels are drained - increased to 500ms for better reliability
-			time.Sleep(500 * time.Millisecond)
+			time.Sleep(streamCleanupDelay)
 			log.DefaultLogger.Info("Stream cleanup delay completed - ready for new stream")
 		}
 
@@ -706,7 +715,7 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 					case <-messagesCh:
 						drainedCount++
 						// Continue draining messages
-					case <-time.After(100 * time.Millisecond):
+					case <-time.After(channelDrainTimeout):
 						// Stop draining after 100ms to avoid blocking too long
 						log.DefaultLogger.Info("Message channel drain completed",
 							"drainedMessages", drainedCount,
@@ -716,7 +725,7 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 				}
 			case msgWithPartition := <-messagesCh:
 				messageCount++
-				log.DefaultLogger.Info("Processing message from channel",
+				log.DefaultLogger.Debug("Processing message from channel",
 					"messageNumber", messageCount,
 					"partition", msgWithPartition.partition,
 					"offset", msgWithPartition.msg.Offset)
@@ -744,14 +753,14 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 					fieldCount = len(arr)
 				}
 
-				log.DefaultLogger.Info("Message frame created",
+				log.DefaultLogger.Debug("Message frame created",
 					"messageNumber", messageCount,
 					"partition", msgWithPartition.partition,
 					"offset", msgWithPartition.msg.Offset,
 					"timestamp", frame.Fields[0].At(0),
 					"fieldCount", fieldCount)
 
-				log.DefaultLogger.Info("Sending frame to Grafana",
+				log.DefaultLogger.Debug("Sending frame to Grafana",
 					"messageNumber", messageCount,
 					"partition", msgWithPartition.partition)
 				err = sender.SendFrame(frame, data.IncludeAll)
@@ -763,7 +772,7 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 					continue
 				}
 
-				log.DefaultLogger.Info("Successfully sent frame to Grafana",
+				log.DefaultLogger.Debug("Successfully sent frame to Grafana",
 					"messageNumber", messageCount,
 					"partition", msgWithPartition.partition,
 					"frameFields", len(frame.Fields),

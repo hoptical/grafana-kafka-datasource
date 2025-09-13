@@ -323,7 +323,7 @@ func (client *KafkaClient) NewStreamReader(ctx context.Context, topic string, pa
 		if n <= 0 {
 			n = 100
 		}
-		grafanalog.DefaultLogger.Info("Setting up lastN reader",
+		grafanalog.DefaultLogger.Debug("Setting up lastN reader",
 			"topic", topic,
 			"partition", partition,
 			"requestedLastN", lastN,
@@ -360,7 +360,7 @@ func (client *KafkaClient) NewStreamReader(ctx context.Context, topic string, pa
 		if start < earliest {
 			start = earliest
 		}
-		grafanalog.DefaultLogger.Info("LastN offset calculation",
+		grafanalog.DefaultLogger.Debug("LastN offset calculation",
 			"topic", topic,
 			"partition", partition,
 			"earliest", earliest,
@@ -387,7 +387,7 @@ func (client *KafkaClient) ConsumerPull(ctx context.Context, reader *kafka.Reade
 		return message, fmt.Errorf("error reading message from Kafka: %w", err)
 	}
 
-	grafanalog.DefaultLogger.Info("Received Kafka message",
+	grafanalog.DefaultLogger.Debug("Received Kafka message",
 		"topic", msg.Topic,
 		"partition", msg.Partition,
 		"offset", msg.Offset,

@@ -31,7 +31,6 @@ export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourc
   }
 
   applyTemplateVariables(query: KafkaQuery, scopedVars: ScopedVars) {
-    console.log('applyTemplateVariables input query:', query);
     const templateSrv = getTemplateSrv();
     const topicName = templateSrv.replace(query.topicName, scopedVars);
     let partition: number | 'all' = query.partition;
@@ -69,7 +68,6 @@ export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourc
       avroSchemaSource: query.avroSchemaSource || AvroSchemaSource.SCHEMA_REGISTRY,
       timestampMode: query.timestampMode || TimestampMode.Message
     };
-    console.log('applyTemplateVariables result:', result);
     return result;
   }
 
@@ -78,7 +76,6 @@ export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourc
       .filter((q): q is KafkaQuery => this.filterQuery(q as KafkaQuery))
       .map((q) => {
         const interpolatedQuery = this.applyTemplateVariables(q as KafkaQuery, request.scopedVars);
-        console.log('Interpolated query:', interpolatedQuery);
         // Build path from encoded segments without dangling dashes
         // Include all configuration parameters that should trigger stream restart
         const segments: string[] = [];
@@ -89,7 +86,7 @@ export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourc
         segments.push(encodeURIComponent(String(interpolatedQuery.avroSchemaSource || 'schemaRegistry')));
         // Include a hash of the Avro schema to detect changes
         const schemaHash = interpolatedQuery.avroSchema ? 
-          String(interpolatedQuery.avroSchema.length) + '_' + interpolatedQuery.avroSchema.slice(0, 10).replace(/[^a-zA-Z0-9]/g, '') : 'none';
+          this.generateSchemaHash(interpolatedQuery.avroSchema) : 'none';
         segments.push(encodeURIComponent(schemaHash));
         
         if (
@@ -99,14 +96,6 @@ export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourc
           segments.push(encodeURIComponent(String(interpolatedQuery.lastN)));
         }
         const path = segments.join('-');
-        console.log('Generated stream path:', path, 'for query:', interpolatedQuery);
-
-        console.log('Creating Grafana Live stream with:', {
-          scope: LiveChannelScope.DataSource,
-          namespace: this.uid,
-          path,
-          data: interpolatedQuery,
-        });
 
         return getGrafanaLiveSrv()
           .getDataStream({
@@ -175,5 +164,20 @@ export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourc
         message: err?.message || 'Failed to validate schema',
       };
     }
+  }
+
+  /**
+   * Generate a stable hash for Avro schema to detect changes
+   * Uses a simple but effective hash function for schema comparison
+   */
+  private generateSchemaHash(schema: string): string {
+    let hash = 0;
+    for (let i = 0; i < schema.length; i++) {
+      const char = schema.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32-bit integer
+    }
+    // Return absolute value as base36 string for shorter, URL-safe hash
+    return Math.abs(hash).toString(36);
   }
 }
