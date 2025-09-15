@@ -203,10 +203,10 @@ export class QueryEditor extends PureComponent<Props, State> {
   onPartitionChange = (value: number | 'all') => {
     const { onChange, query, onRunQuery } = this.props;
     onChange({ ...query, partition: value });
-    // For partition changes, run immediately but also schedule debounced version
-    // This ensures tests pass while still providing debounced behavior for rapid changes
+    // Cancel any pending debounced query to prevent race conditions
+    this.debouncedRunQuery.cancel();
+    // Run query immediately for partition changes
     onRunQuery();
-    this.debouncedRunQuery();
   };
 
   onAutoResetOffsetChanged = (value: AutoOffsetReset) => {
@@ -328,9 +328,10 @@ export class QueryEditor extends PureComponent<Props, State> {
   onMessageFormatChanged = (value: MessageFormat) => {
     const { onChange, query, onRunQuery } = this.props;
     onChange({ ...query, messageFormat: value });
-    // For message format changes, run immediately but also schedule debounced version
+    // Cancel any pending debounced query to prevent race conditions
+    this.debouncedRunQuery.cancel();
+    // Run query immediately for message format changes
     onRunQuery();
-    this.debouncedRunQuery();
   };
 
   onTopicSuggestionClick = (topic: string) => {
@@ -338,6 +339,8 @@ export class QueryEditor extends PureComponent<Props, State> {
     onChange({ ...query, topicName: topic });
     this.setState({ showingSuggestions: false, topicSuggestions: [] });
     this.lastCommittedTopic = topic;
+    // Cancel any pending debounced query to prevent race conditions
+    this.debouncedRunQuery.cancel();
     onRunQuery();
   };
 
