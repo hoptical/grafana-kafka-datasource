@@ -217,41 +217,18 @@ test.describe('Kafka Query Editor', () => {
     // Fill in the query editor fields
     await page.getByRole('textbox', { name: 'Enter topic name' }).fill('test-topic');
     await page.getByRole('button', { name: 'Fetch' }).click();
-    
-    // Use the partition selector ID for reliable selection with improved approach
-    const partitionSelector = page.locator('#query-editor-partition')
-      .or(page.getByText('All partitions').locator('..').locator('.css-1eu65zc'));
-    
-    if (await partitionSelector.first().isVisible({ timeout: 5000 })) {
-      try {
-        await partitionSelector.first().click({ timeout: 10000 });
-      } catch (error) {
-        console.log('Partition selector click failed, trying force click');
-        await partitionSelector.first().click({ force: true });
-      }
-      
-      await page.waitForTimeout(500);
-      
-      const allPartitionsOption = page.getByRole('option', { name: /^All partitions$/ })
-        .or(page.getByText('All partitions', { exact: true }))
-        .or(page.locator('[data-value*="all"]'));
-      
-      if (await allPartitionsOption.first().isVisible({ timeout: 3000 })) {
-        console.log('All partitions option found');
-        try {
-          await allPartitionsOption.first().click({ timeout: 5000 });
-        } catch (error) {
-          console.log('All partitions option click failed, trying alternative approach');
-          // Try clicking the parent dropdown again to close and reopen
-          await partitionSelector.first().click({ force: true });
-          await page.waitForTimeout(500);
-          await allPartitionsOption.first().click({ force: true });
-        }
+    await page
+        .locator('div')
+        .filter({ hasText: /^All partitions$/ })
+        .nth(2)
+        .click();
+
+      if (isV10) {
+        await page.getByLabel('Select options menu').getByText('All partitions').click();
       } else {
-        console.log('All partitions option not found');
+        await page.getByRole('option', { name: /^All partitions$/ }).click();
       }
-    }
-    
+
     // Set visualization with minimal timeout to avoid page closure
     try {
       await panelEditPage.setVisualization('Table');
@@ -261,36 +238,21 @@ test.describe('Kafka Query Editor', () => {
       console.log('Skipping visualization setting to avoid timeout');
     }
 
-    // Wait for data to appear - be more flexible about column names
-    await page.waitForTimeout(2000);
-    
-    // First check if any table data appears at all
-    const tableCells = page.locator('table tbody tr td');
-    await expect(tableCells.first()).toBeVisible({ timeout: 15000 });
-    
-    // Then check for common column patterns
-    const timeColumn = page.getByRole('columnheader').filter({ hasText: /time|timestamp/i });
-    const valueColumn = page.getByRole('columnheader').filter({ hasText: /value|data/i });
-    
-    // At least one of these should be visible
-    const hasTimeColumn = await timeColumn.isVisible({ timeout: 5000 });
-    const hasValueColumn = await valueColumn.isVisible({ timeout: 5000 });
-    
-    if (!hasTimeColumn && !hasValueColumn) {
-      console.log('No expected columns found, checking what columns are actually present');
-      const allHeaders = await page.getByRole('columnheader').allTextContents();
-      console.log('Available columns:', allHeaders);
-    }
-    
-    // If we have time column, check for timestamp format
-    if (hasTimeColumn) {
-      await expect(page.getByRole('cell').filter({ hasText: /\d{4}-\d{2}-\d{2}/ })).toBeVisible({ timeout: 5000 });
-    }
-    
-    // If we have value column, check for numeric data
-    if (hasValueColumn) {
-      await expect(page.getByRole('cell').filter({ hasText: /\d/ })).toBeVisible({ timeout: 5000 });
-    }
+    // Wait for the time column to appear first (this indicates data is flowing)
+    await expect(page.getByRole('columnheader', { name: 'time' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('columnheader', { name: 'value1' })).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: 'value2' })).toBeVisible();
+
+    // Verify that data is flowing correctly with proper formats
+    // Check for timestamp format in time column (YYYY-MM-DD HH:MM:SS)
+    await expect(page.getByRole('cell').filter({ hasText: /\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/ })).toBeVisible();
+    // Check for float numbers in value columns (just verify at least one numeric cell exists)
+    await expect(
+      page
+        .getByRole('cell')
+        .filter({ hasText: /^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/ })
+        .first()
+    ).toBeVisible();
   });
 
   test('should configure Avro message format and validate schema', async ({
