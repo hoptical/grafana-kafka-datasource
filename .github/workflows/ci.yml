@@ -76,7 +76,7 @@ jobs:
 
       - name: Build Kafka producer example
         run: |
-          go build -o dist/producer example/go/producer.go
+          go build -o dist/producer example/go/*.go
 
       - name: Check for E2E
         id: check-for-e2e

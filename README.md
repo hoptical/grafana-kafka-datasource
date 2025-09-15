@@ -135,7 +135,7 @@ Want to test the plugin? Use our [Go sample producer](https://github.com/hoptica
 go run example/go/producer.go -broker localhost:9094 -topic test -interval 500 -num-partitions 3 -shape nested
 ```
 
-Supports flat, nested, and array JSON payloads. See [example/README.md](https://github.com/hoptical/grafana-kafka-datasource/blob/main/example/README.md) for details.
+Supports flat, nested, and array JSON payloads, plus Avro format with **full schema registry integration**. Features verbose logging for debugging. See [example/README.md](https://github.com/hoptical/grafana-kafka-datasource/blob/main/example/README.md) for details.
 
 ## FAQ & Troubleshooting
 
