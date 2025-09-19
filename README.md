@@ -119,9 +119,11 @@ Top-level array (flattened as `item_0.id`, `item_0.value`, `item_1.id`, etc.):
 
 ## Limitations
 
-- Max flattening depth: 5
-- Max fields per message: 1000
+- Max flattening depth: configurable (default: 5)
+- Max fields per message: configurable (default: 1000)
 - Protobuf/AVRO not yet supported
+
+> **Performance Note:** High values for flattening depth and max fields per message can drastically impact performance. Use with caution.
 
 ## Live Demo
 
