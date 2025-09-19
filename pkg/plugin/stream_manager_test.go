@@ -111,7 +111,7 @@ func TestStreamManager_ValidateAndGetPartitions(t *testing.T) {
 				partitions:    tt.partitions,
 				partitionsErr: tt.partitionsErr,
 			}
-			sm := NewStreamManager(client)
+			sm := NewStreamManager(client, 5, 1000)
 
 			qm := queryModel{
 				Topic:     "test-topic",
@@ -234,7 +234,7 @@ func TestStreamManager_ProcessMessage(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			client := &mockStreamClient{}
-			sm := NewStreamManager(client)
+			sm := NewStreamManager(client, 5, 1000)
 
 			qm := queryModel{
 				Topic:         "test-topic",
@@ -294,7 +294,7 @@ func TestStreamManager_ProcessMessage(t *testing.T) {
 
 func TestNewStreamManager(t *testing.T) {
 	client := &mockStreamClient{}
-	sm := NewStreamManager(client)
+	sm := NewStreamManager(client, 5, 1000)
 
 	if sm == nil {
 		t.Error("NewStreamManager should return a non-nil StreamManager")
@@ -307,7 +307,7 @@ func TestNewStreamManager(t *testing.T) {
 
 func TestStreamManager_HandleTopicError(t *testing.T) {
 	client := &mockStreamClient{}
-	sm := NewStreamManager(client)
+	sm := NewStreamManager(client, 5, 1000)
 
 	// Test topic not found error
 	err := sm.handleTopicError(kafka_client.ErrTopicNotFound, "test-topic")
