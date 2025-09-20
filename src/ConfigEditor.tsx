@@ -131,7 +131,7 @@ export const ConfigEditor = (props: Props) => {
   };
 
   const onSchemaRegistryUsernameChange = (event: ChangeEvent<HTMLInputElement>) => {
-    onOptionsChange({ ...options, secureJsonData: { ...options.secureJsonData, schemaRegistryUsername: event.target.value } });
+    onOptionsChange({ ...options, jsonData: { ...options.jsonData, schemaRegistryUsername: event.target.value } });
   };
 
   const onSchemaRegistryPasswordChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -406,8 +406,9 @@ export const ConfigEditor = (props: Props) => {
         >
           <Input
             id="config-editor-schema-registry-username"
+            data-testid="schema-registry-username"
             onChange={onSchemaRegistryUsernameChange}
-            value={secureJsonData.schemaRegistryUsername || ''}
+            value={jsonData.schemaRegistryUsername || ''}
             placeholder="Schema Registry username"
             width={40}
           />

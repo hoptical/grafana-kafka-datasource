@@ -388,8 +388,8 @@ test.describe('Kafka Config Editor', () => {
 
     // Verify values are preserved - only check URL since username field seems to have an issue
     await expect(schemaRegistryUrl.first()).toHaveValue('http://schema-registry:8081');
-    // Skip username validation for now as it may have a different behavior
-    // await expect(schemaRegistryUsername.first()).toHaveValue('schema-user');
+    // TODO: Re-enable the following assertion once the username field reliably preserves its value after save.
+    // The username field may have persistence issues due to being stored in secureJsonData instead of jsonData.
     // Password fields typically don't show values for security
   });
 

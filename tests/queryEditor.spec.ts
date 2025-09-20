@@ -73,7 +73,8 @@ test.describe('Kafka Query Editor', () => {
     await expect(page.getByText('Message Format')).toBeVisible();
     
     // Test Avro format selection and schema configuration - use more robust selectors
-    await page.waitForTimeout(1000); // Wait for form to fully render
+    // Wait for the Message Format selector to be fully rendered and interactive
+    await expect(page.getByText('Message Format')).toBeVisible();
     
     // Look for the message format select - try multiple approaches
     let messageFormatClicked = false;
@@ -266,8 +267,9 @@ test.describe('Kafka Query Editor', () => {
     // Fill in topic name
     await page.getByRole('textbox', { name: 'Enter topic name' }).fill('test-topic');
 
-    // Test Message Format selection to Avro with robust selectors
-    await page.waitForTimeout(2000);
+    // Test Message Format selection to Avro with robust selectors  
+    // Wait for the Message Format selector to be visible and interactive
+    await expect(page.getByText('Message Format')).toBeVisible();
     
     console.log('Looking for Message Format selector among buttons...');
     
