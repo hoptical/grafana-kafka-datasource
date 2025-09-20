@@ -68,6 +68,8 @@ func main() {
 	shape := flag.String("shape", "nested", "Payload shape: nested, flat, or list")
 	format := flag.String("format", "json", "Message format: json or avro")
 	schemaRegistryURL := flag.String("schema-registry", "", "Schema registry URL (for Avro with schema registry)")
+	schemaRegistryUser := flag.String("schema-registry-user", "", "Schema registry username")
+	schemaRegistryPass := flag.String("schema-registry-pass", "", "Schema registry password")
 	verbose := flag.Bool("verbose", false, "Enable verbose logging")
 	flag.Parse()
 
@@ -180,7 +182,7 @@ func main() {
 					"processes": []string{"nginx", "mysql", "redis"},
 				}
 			}
-			messageData, err = EncodeAvroMessage(*shape, payload, *schemaRegistryURL, *topic, *verbose)
+			messageData, err = EncodeAvroMessage(*shape, payload, *schemaRegistryURL, *schemaRegistryUser, *schemaRegistryPass, *topic, *verbose)
 		}
 
 		if err != nil {
