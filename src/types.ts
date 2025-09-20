@@ -54,6 +54,7 @@ export interface KafkaDataSourceOptions extends DataSourceJsonData {
   timeout?: number;
   // Avro Configuration (moved to query level)
   schemaRegistryUrl?: string;
+  schemaRegistryUsername?: string;
 }
 
 // Default options used when creating a new Kafka datasource
@@ -80,7 +81,6 @@ export interface KafkaSecureJsonData {
   tlsClientCert?: string;
   tlsClientKey?: string;
   // Schema Registry Authentication
-  schemaRegistryUsername?: string;
   schemaRegistryPassword?: string;
 }
 

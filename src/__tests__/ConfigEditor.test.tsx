@@ -519,7 +519,7 @@ describe('ConfigEditor', () => {
 
     expect(mockOnOptionsChange).toHaveBeenCalledWith(
       expect.objectContaining({
-        secureJsonData: expect.objectContaining({
+        jsonData: expect.objectContaining({
           schemaRegistryUsername: 'registry-user',
         }),
       })
