@@ -9,6 +9,7 @@ datasources:
     jsonData:
       bootstrapServers: 'kafka:9092'
       schemaRegistryUrl: 'http://schema-registry:8081'
+      # schemaRegistryUsername: ""
       # Uncomment the below lines to enable SASL authentication or other configurations
       # securityProtocol: "PLAINTEXT"
       # saslMechanisms: "PLAIN"
@@ -17,4 +18,5 @@ datasources:
       # healthcheckTimeout: 3000
     # secureJsonData:
     #   saslPassword: ""
+    #   schemaRegistryPassword: ""
     #   apiKey: ""
