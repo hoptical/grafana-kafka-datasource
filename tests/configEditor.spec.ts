@@ -58,6 +58,9 @@ test.describe('Kafka Config Editor', () => {
     await page.getByRole('button', { name: 'Expand section Advanced' }).click();
     await expect(page.getByRole('textbox', { name: 'Log Level' })).toBeVisible();
     await expect(page.getByRole('spinbutton', { name: 'Healthcheck Timeout (ms)' })).toBeVisible();
+    await expect(page.getByRole('spinbutton', { name: 'Request Timeout (ms)' })).toBeVisible();
+    await expect(page.getByRole('spinbutton', { name: 'JSON Flatten Depth' })).toBeVisible();
+    await expect(page.getByRole('spinbutton', { name: 'JSON Field Limit' })).toBeVisible();
   });
 
   test('should validate healthcheck timeout input and enforce non-negative values', async ({
@@ -93,6 +96,66 @@ test.describe('Kafka Config Editor', () => {
     // Should handle large numbers
     await timeoutField.fill('60000');
     await expect(timeoutField).toHaveValue('60000');
+  });
+
+  test('should validate JSON flatten depth input and enforce valid range', async ({
+    createDataSourceConfigPage,
+    readProvisionedDataSource,
+    page,
+  }) => {
+    const ds = await readProvisionedDataSource({ fileName: 'datasource.yaml' });
+    const configPage = await createDataSourceConfigPage({ type: ds.type });
+
+    await page.getByRole('button', { name: 'Expand section Advanced' }).click();
+
+    const flattenDepthField = page.getByRole('spinbutton', { name: 'JSON Flatten Depth' });
+
+    // Should accept valid positive numbers within range
+    await flattenDepthField.fill('10');
+    await expect(flattenDepthField).toHaveValue('10');
+
+    // Should accept minimum value of 1
+    await flattenDepthField.fill('1');
+    await expect(flattenDepthField).toHaveValue('1');
+
+    // Should accept maximum value of 20
+    await flattenDepthField.fill('20');
+    await expect(flattenDepthField).toHaveValue('20');
+
+    // Should enforce minimum value of 0 for negative numbers
+    await flattenDepthField.fill('-5');
+    await flattenDepthField.blur();
+    await expect(flattenDepthField).toHaveValue('0');
+  });
+
+  test('should validate JSON field limit input and enforce valid range', async ({
+    createDataSourceConfigPage,
+    readProvisionedDataSource,
+    page,
+  }) => {
+    const ds = await readProvisionedDataSource({ fileName: 'datasource.yaml' });
+    const configPage = await createDataSourceConfigPage({ type: ds.type });
+
+    await page.getByRole('button', { name: 'Expand section Advanced' }).click();
+
+    const fieldLimitField = page.getByRole('spinbutton', { name: 'JSON Field Limit' });
+
+    // Should accept valid positive numbers within range
+    await fieldLimitField.fill('2000');
+    await expect(fieldLimitField).toHaveValue('2000');
+
+    // Should accept minimum value of 10
+    await fieldLimitField.fill('10');
+    await expect(fieldLimitField).toHaveValue('10');
+
+    // Should accept maximum value of 10000
+    await fieldLimitField.fill('10000');
+    await expect(fieldLimitField).toHaveValue('10000');
+
+    // Should enforce minimum value of 0 for negative numbers
+    await fieldLimitField.fill('-100');
+    await fieldLimitField.blur();
+    await expect(fieldLimitField).toHaveValue('0');
   });
 
   test('should fail when configuring datasource with unreachable servers', async ({
@@ -158,6 +221,9 @@ test.describe('Kafka Config Editor', () => {
     await page.getByRole('button', { name: 'Expand section Advanced' }).click();
     await page.getByRole('textbox', { name: 'Log Level' }).fill('debug');
     await page.getByRole('spinbutton', { name: 'Healthcheck Timeout (ms)' }).fill('3000');
+    await page.getByRole('spinbutton', { name: 'Request Timeout (ms)' }).fill('5000');
+    await page.getByRole('spinbutton', { name: 'JSON Flatten Depth' }).fill('8');
+    await page.getByRole('spinbutton', { name: 'JSON Field Limit' }).fill('1500');
 
     // Save the configuration
     await expect(configPage.saveAndTest()).not.toBeOK();
