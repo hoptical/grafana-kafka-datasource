@@ -19,11 +19,17 @@ type StreamManager struct {
 	client          KafkaClientAPI
 	flattenMaxDepth int
 	flattenFieldCap int
+	fieldBuilder    *FieldBuilder // Maintains type registry across messages
 }
 
 // NewStreamManager creates a new StreamManager instance.
 func NewStreamManager(client KafkaClientAPI, flattenMaxDepth, flattenFieldCap int) *StreamManager {
-	return &StreamManager{client: client, flattenMaxDepth: flattenMaxDepth, flattenFieldCap: flattenFieldCap}
+	return &StreamManager{
+		client:          client,
+		flattenMaxDepth: flattenMaxDepth,
+		flattenFieldCap: flattenFieldCap,
+		fieldBuilder:    NewFieldBuilder(),
+	}
 }
 
 // ProcessMessage converts a Kafka message into a Grafana data frame.
@@ -74,7 +80,6 @@ func (sm *StreamManager) ProcessMessage(
 
 	FlattenJSON("", messageValue, flat, 0, sm.flattenMaxDepth, sm.flattenFieldCap)
 
-	fieldBuilder := NewFieldBuilder()
 	fieldIndex := len(frame.Fields)
 
 	// Collect keys and sort them for deterministic field ordering
@@ -86,7 +91,7 @@ func (sm *StreamManager) ProcessMessage(
 
 	for _, key := range keys {
 		value := flat[key]
-		fieldBuilder.AddValueToFrame(frame, key, value, fieldIndex)
+		sm.fieldBuilder.AddValueToFrame(frame, key, value, fieldIndex)
 		fieldIndex++
 	}
 
