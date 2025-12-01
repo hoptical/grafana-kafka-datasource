@@ -90,8 +90,17 @@ func main() {
 
 	for {
 		// Create sample data (flat, nested, or list)
-		value1 := *valuesOffset - rand.Float64()
-		value2 := *valuesOffset + rand.Float64()
+		// Periodically set value1/value2 to null to reproduce the bug.
+		rawValue1 := *valuesOffset - rand.Float64()
+		rawValue2 := *valuesOffset + rand.Float64()
+		var value1 interface{} = rawValue1
+		var value2 interface{} = rawValue2
+		if counter%7 == 0 {
+			value1 = nil
+		}
+		if counter%11 == 0 {
+			value2 = nil
+		}
 
 		var payload interface{}
 		switch *shape {
@@ -130,12 +139,12 @@ func main() {
 					map[string]interface{}{
 						"type":     "cpu_high",
 						"severity": "warning",
-						"value":    value1 * 100,
+						"value":    rawValue1 * 100,
 					},
 					map[string]interface{}{
 						"type":     "mem_low",
 						"severity": "info",
-						"value":    value2 * 50,
+						"value":    rawValue2 * 50,
 					},
 				},
 				"processes": []string{"nginx", "mysql", "redis"},
@@ -170,7 +179,7 @@ func main() {
 						"name": hostName,
 						"ip":   hostIP,
 					},
-					"value":     value1 * 1.5,
+					"value":     rawValue1 * 1.5,
 					"timestamp": time.Now().Unix(),
 				},
 				map[string]interface{}{
@@ -180,7 +189,7 @@ func main() {
 						"name": hostName,
 						"ip":   hostIP,
 					},
-					"value":     value2 * 0.8,
+					"value":     rawValue2 * 0.8,
 					"timestamp": time.Now().Unix(),
 				},
 				map[string]interface{}{
