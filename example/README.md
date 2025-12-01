@@ -56,6 +56,8 @@ go run producer.go -broker localhost:9094 -topic test -interval 500 -num-partiti
 	]
 	```
 
+Null reproduction: All shapes periodically set fields like `value1` or `value2` to `null` to reproduce the Grafana frame type flip in realistic payloads.
+
 All shapes are supported by the plugin and help test flattening, array handling, and nested data.
 
 #### Other options
@@ -76,5 +78,11 @@ The Python code will produces simple flat JSON messages to the Kafka topic `test
 ### Usage
 
 ```bash
+python producer.py --broker localhost:9092 --topic test --interval 0.5 --shape flat
+
+Or the default flat messages:
+
+```bash
 python producer.py
+```
 ```
