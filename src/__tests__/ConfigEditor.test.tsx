@@ -488,6 +488,66 @@ describe('ConfigEditor', () => {
     );
   });
 
+  it('calls onOptionsChange when JSON flatten depth changes', () => {
+    renderConfigEditor();
+    const input = screen.getByDisplayValue('5'); // Default flattenMaxDepth
+
+    fireEvent.change(input, { target: { value: '10' } });
+
+    expect(mockOnOptionsChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jsonData: expect.objectContaining({
+          flattenMaxDepth: 10,
+        }),
+      })
+    );
+  });
+
+  it('validates JSON flatten depth to non-negative values', () => {
+    renderConfigEditor();
+    const input = screen.getByDisplayValue('5');
+
+    fireEvent.change(input, { target: { value: '-2' } });
+
+    expect(mockOnOptionsChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jsonData: expect.objectContaining({
+          flattenMaxDepth: 0,
+        }),
+      })
+    );
+  });
+
+  it('calls onOptionsChange when JSON field limit changes', () => {
+    renderConfigEditor();
+    const input = screen.getByDisplayValue('1000'); // Default flattenFieldCap
+
+    fireEvent.change(input, { target: { value: '2000' } });
+
+    expect(mockOnOptionsChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jsonData: expect.objectContaining({
+          flattenFieldCap: 2000,
+        }),
+      })
+    );
+  });
+
+  it('validates JSON field limit to non-negative values', () => {
+    renderConfigEditor();
+    const input = screen.getByDisplayValue('1000');
+
+    fireEvent.change(input, { target: { value: '-100' } });
+
+    expect(mockOnOptionsChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jsonData: expect.objectContaining({
+          flattenFieldCap: 0,
+        }),
+      })
+    );
+  });
+
   it('preserves existing configuration values', () => {
     const existingConfig = {
       bootstrapServers: 'existing-servers:9092',
@@ -498,6 +558,8 @@ describe('ConfigEditor', () => {
       logLevel: 'info',
       healthcheckTimeout: 5000,
       timeout: 10000,
+      flattenMaxDepth: 8,
+      flattenFieldCap: 1500,
     };
 
     renderConfigEditor(existingConfig);
@@ -508,5 +570,7 @@ describe('ConfigEditor', () => {
     expect(screen.getByDisplayValue('info')).toBeInTheDocument();
     expect(screen.getByDisplayValue('5000')).toBeInTheDocument();
     expect(screen.getByDisplayValue('10000')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('8')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('1500')).toBeInTheDocument();
   });
 });

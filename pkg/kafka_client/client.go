@@ -48,7 +48,9 @@ type Options struct {
 	TLSClientCert     string `json:"tlsClientCert"`
 	TLSClientKey      string `json:"tlsClientKey"`
 	// Advanced settings
-	Timeout int32 `json:"timeout"` // ms; primary timeout
+	Timeout         int32 `json:"timeout"` // ms; primary timeout
+	FlattenMaxDepth int   `json:"flattenMaxDepth"`
+	FlattenFieldCap int   `json:"flattenFieldCap"`
 }
 
 type KafkaClient struct {

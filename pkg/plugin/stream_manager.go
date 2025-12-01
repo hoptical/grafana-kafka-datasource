@@ -16,12 +16,14 @@ import (
 
 // StreamManager handles the streaming logic for Kafka messages.
 type StreamManager struct {
-	client KafkaClientAPI
+	client          KafkaClientAPI
+	flattenMaxDepth int
+	flattenFieldCap int
 }
 
 // NewStreamManager creates a new StreamManager instance.
-func NewStreamManager(client KafkaClientAPI) *StreamManager {
-	return &StreamManager{client: client}
+func NewStreamManager(client KafkaClientAPI, flattenMaxDepth, flattenFieldCap int) *StreamManager {
+	return &StreamManager{client: client, flattenMaxDepth: flattenMaxDepth, flattenFieldCap: flattenFieldCap}
 }
 
 // ProcessMessage converts a Kafka message into a Grafana data frame.
@@ -70,7 +72,7 @@ func (sm *StreamManager) ProcessMessage(
 		messageValue = wrappedValue
 	}
 
-	FlattenJSON("", messageValue, flat, 0, defaultFlattenMaxDepth, defaultFlattenFieldCap)
+	FlattenJSON("", messageValue, flat, 0, sm.flattenMaxDepth, sm.flattenFieldCap)
 
 	fieldBuilder := NewFieldBuilder()
 	fieldIndex := len(frame.Fields)

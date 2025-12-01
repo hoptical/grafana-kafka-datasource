@@ -58,7 +58,7 @@ func NewKafkaInstance(_ context.Context, s backend.DataSourceInstanceSettings) (
 
 	kc := kafka_client.NewKafkaClient(*settings)
 
-	return &KafkaDatasource{client: &kc}, nil
+	return &KafkaDatasource{client: &kc, settings: settings}, nil
 }
 
 func getDatasourceSettings(s backend.DataSourceInstanceSettings) (*kafka_client.Options, error) {
@@ -115,15 +115,39 @@ func getDatasourceSettings(s backend.DataSourceInstanceSettings) (*kafka_client.
 		}
 	}
 
+	// Validate and set JSON flattening parameters with proper bounds
+	if settings.FlattenMaxDepth == 0 {
+		settings.FlattenMaxDepth = defaultFlattenMaxDepth
+	} else if settings.FlattenMaxDepth < 1 {
+		settings.FlattenMaxDepth = 1
+	}
+
+	if settings.FlattenFieldCap == 0 {
+		settings.FlattenFieldCap = defaultFlattenFieldCap
+	} else if settings.FlattenFieldCap < 1 {
+		settings.FlattenFieldCap = 1
+	}
+
 	return settings, nil
 }
 
-type KafkaDatasource struct{ client KafkaClientAPI }
+type KafkaDatasource struct {
+	client   KafkaClientAPI
+	settings *kafka_client.Options
+}
 
 func (d *KafkaDatasource) Dispose() { d.client.Dispose() }
 
 // NewWithClient allows injecting a custom KafkaClientAPI (primarily for tests).
-func NewWithClient(c KafkaClientAPI) *KafkaDatasource { return &KafkaDatasource{client: c} }
+func NewWithClient(c KafkaClientAPI) *KafkaDatasource {
+	return &KafkaDatasource{
+		client: c,
+		settings: &kafka_client.Options{
+			FlattenMaxDepth: defaultFlattenMaxDepth,
+			FlattenFieldCap: defaultFlattenFieldCap,
+		},
+	}
+}
 
 func (d *KafkaDatasource) QueryData(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
 	log.DefaultLogger.Debug("QueryData called", "request", req)
@@ -325,7 +349,7 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 	}
 
 	// Create stream manager and validate partitions
-	streamManager := NewStreamManager(d.client)
+	streamManager := NewStreamManager(d.client, d.settings.FlattenMaxDepth, d.settings.FlattenFieldCap)
 	partitions, err := streamManager.ValidateAndGetPartitions(ctx, qm)
 	if err != nil {
 		return err
