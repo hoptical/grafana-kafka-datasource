@@ -5,7 +5,7 @@ services:
       service: grafana
 
   kafka:
-    image: bitnami/kafka:3.7
+    image: bitnamilegacy/kafka:3.7
     container_name: kafka
     environment:
       - KAFKA_KRAFT_MODE=true
