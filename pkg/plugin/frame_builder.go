@@ -86,6 +86,8 @@ func (fb *FieldBuilder) createNullableField(frame *data.Frame, key string, field
 	case data.FieldTypeNullableString:
 		frame.Fields[fieldIndex] = data.NewField(key, nil, make([]*string, 1))
 	default:
+		// Fallback to nullable float64 if type is not recognized
+		// Note: value is left as nil (no Set call needed)
 		frame.Fields[fieldIndex] = data.NewField(key, nil, make([]*float64, 1))
 	}
 }
