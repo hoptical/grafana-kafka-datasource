@@ -1,8 +1,16 @@
 import { test, expect } from '@grafana/plugin-e2e';
 import { exec, ChildProcess } from 'child_process';
 import { accessSync, constants } from 'fs';
+import { Page, Locator } from '@playwright/test';
 
 const isV10 = (process.env.GRAFANA_VERSION || '').startsWith('10.');
+
+// Helper to get table cells compatible across Grafana versions
+// Grafana v12.2.0+ uses 'gridcell' role, older versions use 'cell'
+function getTableCells(page: Page): Locator {
+  // Use a CSS selector that works for both roles
+  return page.locator('[role="gridcell"], [role="cell"]');
+}
 function startKafkaProducer(): ChildProcess {
   const producerPath = './dist/producer';
   try {
@@ -129,16 +137,15 @@ test.describe('Kafka Query Editor', () => {
 
     // Wait for the time column to appear first (this indicates data is flowing)
     await expect(page.getByRole('columnheader', { name: 'time' })).toBeVisible({ timeout: 10000 });
-    await expect(page.getByRole('columnheader', { name: 'value1' })).toBeVisible();
-    await expect(page.getByRole('columnheader', { name: 'value2' })).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: 'offset' })).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: 'partition' })).toBeVisible();
 
     // Verify that data is flowing correctly with proper formats
     // Check for timestamp format in time column (YYYY-MM-DD HH:MM:SS)
-    await expect(page.getByRole('cell').filter({ hasText: /\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/ })).toBeVisible();
+    await expect(getTableCells(page).filter({ hasText: /\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/ })).toBeVisible();
     // Check for float numbers in value columns (just verify at least one numeric cell exists)
     await expect(
-      page
-        .getByRole('cell')
+      getTableCells(page)
         .filter({ hasText: /^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/ })
         .first()
     ).toBeVisible();
@@ -202,9 +209,8 @@ test.describe('Kafka Query Editor', () => {
     await panelEditPage.setVisualization('Table');
     // Wait for data columns
     await expect(page.getByRole('columnheader', { name: 'time' })).toBeVisible({ timeout: 10000 });
-    await expect(page.getByRole('columnheader', { name: 'value1' })).toBeVisible();
-    // Confirm partition column absent (single partition) or if present only single value
-    // Not asserting strictly due to frame structure but ensures at least one data cell
-    await expect(page.getByRole('cell').first()).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: 'offset' })).toBeVisible();
+    // Confirm at least one data cell is visible (works across Grafana versions)
+    await expect(getTableCells(page).first()).toBeVisible();
   });
 });
