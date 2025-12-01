@@ -93,9 +93,7 @@ func (sm *StreamManager) ProcessMessage(
 	msgFieldStart := len(fields)
 	totalFields := len(fields) + len(keys)
 	frame.Fields = make([]*data.Field, totalFields)
-	for i, f := range fields {
-		frame.Fields[i] = f
-	}
+	copy(frame.Fields, fields)
 
 	// Add message fields by direct assignment
 	for i, key := range keys {
