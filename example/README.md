@@ -79,10 +79,10 @@ The Python code will produces simple flat JSON messages to the Kafka topic `test
 
 ```bash
 python producer.py --broker localhost:9092 --topic test --interval 0.5 --shape flat
+```
 
 Or the default flat messages:
 
 ```bash
 python producer.py
-```
 ```
