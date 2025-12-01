@@ -120,16 +120,12 @@ func getDatasourceSettings(s backend.DataSourceInstanceSettings) (*kafka_client.
 		settings.FlattenMaxDepth = defaultFlattenMaxDepth
 	} else if settings.FlattenMaxDepth < 1 {
 		settings.FlattenMaxDepth = 1
-	} else if settings.FlattenMaxDepth > 20 {
-		settings.FlattenMaxDepth = 20
 	}
 
 	if settings.FlattenFieldCap == 0 {
 		settings.FlattenFieldCap = defaultFlattenFieldCap
-	} else if settings.FlattenFieldCap < 10 {
-		settings.FlattenFieldCap = 10
-	} else if settings.FlattenFieldCap > 10000 {
-		settings.FlattenFieldCap = 10000
+	} else if settings.FlattenFieldCap < 1 {
+		settings.FlattenFieldCap = 1
 	}
 
 	return settings, nil

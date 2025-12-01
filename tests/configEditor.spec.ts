@@ -98,7 +98,7 @@ test.describe('Kafka Config Editor', () => {
     await expect(timeoutField).toHaveValue('60000');
   });
 
-  test('should validate JSON flatten depth input and enforce valid range', async ({
+  test('should validate JSON flatten depth input and enforce valid range (no hard max)', async ({
     createDataSourceConfigPage,
     readProvisionedDataSource,
     page,
@@ -110,7 +110,7 @@ test.describe('Kafka Config Editor', () => {
 
     const flattenDepthField = page.getByRole('spinbutton', { name: 'JSON Flatten Depth' });
 
-    // Should accept valid positive numbers within range
+    // Should accept valid positive numbers
     await flattenDepthField.fill('10');
     await expect(flattenDepthField).toHaveValue('10');
 
@@ -118,9 +118,9 @@ test.describe('Kafka Config Editor', () => {
     await flattenDepthField.fill('1');
     await expect(flattenDepthField).toHaveValue('1');
 
-    // Should accept maximum value of 20
-    await flattenDepthField.fill('20');
-    await expect(flattenDepthField).toHaveValue('20');
+    // Should accept large values (no hard upper bound)
+    await flattenDepthField.fill('999999');
+    await expect(flattenDepthField).toHaveValue('999999');
 
     // Should enforce minimum value of 0 for negative numbers
     await flattenDepthField.fill('-5');
@@ -128,7 +128,7 @@ test.describe('Kafka Config Editor', () => {
     await expect(flattenDepthField).toHaveValue('0');
   });
 
-  test('should validate JSON field limit input and enforce valid range', async ({
+  test('should validate JSON field limit input and enforce valid range (no hard max)', async ({
     createDataSourceConfigPage,
     readProvisionedDataSource,
     page,
@@ -140,7 +140,7 @@ test.describe('Kafka Config Editor', () => {
 
     const fieldLimitField = page.getByRole('spinbutton', { name: 'JSON Field Limit' });
 
-    // Should accept valid positive numbers within range
+    // Should accept valid positive numbers
     await fieldLimitField.fill('2000');
     await expect(fieldLimitField).toHaveValue('2000');
 
@@ -148,9 +148,9 @@ test.describe('Kafka Config Editor', () => {
     await fieldLimitField.fill('10');
     await expect(fieldLimitField).toHaveValue('10');
 
-    // Should accept maximum value of 10000
-    await fieldLimitField.fill('10000');
-    await expect(fieldLimitField).toHaveValue('10000');
+    // Should accept large values (no hard upper bound)
+    await fieldLimitField.fill('500000');
+    await expect(fieldLimitField).toHaveValue('500000');
 
     // Should enforce minimum value of 0 for negative numbers
     await fieldLimitField.fill('-100');

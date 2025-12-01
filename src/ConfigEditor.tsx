@@ -416,7 +416,7 @@ export const ConfigEditor = (props: Props) => {
         <InlineField
             label="JSON Flatten Depth"
             labelWidth={30}
-            tooltip="Maximum depth to flatten nested JSON objects. Higher values allow deeper nesting but may impact performance. (Default: 5)"
+            tooltip="Depth to flatten nested JSON objects. No hard upper bound; higher values may impact performance. (Default: 5)"
             grow
         >
             <Input
@@ -426,14 +426,13 @@ export const ConfigEditor = (props: Props) => {
                 type="number"
                 step={1}
                 min={1}
-                max={20}
                 width={15}
             />
         </InlineField>
         <InlineField
             label="JSON Field Limit"
             labelWidth={30}
-            tooltip="Maximum number of flattened fields to process per message. Prevents memory issues with very large JSON objects. (Default: 1000)"
+            tooltip="Number of flattened fields to process per message. No hard upper bound; very large values can impact memory/CPU. (Default: 1000)"
             grow
         >
             <Input
@@ -441,9 +440,8 @@ export const ConfigEditor = (props: Props) => {
                 onChange={onRequestFlattenFieldCapChange}
                 value={jsonData.flattenFieldCap}
                 type="number"
-                step={10}
-                min={10}
-                max={10000}
+                step={1}
+                min={1}
                 width={15}
             />
         </InlineField>
