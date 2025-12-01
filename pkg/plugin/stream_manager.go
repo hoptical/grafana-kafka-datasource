@@ -42,26 +42,28 @@ func (sm *StreamManager) ProcessMessage(
 	frame := data.NewFrame("response")
 
 	// Add time field
-	frame.Fields = append(frame.Fields, data.NewField("time", nil, make([]time.Time, 1)))
-
+	timeField := data.NewField("time", nil, make([]time.Time, 1))
 	var frameTime time.Time
 	if qm.TimestampMode == "now" {
 		frameTime = time.Now()
 	} else {
 		frameTime = msg.Timestamp
 	}
-	frame.Fields[0].Set(0, frameTime)
+	timeField.Set(0, frameTime)
+
+	fields := []*data.Field{timeField}
 
 	// Add partition field when consuming from multiple partitions
 	if len(partitions) > 1 {
-		frame.Fields = append(frame.Fields, data.NewField("partition", nil, make([]int32, 1)))
-		frame.Fields[1].Set(0, partition)
+		partitionField := data.NewField("partition", nil, make([]int32, 1))
+		partitionField.Set(0, partition)
+		fields = append(fields, partitionField)
 	}
 
 	// Add offset field
-	offsetFieldIndex := len(frame.Fields)
-	frame.Fields = append(frame.Fields, data.NewField("offset", nil, make([]int64, 1)))
-	frame.Fields[offsetFieldIndex].Set(0, msg.Offset)
+	offsetField := data.NewField("offset", nil, make([]int64, 1))
+	offsetField.Set(0, msg.Offset)
+	fields = append(fields, offsetField)
 
 	// Flatten and process message values
 	flat := make(map[string]interface{})
@@ -80,8 +82,6 @@ func (sm *StreamManager) ProcessMessage(
 
 	FlattenJSON("", messageValue, flat, 0, sm.flattenMaxDepth, sm.flattenFieldCap)
 
-	fieldIndex := len(frame.Fields)
-
 	// Collect keys and sort them for deterministic field ordering
 	keys := make([]string, 0, len(flat))
 	for key := range flat {
@@ -89,10 +89,19 @@ func (sm *StreamManager) ProcessMessage(
 	}
 	sort.Strings(keys)
 
-	for _, key := range keys {
+	// Pre-allocate fields slice
+	msgFieldStart := len(fields)
+	totalFields := len(fields) + len(keys)
+	frame.Fields = make([]*data.Field, totalFields)
+	for i, f := range fields {
+		frame.Fields[i] = f
+	}
+
+	// Add message fields by direct assignment
+	for i, key := range keys {
 		value := flat[key]
-		sm.fieldBuilder.AddValueToFrame(frame, key, value, fieldIndex)
-		fieldIndex++
+		fieldIdx := msgFieldStart + i
+		sm.fieldBuilder.AddValueToFrame(frame, key, value, fieldIdx)
 	}
 
 	return frame, nil
