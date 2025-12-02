@@ -2,6 +2,7 @@
 
 ## [v1.1.0](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.1.0)
 [Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v1.0.1...v1.1.0)
+- Fix: Address security issues in dependencies and configuration ([#107](https://github.com/hoptical/grafana-kafka-datasource/pull/107))
 - Fix: Use type registry with nullable types to prevent data loss when encountering null values ([#104](https://github.com/hoptical/grafana-kafka-datasource/pull/104))
 - Perf: Pre-allocate frame fields to eliminate append overhead ([#106](https://github.com/hoptical/grafana-kafka-datasource/pull/106))
 - Feat: Configurable JSON flatten limits ([#99](https://github.com/hoptical/grafana-kafka-datasource/pull/99))
