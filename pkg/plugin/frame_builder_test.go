@@ -7,6 +7,13 @@ import (
 	"github.com/grafana/grafana-plugin-sdk-go/data"
 )
 
+// newFrameWithCapacity creates a frame with pre-allocated fields slice.
+func newFrameWithCapacity(name string, numFields int) *data.Frame {
+	frame := data.NewFrame(name)
+	frame.Fields = make([]*data.Field, numFields)
+	return frame
+}
+
 func TestFieldBuilder_AddValueToFrame(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -69,7 +76,7 @@ func TestFieldBuilder_AddValueToFrame(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			fb := NewFieldBuilder()
-			frame := data.NewFrame("test")
+			frame := newFrameWithCapacity("test", 1)
 
 			fb.AddValueToFrame(frame, tt.key, tt.value, 0)
 
@@ -171,7 +178,7 @@ func TestFieldBuilder_JSONNumber(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			fb := NewFieldBuilder()
-			frame := data.NewFrame("test")
+			frame := newFrameWithCapacity("test", 1)
 			num := json.Number(tt.jsonNumber)
 			fb.AddValueToFrame(frame, "test_field", num, 0)
 			if len(frame.Fields) != 1 {
@@ -222,7 +229,6 @@ func TestFieldBuilder_JSONNumber(t *testing.T) {
 
 func TestFieldBuilder_IntegerTypes(t *testing.T) {
 	fb := NewFieldBuilder()
-	frame := data.NewFrame("test")
 
 	// Test various integer types
 	values := map[string]interface{}{
@@ -238,6 +244,8 @@ func TestFieldBuilder_IntegerTypes(t *testing.T) {
 		"uint64_val":  uint64(64),
 		"float32_val": float32(32.5),
 	}
+
+	frame := newFrameWithCapacity("test", len(values))
 
 	fieldIndex := 0
 	for key, value := range values {
@@ -335,7 +343,7 @@ func TestFieldBuilder_NullHandling(t *testing.T) {
 			fb := NewFieldBuilder()
 
 			for i, val := range tt.sequence {
-				frame := data.NewFrame("test")
+				frame := newFrameWithCapacity("test", 1)
 				fb.AddValueToFrame(frame, tt.key, val, 0)
 
 				if len(frame.Fields) != 1 {
@@ -390,7 +398,7 @@ func TestFieldBuilder_NullableBoolHandling(t *testing.T) {
 	// Test bool -> nil -> bool
 	sequence := []interface{}{true, nil, false}
 	for i, val := range sequence {
-		frame := data.NewFrame("test")
+		frame := newFrameWithCapacity("test", 1)
 		fb.AddValueToFrame(frame, "flag", val, 0)
 
 		if len(frame.Fields) != 1 {
@@ -418,7 +426,7 @@ func TestFieldBuilder_NilFirstBehavior(t *testing.T) {
 	fb := NewFieldBuilder()
 
 	// Step 0: nil comes first - should default to float64
-	frame1 := data.NewFrame("test")
+	frame1 := newFrameWithCapacity("test", 1)
 	fb.AddValueToFrame(frame1, "sensor", nil, 0)
 
 	if len(frame1.Fields) != 1 {
@@ -434,7 +442,7 @@ func TestFieldBuilder_NilFirstBehavior(t *testing.T) {
 	}
 
 	// Step 1: int64 comes next - should register as int64 in registry for future messages
-	frame2 := data.NewFrame("test")
+	frame2 := newFrameWithCapacity("test", 1)
 	fb.AddValueToFrame(frame2, "sensor", int64(100), 0)
 
 	if len(frame2.Fields) != 1 {
@@ -454,7 +462,7 @@ func TestFieldBuilder_NilFirstBehavior(t *testing.T) {
 	}
 
 	// Step 2: nil comes again - should now use int64 from registry
-	frame3 := data.NewFrame("test")
+	frame3 := newFrameWithCapacity("test", 1)
 	fb.AddValueToFrame(frame3, "sensor", nil, 0)
 
 	if len(frame3.Fields) != 1 {
