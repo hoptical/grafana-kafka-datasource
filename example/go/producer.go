@@ -67,7 +67,22 @@ func main() {
 	valuesOffset := flag.Float64("values-offset", 1.0, "Offset for the values")
 	connectTimeout := flag.Int("connect-timeout", 5000, "Broker connect timeout in milliseconds")
 	shape := flag.String("shape", "nested", "Payload shape: nested, flat, or list")
+	format := flag.String("format", "json", "Message format: json or avro")
+	schemaRegistryURL := flag.String("schema-registry", "", "Schema registry URL (for Avro with schema registry)")
+	verbose := flag.Bool("verbose", false, "Enable verbose logging")
 	flag.Parse()
+
+	// Validate format
+	if *format != "json" && *format != "avro" {
+		fmt.Printf("Error: Invalid format %q. Valid options: json, avro\n", *format)
+		os.Exit(1)
+	}
+
+	// Validate Avro compatibility
+	if *format == "avro" && *shape == "list" {
+		fmt.Printf("Error: Avro format does not support 'list' shape. Use 'flat' or 'nested' shapes with Avro.\n")
+		os.Exit(1)
+	}
 
 	// Create topic if it doesn't exist
 	timeout := time.Duration(*connectTimeout) * time.Millisecond
@@ -102,6 +117,10 @@ func main() {
 			value2 = nil
 		}
 
+		var messageData []byte
+		var err error
+
+		// Create payload based on shape
 		var payload interface{}
 		switch *shape {
 		case "flat":
@@ -150,7 +169,7 @@ func main() {
 				"processes": []string{"nginx", "mysql", "redis"},
 			}
 		case "list":
-			// JSON that starts with an array containing multiple records
+			// Top-level array of records
 			payload = []interface{}{
 				map[string]interface{}{
 					"id":   counter,
@@ -179,33 +198,7 @@ func main() {
 						"name": hostName,
 						"ip":   hostIP,
 					},
-					"value":     rawValue1 * 1.5,
-					"timestamp": time.Now().Unix(),
-				},
-				map[string]interface{}{
-					"id":   counter + 1001,
-					"type": "event",
-					"host": map[string]interface{}{
-						"name": hostName,
-						"ip":   hostIP,
-					},
-					"value":     rawValue2 * 0.8,
-					"timestamp": time.Now().Unix(),
-				},
-				map[string]interface{}{
-					"id":        counter + 2000,
-					"type":      "log",
-					"message":   fmt.Sprintf("Sample log entry #%d", counter),
-					"level":     "info",
-					"tags":      []string{"prod", "edge"},
-					"timestamp": time.Now().Unix(),
-				},
-				map[string]interface{}{
-					"id":        counter + 2001,
-					"type":      "log",
-					"message":   fmt.Sprintf("Sample log entry #%d (batch)", counter),
-					"level":     "debug",
-					"tags":      []string{"prod", "edge", "batch"},
+					"message":   "Sample log entry",
 					"timestamp": time.Now().Unix(),
 				},
 			}
@@ -215,17 +208,39 @@ func main() {
 			os.Exit(1)
 		}
 
-		// Convert payload to JSON
-		jsonData, err := json.Marshal(payload)
+		// Encode based on format
+		if *format == "json" {
+			messageData, err = json.Marshal(payload)
+		} else if *format == "avro" {
+			if *verbose {
+				fmt.Printf("[PRODUCER DEBUG] Using Avro format for message #%d\n", counter)
+			}
+			messageData, err = EncodeAvroMessage(*shape, payload, *schemaRegistryURL, *topic, *verbose)
+		}
+
 		if err != nil {
-			fmt.Printf("Error marshaling JSON: %v\n", err)
-			os.Exit(1)
+			fmt.Printf("Error encoding message: %v\n", err)
+		}
+
+		// Send the message
+		err = w.WriteMessages(context.Background(), kafka.Message{
+			Key:   []byte(fmt.Sprintf("key-%d", counter)),
+			Value: messageData,
+		})
+
+		if *verbose {
+			fmt.Printf("[PRODUCER DEBUG] Final message length: %d bytes, format: %s\n", len(messageData), *format)
+			if len(messageData) > 0 && len(messageData) <= 20 {
+				fmt.Printf("[PRODUCER DEBUG] Message content: %x\n", messageData)
+			} else if len(messageData) > 20 {
+				fmt.Printf("[PRODUCER DEBUG] Message preview: %x...\n", messageData[:20])
+			}
 		}
 
 		// Produce message
 		err = w.WriteMessages(context.Background(),
 			kafka.Message{
-				Value: jsonData,
+				Value: messageData,
 			},
 		)
 		if err != nil {
@@ -233,7 +248,11 @@ func main() {
 			os.Exit(1)
 		}
 
-		fmt.Printf("Sample #%d produced to topic %s (shape=%s)!\n", counter, *topic, *shape)
+		if *verbose {
+			fmt.Printf("Sample #%d produced to topic %s (shape=%s, format=%s)!\n", counter, *topic, *shape, *format)
+		} else {
+			fmt.Printf("Sample #%d produced to topic %s\n", counter, *topic)
+		}
 		counter++
 		time.Sleep(time.Duration(*sleepTime) * time.Millisecond)
 	}

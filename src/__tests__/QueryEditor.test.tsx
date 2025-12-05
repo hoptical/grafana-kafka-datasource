@@ -1,13 +1,14 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryEditor } from '../QueryEditor';
-import { AutoOffsetReset, TimestampMode, defaultQuery, type KafkaQuery } from '../types';
+import { AutoOffsetReset, TimestampMode, defaultQuery, MessageFormat, AvroSchemaSource, type KafkaQuery } from '../types';
 import { deepFreeze } from '../test-utils/test-helpers';
 
 // Mock @grafana/ui components
 jest.mock('@grafana/ui', () => ({
   InlineField: ({ children, label }: any) => (
     <div data-testid="inline-field" aria-label={label}>
+      {label && <label>{label}</label>}
       {children}
     </div>
   ),
@@ -86,6 +87,7 @@ describe('QueryEditor', () => {
       autoOffsetReset: AutoOffsetReset.LATEST,
       timestampMode: TimestampMode.Message,
       lastN: 100,
+      messageFormat: MessageFormat.JSON,
     });
     expect(() => {
       render(
@@ -352,5 +354,86 @@ describe('QueryEditor', () => {
     );
 
     consoleError.mockRestore();
+  });
+
+  it('renders message format select with JSON as default', () => {
+    renderEditor();
+    const messageFormatSelect = screen.getAllByTestId('select')[3] as HTMLSelectElement; // Fourth select is message format
+
+    expect(messageFormatSelect).toBeInTheDocument();
+    expect(messageFormatSelect.value).toBe(MessageFormat.JSON);
+  });
+
+  it('calls onChange and onRunQuery when message format changes to Avro', () => {
+    renderEditor({ messageFormat: MessageFormat.JSON });
+    const messageFormatSelect = screen.getAllByTestId('select')[3];
+
+    fireEvent.change(messageFormatSelect, { target: { value: MessageFormat.AVRO } });
+
+    expect(onChange).toHaveBeenCalledWith({
+      refId: 'A',
+      ...defaultQuery,
+      messageFormat: MessageFormat.AVRO,
+    });
+    expect(onRunQuery).toHaveBeenCalled();
+  });
+
+  it('shows Avro configuration when message format is Avro', () => {
+    renderEditor({ messageFormat: MessageFormat.AVRO });
+    expect(screen.getByText('Avro Schema Source')).toBeInTheDocument();
+  });
+
+  it('does not show Avro configuration when message format is JSON', () => {
+    renderEditor({ messageFormat: MessageFormat.JSON });
+    expect(screen.queryByText('Avro Schema Source')).not.toBeInTheDocument();
+  });
+
+  it('renders Avro schema source select with Schema Registry as default', () => {
+    renderEditor({ messageFormat: MessageFormat.AVRO });
+    const avroSourceSelect = screen.getAllByTestId('select')[4] as HTMLSelectElement; // Fifth select is avro source
+
+    expect(avroSourceSelect).toBeInTheDocument();
+    expect(avroSourceSelect.value).toBe(AvroSchemaSource.SCHEMA_REGISTRY);
+  });
+
+  it('calls onChange and onRunQuery when Avro schema source changes', () => {
+    renderEditor({ messageFormat: MessageFormat.AVRO, avroSchemaSource: AvroSchemaSource.SCHEMA_REGISTRY });
+    const avroSourceSelect = screen.getAllByTestId('select')[4];
+
+    fireEvent.change(avroSourceSelect, { target: { value: AvroSchemaSource.INLINE_SCHEMA } });
+
+    expect(onChange).toHaveBeenCalledWith({
+      refId: 'A',
+      ...defaultQuery,
+      messageFormat: MessageFormat.AVRO,
+      avroSchemaSource: AvroSchemaSource.INLINE_SCHEMA,
+    });
+    expect(onRunQuery).toHaveBeenCalled();
+  });
+
+  it('shows inline schema textarea when Avro schema source is Inline Schema', () => {
+    renderEditor({ messageFormat: MessageFormat.AVRO, avroSchemaSource: AvroSchemaSource.INLINE_SCHEMA });
+    expect(screen.getByPlaceholderText('Paste your Avro schema JSON here...')).toBeInTheDocument();
+  });
+
+  it('does not show inline schema textarea when Avro schema source is Schema Registry', () => {
+    renderEditor({ messageFormat: MessageFormat.AVRO, avroSchemaSource: AvroSchemaSource.SCHEMA_REGISTRY });
+    expect(screen.queryByPlaceholderText('Paste your Avro schema JSON here...')).not.toBeInTheDocument();
+  });
+
+  it('calls onChange and onRunQuery when Avro schema changes', () => {
+    renderEditor({ messageFormat: MessageFormat.AVRO, avroSchemaSource: AvroSchemaSource.INLINE_SCHEMA });
+    const textarea = screen.getByPlaceholderText('Paste your Avro schema JSON here...');
+
+    fireEvent.change(textarea, { target: { value: '{"type": "record", "name": "Test"}' } });
+
+    expect(onChange).toHaveBeenCalledWith({
+      refId: 'A',
+      ...defaultQuery,
+      messageFormat: MessageFormat.AVRO,
+      avroSchemaSource: AvroSchemaSource.INLINE_SCHEMA,
+      avroSchema: '{"type": "record", "name": "Test"}',
+    });
+    expect(onRunQuery).toHaveBeenCalled();
   });
 });

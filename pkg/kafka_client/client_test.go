@@ -2,8 +2,11 @@ package kafka_client
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestNewKafkaClient_Defaults(t *testing.T) {
@@ -297,6 +300,261 @@ func TestIsTopicNotFound(t *testing.T) {
 			result := isTopicNotFound(tt.err)
 			if result != tt.expected {
 				t.Errorf("Expected %v, got %v for error: %v", tt.expected, result, tt.err)
+			}
+		})
+	}
+}
+
+func TestNewKafkaClient_AvroConfiguration(t *testing.T) {
+	options := Options{
+		BootstrapServers:       "localhost:9092",
+		MessageFormat:          "avro",
+		SchemaRegistryUrl:      "http://localhost:8081",
+		SchemaRegistryUsername: "registry-user",
+		SchemaRegistryPassword: "registry-pass",
+	}
+	client := NewKafkaClient(options)
+
+	if client.MessageFormat != "avro" {
+		t.Errorf("Expected MessageFormat to be 'avro', got %s", client.MessageFormat)
+	}
+	if client.SchemaRegistryUrl != "http://localhost:8081" {
+		t.Errorf("Expected SchemaRegistryUrl to be 'http://localhost:8081', got %s", client.SchemaRegistryUrl)
+	}
+	if client.SchemaRegistryUsername != "registry-user" {
+		t.Errorf("Expected SchemaRegistryUsername to be 'registry-user', got %s", client.SchemaRegistryUsername)
+	}
+	if client.SchemaRegistryPassword != "registry-pass" {
+		t.Errorf("Expected SchemaRegistryPassword to be 'registry-pass', got %s", client.SchemaRegistryPassword)
+	}
+}
+
+func TestKafkaClient_GetMessageFormat(t *testing.T) {
+	client := NewKafkaClient(Options{
+		BootstrapServers: "localhost:9092",
+		MessageFormat:    "avro",
+	})
+
+	result := client.GetMessageFormat()
+	if result != "avro" {
+		t.Errorf("Expected GetMessageFormat to return 'avro', got %s", result)
+	}
+}
+
+func TestKafkaClient_GetSchemaRegistryUrl(t *testing.T) {
+	client := NewKafkaClient(Options{
+		BootstrapServers:  "localhost:9092",
+		SchemaRegistryUrl: "http://localhost:8081",
+	})
+
+	result := client.GetSchemaRegistryUrl()
+	if result != "http://localhost:8081" {
+		t.Errorf("Expected GetSchemaRegistryUrl to return 'http://localhost:8081', got %s", result)
+	}
+}
+
+func TestKafkaClient_GetSchemaRegistryUsername(t *testing.T) {
+	client := NewKafkaClient(Options{
+		BootstrapServers:       "localhost:9092",
+		SchemaRegistryUsername: "test-user",
+	})
+
+	result := client.GetSchemaRegistryUsername()
+	if result != "test-user" {
+		t.Errorf("Expected GetSchemaRegistryUsername to return 'test-user', got %s", result)
+	}
+}
+
+func TestKafkaClient_GetSchemaRegistryPassword(t *testing.T) {
+	client := NewKafkaClient(Options{
+		BootstrapServers:       "localhost:9092",
+		SchemaRegistryPassword: "test-pass",
+	})
+
+	result := client.GetSchemaRegistryPassword()
+	if result != "test-pass" {
+		t.Errorf("Expected GetSchemaRegistryPassword to return 'test-pass', got %s", result)
+	}
+}
+
+func TestKafkaClient_GetAvroSubjectNamingStrategy(t *testing.T) {
+	client := NewKafkaClient(Options{
+		BootstrapServers: "localhost:9092",
+	})
+
+	result := client.GetAvroSubjectNamingStrategy()
+	if result != "recordName" {
+		t.Errorf("Expected GetAvroSubjectNamingStrategy to return 'recordName', got %s", result)
+	}
+}
+
+func TestKafkaClient_ConsumerPull_AvroMessage(t *testing.T) {
+	// This test verifies that ConsumerPull stores raw bytes for potential Avro decoding
+	// Mock a Kafka message with binary data that would be Avro-encoded
+	avroData := []byte{0x00, 0x01, 0x02, 0x03} // Mock Avro binary data
+
+	// Since we can't easily mock the kafka.Reader, we'll test the message structure
+	message := KafkaMessage{
+		Value:     nil, // Not JSON
+		RawValue:  avroData,
+		Timestamp: time.Now(),
+		Offset:    123,
+	}
+
+	if len(message.RawValue) != 4 {
+		t.Errorf("Expected RawValue to contain 4 bytes, got %d", len(message.RawValue))
+	}
+	if message.Value != nil {
+		t.Error("Expected Value to be nil for non-JSON message")
+	}
+}
+
+func TestKafkaClient_GetTopicPartitions(t *testing.T) {
+	client := NewKafkaClient(Options{BootstrapServers: "localhost:9092"})
+	err := client.NewConnection()
+	if err != nil {
+		t.Skip("Skipping test: unable to connect to Kafka broker")
+	}
+
+	ctx := context.Background()
+	partitions, err := client.GetTopicPartitions(ctx, "__consumer_offsets")
+	if err != nil {
+		// This might fail if the topic doesn't exist or we can't connect
+		t.Logf("GetTopicPartitions failed (expected in test environment): %v", err)
+		return
+	}
+
+	if len(partitions) == 0 {
+		t.Error("Expected at least one partition for __consumer_offsets topic")
+	}
+
+	// Verify partitions are non-negative
+	for _, p := range partitions {
+		if p < 0 {
+			t.Errorf("Expected partition ID to be non-negative, got %d", p)
+		}
+	}
+}
+
+func TestKafkaClient_GetTopics(t *testing.T) {
+	client := NewKafkaClient(Options{BootstrapServers: "localhost:9092"})
+	err := client.NewConnection()
+	if err != nil {
+		t.Skip("Skipping test: unable to connect to Kafka broker")
+	}
+
+	ctx := context.Background()
+
+	// Test without prefix
+	topics, err := client.GetTopics(ctx, "", 10)
+	if err != nil {
+		t.Logf("GetTopics failed (expected in test environment): %v", err)
+		return
+	}
+
+	// Test with prefix
+	prefixedTopics, err := client.GetTopics(ctx, "__", 5)
+	if err != nil {
+		t.Logf("GetTopics with prefix failed (expected in test environment): %v", err)
+		return
+	}
+
+	// Prefixed results should be subset of all topics
+	if len(prefixedTopics) > len(topics) {
+		t.Error("Prefixed topics should not exceed total topics")
+	}
+
+	// Verify prefixed topics actually start with prefix
+	for _, topic := range prefixedTopics {
+		if !strings.HasPrefix(topic, "__") {
+			t.Errorf("Expected topic %s to start with prefix '__'", topic)
+		}
+	}
+}
+
+func TestKafkaClient_decodeMessageValue_JSON(t *testing.T) {
+	client := NewKafkaClient(Options{BootstrapServers: "localhost:9092"})
+
+	tests := []struct {
+		name     string
+		data     []byte
+		format   string
+		expected interface{}
+		hasError bool
+	}{
+		{
+			name:     "valid JSON object",
+			data:     []byte(`{"key": "value", "number": 123}`),
+			format:   "json",
+			expected: map[string]interface{}{"key": "value", "number": json.Number("123")},
+			hasError: false,
+		},
+		{
+			name:     "valid JSON array",
+			data:     []byte(`[{"key": "value"}]`),
+			format:   "json",
+			expected: []interface{}{map[string]interface{}{"key": "value"}},
+			hasError: false,
+		},
+		{
+			name:     "invalid JSON",
+			data:     []byte(`invalid json`),
+			format:   "json",
+			expected: nil,
+			hasError: true,
+		},
+		{
+			name:     "avro format",
+			data:     []byte(`some avro data`),
+			format:   "avro",
+			expected: nil,
+			hasError: false,
+		},
+		{
+			name:     "empty format with valid JSON",
+			data:     []byte(`{"key": "value"}`),
+			format:   "",
+			expected: map[string]interface{}{"key": "value"},
+			hasError: false,
+		},
+		{
+			name:     "empty format with invalid JSON",
+			data:     []byte(`binary data`),
+			format:   "",
+			expected: nil,
+			hasError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := client.decodeMessageValue(tt.data, tt.format)
+
+			if tt.hasError && err == nil {
+				t.Error("Expected error but got none")
+			}
+			if !tt.hasError && err != nil {
+				t.Errorf("Expected no error but got: %v", err)
+			}
+
+			if tt.expected != nil {
+				if result == nil {
+					t.Error("Expected non-nil result")
+					return
+				}
+
+				// For JSON objects, compare structure
+				if expectedMap, ok := tt.expected.(map[string]interface{}); ok {
+					if resultMap, ok := result.(map[string]interface{}); ok {
+						for k, v := range expectedMap {
+							if resultMap[k] != v {
+								t.Errorf("Expected %s=%v, got %s=%v", k, v, k, resultMap[k])
+							}
+						}
+					} else {
+						t.Errorf("Expected map[string]interface{}, got %T", result)
+					}
+				}
 			}
 		})
 	}

@@ -6,6 +6,7 @@ toolchain go1.24.10
 
 require (
 	github.com/grafana/grafana-plugin-sdk-go v0.284.0
+	github.com/linkedin/goavro/v2 v2.14.0
 	github.com/segmentio/kafka-go v0.4.47
 )
 
@@ -24,6 +25,7 @@ require (
 	github.com/gogo/googleapis v1.4.1 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
+	github.com/golang/snappy v1.0.0 // indirect
 	github.com/google/flatbuffers v25.2.10+incompatible // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
