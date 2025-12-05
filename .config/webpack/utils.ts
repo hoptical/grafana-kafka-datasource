@@ -36,7 +36,7 @@ export function getPluginJson() {
 
 export function getCPConfigVersion() {
   const cprcJson = path.resolve(process.cwd(), './.config', '.cprc.json');
-  return fs.existsSync(cprcJson) ? loadJson(cprcJson).version : { version: 'unknown' };
+  return fs.existsSync(cprcJson) ? loadJson(cprcJson).version : 'unknown';
 }
 
 export function hasReadme() {
