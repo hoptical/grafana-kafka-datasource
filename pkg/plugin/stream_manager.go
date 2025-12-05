@@ -214,8 +214,6 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 
 	fields := []*data.Field{timeField}
 
-	fields := []*data.Field{timeField}
-
 	// Add partition field when consuming from multiple partitions
 	if len(partitions) > 1 {
 		partitionField := data.NewField("partition", nil, make([]int32, 1))
@@ -242,7 +240,7 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 		messageValue = wrappedValue
 	}
 
-	FlattenJSON("", messageValue, flat, 0, sm.flattenMaxDepth, sm.flattenFieldCap)
+	FlattenJSON("", messageValue, flat, 0, defaultFlattenMaxDepth, defaultFlattenFieldCap)
 
 	// Collect keys and sort them for deterministic field ordering
 	keys := make([]string, 0, len(flat))
@@ -257,11 +255,13 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 	frame.Fields = make([]*data.Field, totalFields)
 	copy(frame.Fields, fields)
 
+	fieldBuilder := NewFieldBuilder()
+
 	// Add message fields by direct assignment
 	for i, key := range keys {
 		value := flat[key]
 		fieldIdx := msgFieldStart + i
-		sm.fieldBuilder.AddValueToFrame(frame, key, value, fieldIdx)
+		fieldBuilder.AddValueToFrame(frame, key, value, fieldIdx)
 	}
 
 	return frame, nil

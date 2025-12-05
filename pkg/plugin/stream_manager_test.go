@@ -354,7 +354,7 @@ func TestStreamManager_readFromPartition_ReaderError(t *testing.T) {
 		readerErr: errors.New("failed to create reader"),
 	}
 
-	sm := NewStreamManager(mockClient)
+	sm := NewStreamManager(mockClient, 5, 1000)
 	qm := queryModel{
 		Topic:           "test-topic",
 		AutoOffsetReset: "earliest",
@@ -392,7 +392,7 @@ func TestStreamManager_readFromPartition_PullError(t *testing.T) {
 		pullErr: errors.New("failed to pull message"),
 	}
 
-	sm := NewStreamManager(mockClient)
+	sm := NewStreamManager(mockClient, 5, 1000)
 	qm := queryModel{
 		Topic:           "test-topic",
 		AutoOffsetReset: "earliest",
@@ -453,7 +453,7 @@ func TestStreamManager_readFromPartition_ContextCancellation(t *testing.T) {
 		},
 	}
 
-	sm := NewStreamManager(mockClient)
+	sm := NewStreamManager(mockClient, 5, 1000)
 	qm := queryModel{
 		Topic:           "test-topic",
 		AutoOffsetReset: "earliest",
@@ -495,7 +495,7 @@ func TestStreamManager_readFromPartition_ContextCancellation(t *testing.T) {
 }
 
 func TestStreamManager_UpdateStreamConfig(t *testing.T) {
-	sm := NewStreamManager(&mockStreamClient{})
+	sm := NewStreamManager(&mockStreamClient{}, 5, 1000)
 	config := &StreamConfig{
 		MessageFormat:    "json",
 		AvroSchemaSource: "",
@@ -520,7 +520,7 @@ func TestStreamManager_UpdateStreamConfig(t *testing.T) {
 
 func TestStreamManager_ProcessMessage_RuntimeConfigChange_JSON(t *testing.T) {
 	mockClient := &mockStreamClient{}
-	sm := NewStreamManager(mockClient)
+	sm := NewStreamManager(mockClient, 5, 1000)
 
 	// Test message with JSON format
 	msg := kafka_client.KafkaMessage{
@@ -557,7 +557,7 @@ func TestStreamManager_ProcessMessage_RuntimeConfigChange_JSON(t *testing.T) {
 
 func TestStreamManager_ProcessMessage_RuntimeConfigChange_Avro(t *testing.T) {
 	mockClient := &mockStreamClient{}
-	sm := NewStreamManager(mockClient)
+	sm := NewStreamManager(mockClient, 5, 1000)
 
 	// Test message with Avro format (raw bytes that will fail decoding)
 	msg := kafka_client.KafkaMessage{
@@ -602,7 +602,7 @@ func TestStreamManager_ProcessMessage_RuntimeConfigChange_Avro(t *testing.T) {
 
 func TestStreamManager_ProcessMessage_ConfigChangeReflection(t *testing.T) {
 	mockClient := &mockStreamClient{}
-	sm := NewStreamManager(mockClient)
+	sm := NewStreamManager(mockClient, 5, 1000)
 
 	// Test message
 	msg := kafka_client.KafkaMessage{
@@ -677,7 +677,7 @@ func TestStreamManager_ReadFromPartition_ConfigUpdate(t *testing.T) {
 		},
 	}
 
-	sm := NewStreamManager(mockClient)
+	sm := NewStreamManager(mockClient, 5, 1000)
 
 	config := &StreamConfig{
 		MessageFormat:    "json",
@@ -747,7 +747,7 @@ func TestStreamManager_DynamicConfig_AllPartitions(t *testing.T) {
 		},
 	}
 
-	sm := NewStreamManager(mockClient)
+	sm := NewStreamManager(mockClient, 5, 1000)
 
 	config := &StreamConfig{
 		MessageFormat:    "json",
@@ -792,7 +792,7 @@ func TestStreamManager_DynamicConfig_AllPartitions(t *testing.T) {
 
 func TestStreamManager_ProcessMessage_ErrorHandling_JSON(t *testing.T) {
 	mockClient := &mockStreamClient{}
-	sm := NewStreamManager(mockClient)
+	sm := NewStreamManager(mockClient, 5, 1000)
 
 	// Test message with invalid JSON
 	msg := kafka_client.KafkaMessage{
@@ -832,7 +832,7 @@ func TestStreamManager_ProcessMessage_ErrorHandling_JSON(t *testing.T) {
 
 func TestStreamManager_ProcessMessage_ErrorHandling_Avro(t *testing.T) {
 	mockClient := &mockStreamClient{}
-	sm := NewStreamManager(mockClient)
+	sm := NewStreamManager(mockClient, 5, 1000)
 
 	// Test message with invalid Avro data
 	msg := kafka_client.KafkaMessage{

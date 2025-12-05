@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"math/rand"
@@ -119,115 +120,36 @@ func main() {
 		var messageData []byte
 		var err error
 
-		if *format == "json" {
-			messageData, err = EncodeJSONMessage(*shape, counter, hostName, hostIP, *valuesOffset)
-		} else if *format == "avro" {
-			if *verbose {
-				fmt.Printf("[PRODUCER DEBUG] Using Avro format for message #%d\n", counter)
+		// Create payload based on shape
+		var payload interface{}
+		switch *shape {
+		case "flat":
+			payload = map[string]interface{}{
+				"host.name":        hostName,
+				"host.ip":          hostIP,
+				"metrics.cpu.load": value1,
+				"metrics.cpu.temp": 60.0 + rand.Float64()*10.0,
+				"metrics.mem.used": 1000 + rand.Intn(2000),
+				"metrics.mem.free": 8000 + rand.Intn(2000),
+				"value1":           value1,
+				"value2":           value2,
+				"tags":             []string{"prod", "edge"},
 			}
-			// For Avro, we need to create the data structure first, then encode it
-			var payload interface{}
-
-			switch *shape {
-			case "flat":
-				if *format == "avro" {
-					// Use Avro-compatible field names
-					payload = map[string]interface{}{
-						"host_name":        hostName,
-						"host_ip":          hostIP,
-						"metrics_cpu_load": value1,
-						"metrics_cpu_temp": 60.0 + rand.Float64()*10.0,
-						"metrics_mem_used": 1000 + rand.Intn(2000),
-						"metrics_mem_free": 8000 + rand.Intn(2000),
-						"value1":           value1,
-						"value2":           value2,
-						"tags":             []string{"prod", "edge"},
-					}
-				} else {
-					// Use JSON-compatible field names
-					payload = map[string]interface{}{
-						"host.name":        hostName,
-						"host.ip":          hostIP,
-						"metrics.cpu.load": value1,
-						"metrics.cpu.temp": 60.0 + rand.Float64()*10.0,
-						"metrics.mem.used": 1000 + rand.Intn(2000),
-						"metrics.mem.free": 8000 + rand.Intn(2000),
-						"value1":           value1,
-						"value2":           value2,
-						"tags":             []string{"prod", "edge"},
-					}
-				}
-			case "nested":
-				payload = map[string]interface{}{
-					"host": map[string]interface{}{
-						"name": hostName,
-						"ip":   hostIP,
+		case "nested":
+			payload = map[string]interface{}{
+				"host": map[string]interface{}{
+					"name": hostName,
+					"ip":   hostIP,
+				},
+				"metrics": map[string]interface{}{
+					"cpu": map[string]interface{}{
+						"load": value1,
+						"temp": 60.0 + rand.Float64()*10.0,
 					},
-					"metrics": map[string]interface{}{
-						"cpu": map[string]interface{}{
-							"load": value1,
-							"temp": 60.0 + rand.Float64()*10.0,
-						},
-						"mem": map[string]interface{}{
-							"used": 1000 + rand.Intn(2000),
-							"free": 8000 + rand.Intn(2000),
-						},
+					"mem": map[string]interface{}{
+						"used": 1000 + rand.Intn(2000),
+						"free": 8000 + rand.Intn(2000),
 					},
-<<<<<<< HEAD
-					"value1": value1,
-					"value2": value2,
-					"tags":   []string{"prod", "edge"},
-					"alerts": []interface{}{
-						map[string]interface{}{
-							"type":     "cpu_high",
-							"severity": "warning",
-							"value":    rawValue1 * 100,
-						},
-						map[string]interface{}{
-							"type":     "mem_low",
-							"severity": "info",
-							"value":    rawValue2 * 50,
-						},
-					},
-					"processes": []string{"nginx", "mysql", "redis"},
-				}
-			case "list":
-				// Avro doesn't support top-level arrays, so we wrap in an object
-				payload = map[string]interface{}{
-					"items": []interface{}{
-						map[string]interface{}{
-							"id":   counter,
-							"type": "metric",
-							"host_name": hostName,
-							"host_ip":   hostIP,
-							"value":     value1,
-							"timestamp": time.Now().Unix(),
-						},
-						map[string]interface{}{
-							"id":   counter + 1,
-							"type": "metric",
-							"host_name": hostName,
-							"host_ip":   hostIP,
-							"value":     value2,
-							"timestamp": time.Now().Unix(),
-						},
-						map[string]interface{}{
-							"id":   counter + 1000,
-							"type": "event",
-							"host_name": hostName,
-							"host_ip":   hostIP,
-							"message":   "Sample log entry",
-							"timestamp": time.Now().Unix(),
-						},
-					},
-				}
-			}
-			messageData, err = EncodeAvroMessage(*shape, payload, *schemaRegistryURL, *topic, *verbose)
-		}
-
-		if err != nil {
-			fmt.Printf("Error encoding message: %v\n", err)
-=======
 				},
 				"value1": value1,
 				"value2": value2,
@@ -247,7 +169,7 @@ func main() {
 				"processes": []string{"nginx", "mysql", "redis"},
 			}
 		case "list":
-			// JSON that starts with an array containing multiple records
+			// Top-level array of records
 			payload = []interface{}{
 				map[string]interface{}{
 					"id":   counter,
@@ -276,42 +198,35 @@ func main() {
 						"name": hostName,
 						"ip":   hostIP,
 					},
-					"value":     rawValue1 * 1.5,
-					"timestamp": time.Now().Unix(),
-				},
-				map[string]interface{}{
-					"id":   counter + 1001,
-					"type": "event",
-					"host": map[string]interface{}{
-						"name": hostName,
-						"ip":   hostIP,
-					},
-					"value":     rawValue2 * 0.8,
-					"timestamp": time.Now().Unix(),
-				},
-				map[string]interface{}{
-					"id":        counter + 2000,
-					"type":      "log",
-					"message":   fmt.Sprintf("Sample log entry #%d", counter),
-					"level":     "info",
-					"tags":      []string{"prod", "edge"},
-					"timestamp": time.Now().Unix(),
-				},
-				map[string]interface{}{
-					"id":        counter + 2001,
-					"type":      "log",
-					"message":   fmt.Sprintf("Sample log entry #%d (batch)", counter),
-					"level":     "debug",
-					"tags":      []string{"prod", "edge", "batch"},
+					"message":   "Sample log entry",
 					"timestamp": time.Now().Unix(),
 				},
 			}
 		default:
 			// Handle unknown shape
 			fmt.Printf("Error: Unknown shape %q. Valid options: nested, flat, list\n", *shape)
->>>>>>> a27df3038796d09fe2bed04b25692f2cf7521c2d
 			os.Exit(1)
 		}
+
+		// Encode based on format
+		if *format == "json" {
+			messageData, err = json.Marshal(payload)
+		} else if *format == "avro" {
+			if *verbose {
+				fmt.Printf("[PRODUCER DEBUG] Using Avro format for message #%d\n", counter)
+			}
+			messageData, err = EncodeAvroMessage(*shape, payload, *schemaRegistryURL, *topic, *verbose)
+		}
+
+		if err != nil {
+			fmt.Printf("Error encoding message: %v\n", err)
+		}
+
+		// Send the message
+		err = w.WriteMessages(context.Background(), kafka.Message{
+			Key:   []byte(fmt.Sprintf("key-%d", counter)),
+			Value: messageData,
+		})
 
 		if *verbose {
 			fmt.Printf("[PRODUCER DEBUG] Final message length: %d bytes, format: %s\n", len(messageData), *format)

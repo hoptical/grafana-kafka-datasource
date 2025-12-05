@@ -196,16 +196,10 @@ func (d *KafkaDatasource) partitionsChanged(qm queryModel, partitions []int32) b
 
 	return false
 }
-}
 
 func (d *KafkaDatasource) Dispose() { d.client.Dispose() }
 
 // NewWithClient allows injecting a custom KafkaClientAPI (primarily for tests).
-<<<<<<< HEAD
-// NewWithClient allows injecting a custom KafkaClientAPI (primarily for tests).
-func NewWithClient(c KafkaClientAPI) *KafkaDatasource {
-	return &KafkaDatasource{client: c}
-=======
 func NewWithClient(c KafkaClientAPI) *KafkaDatasource {
 	return &KafkaDatasource{
 		client: c,
@@ -214,7 +208,6 @@ func NewWithClient(c KafkaClientAPI) *KafkaDatasource {
 			FlattenFieldCap: defaultFlattenFieldCap,
 		},
 	}
->>>>>>> a27df3038796d09fe2bed04b25692f2cf7521c2d
 }
 
 func (d *KafkaDatasource) QueryData(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {

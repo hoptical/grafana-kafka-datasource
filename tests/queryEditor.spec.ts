@@ -634,6 +634,7 @@ test.describe('Kafka Query Editor', () => {
     createDataSourceConfigPage,
     readProvisionedDataSource,
     page,
+    panelEditPage,
   }) => {
     const ds = await readProvisionedDataSource({ fileName: 'datasource.yaml' });
     const configPage = await createDataSourceConfigPage({ type: ds.type });
@@ -661,3 +662,4 @@ test.describe('Kafka Query Editor', () => {
     // Confirm at least one data cell is visible (works across Grafana versions)
     await expect(getTableCells(page).first()).toBeVisible();
   });
+});
