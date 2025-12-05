@@ -20,4 +20,4 @@ jobs:
     steps:
       - uses: grafana/plugin-actions/create-plugin-update@main
         with:
-          token: ${{ secrets.GH_PAT_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
