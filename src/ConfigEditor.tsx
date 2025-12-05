@@ -114,17 +114,19 @@ export const ConfigEditor = (props: Props) => {
     onOptionsChange({ ...options, jsonData: { ...options.jsonData, logLevel: event.target.value } });
   };
 
-  const onHealthcheckTimeoutChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const n = Number(event.target.value);
-    const validated = Number.isFinite(n) && n >= 0 ? n : 0;
-    onOptionsChange({ ...options, jsonData: { ...options.jsonData, healthcheckTimeout: validated } });
+  const makeNumberChangeHandler = (key: string) => (event: ChangeEvent<HTMLInputElement>) => {
+      const n = Number(event.target.value);
+      const validated = Number.isFinite(n) && n >= 0 ? n : 0;
+      onOptionsChange({
+          ...options,
+          jsonData: { ...options.jsonData, [key]: validated },
+      });
   };
 
-  const onRequestTimeoutChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const n = Number(event.target.value);
-    const validated = Number.isFinite(n) && n >= 0 ? n : 0;
-    onOptionsChange({ ...options, jsonData: { ...options.jsonData, timeout: validated } });
-  };
+  const onHealthcheckTimeoutChange = makeNumberChangeHandler("healthcheckTimeout");
+  const onRequestTimeoutChange = makeNumberChangeHandler("timeout");
+  const onRequestFlattenMaxDepthChange = makeNumberChangeHandler("flattenMaxDepth");
+  const onRequestFlattenFieldCapChange = makeNumberChangeHandler("flattenFieldCap");
 
   const onSchemaRegistryUrlChange = (event: ChangeEvent<HTMLInputElement>) => {
     onOptionsChange({ ...options, jsonData: { ...options.jsonData, schemaRegistryUrl: event.target.value } });
@@ -481,6 +483,39 @@ export const ConfigEditor = (props: Props) => {
             min={0}
             width={40}
           />
+        </InlineField>
+
+        <InlineField
+            label="JSON Flatten Depth"
+            labelWidth={30}
+            tooltip="Depth to flatten nested JSON objects. No hard upper bound; higher values may impact performance. (Default: 5)"
+            grow
+        >
+            <Input
+                id="config-editor-flattenmaxdepth"
+                onChange={onRequestFlattenMaxDepthChange}
+                value={jsonData.flattenMaxDepth}
+                type="number"
+                step={1}
+                min={1}
+                width={15}
+            />
+        </InlineField>
+        <InlineField
+            label="JSON Field Limit"
+            labelWidth={30}
+            tooltip="Number of flattened fields to process per message. No hard upper bound; very large values can impact memory/CPU. (Default: 1000)"
+            grow
+        >
+            <Input
+                id="config-editor-flattenfieldcap"
+                onChange={onRequestFlattenFieldCapChange}
+                value={jsonData.flattenFieldCap}
+                type="number"
+                step={1}
+                min={1}
+                width={15}
+            />
         </InlineField>
       </ConfigSection>
     </>

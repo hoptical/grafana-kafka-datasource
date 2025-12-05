@@ -103,6 +103,19 @@ func main() {
 	hostIP := "127.0.0.1"
 
 	for {
+		// Create sample data (flat, nested, or list)
+		// Periodically set value1/value2 to null to reproduce the bug.
+		rawValue1 := *valuesOffset - rand.Float64()
+		rawValue2 := *valuesOffset + rand.Float64()
+		var value1 interface{} = rawValue1
+		var value2 interface{} = rawValue2
+		if counter%7 == 0 {
+			value1 = nil
+		}
+		if counter%11 == 0 {
+			value2 = nil
+		}
+
 		var messageData []byte
 		var err error
 
@@ -114,8 +127,6 @@ func main() {
 			}
 			// For Avro, we need to create the data structure first, then encode it
 			var payload interface{}
-			value1 := *valuesOffset - rand.Float64()
-			value2 := *valuesOffset + rand.Float64()
 
 			switch *shape {
 			case "flat":
@@ -162,6 +173,7 @@ func main() {
 							"free": 8000 + rand.Intn(2000),
 						},
 					},
+<<<<<<< HEAD
 					"value1": value1,
 					"value2": value2,
 					"tags":   []string{"prod", "edge"},
@@ -169,15 +181,45 @@ func main() {
 						map[string]interface{}{
 							"type":     "cpu_high",
 							"severity": "warning",
-							"value":    value1 * 100,
+							"value":    rawValue1 * 100,
 						},
 						map[string]interface{}{
 							"type":     "mem_low",
 							"severity": "info",
-							"value":    value2 * 50,
+							"value":    rawValue2 * 50,
 						},
 					},
 					"processes": []string{"nginx", "mysql", "redis"},
+				}
+			case "list":
+				// Avro doesn't support top-level arrays, so we wrap in an object
+				payload = map[string]interface{}{
+					"items": []interface{}{
+						map[string]interface{}{
+							"id":   counter,
+							"type": "metric",
+							"host_name": hostName,
+							"host_ip":   hostIP,
+							"value":     value1,
+							"timestamp": time.Now().Unix(),
+						},
+						map[string]interface{}{
+							"id":   counter + 1,
+							"type": "metric",
+							"host_name": hostName,
+							"host_ip":   hostIP,
+							"value":     value2,
+							"timestamp": time.Now().Unix(),
+						},
+						map[string]interface{}{
+							"id":   counter + 1000,
+							"type": "event",
+							"host_name": hostName,
+							"host_ip":   hostIP,
+							"message":   "Sample log entry",
+							"timestamp": time.Now().Unix(),
+						},
+					},
 				}
 			}
 			messageData, err = EncodeAvroMessage(*shape, payload, *schemaRegistryURL, *topic, *verbose)
@@ -185,6 +227,89 @@ func main() {
 
 		if err != nil {
 			fmt.Printf("Error encoding message: %v\n", err)
+=======
+				},
+				"value1": value1,
+				"value2": value2,
+				"tags":   []string{"prod", "edge"},
+				"alerts": []interface{}{
+					map[string]interface{}{
+						"type":     "cpu_high",
+						"severity": "warning",
+						"value":    rawValue1 * 100,
+					},
+					map[string]interface{}{
+						"type":     "mem_low",
+						"severity": "info",
+						"value":    rawValue2 * 50,
+					},
+				},
+				"processes": []string{"nginx", "mysql", "redis"},
+			}
+		case "list":
+			// JSON that starts with an array containing multiple records
+			payload = []interface{}{
+				map[string]interface{}{
+					"id":   counter,
+					"type": "metric",
+					"host": map[string]interface{}{
+						"name": hostName,
+						"ip":   hostIP,
+					},
+					"value":     value1,
+					"timestamp": time.Now().Unix(),
+				},
+				map[string]interface{}{
+					"id":   counter + 1,
+					"type": "metric",
+					"host": map[string]interface{}{
+						"name": hostName,
+						"ip":   hostIP,
+					},
+					"value":     value2,
+					"timestamp": time.Now().Unix(),
+				},
+				map[string]interface{}{
+					"id":   counter + 1000,
+					"type": "event",
+					"host": map[string]interface{}{
+						"name": hostName,
+						"ip":   hostIP,
+					},
+					"value":     rawValue1 * 1.5,
+					"timestamp": time.Now().Unix(),
+				},
+				map[string]interface{}{
+					"id":   counter + 1001,
+					"type": "event",
+					"host": map[string]interface{}{
+						"name": hostName,
+						"ip":   hostIP,
+					},
+					"value":     rawValue2 * 0.8,
+					"timestamp": time.Now().Unix(),
+				},
+				map[string]interface{}{
+					"id":        counter + 2000,
+					"type":      "log",
+					"message":   fmt.Sprintf("Sample log entry #%d", counter),
+					"level":     "info",
+					"tags":      []string{"prod", "edge"},
+					"timestamp": time.Now().Unix(),
+				},
+				map[string]interface{}{
+					"id":        counter + 2001,
+					"type":      "log",
+					"message":   fmt.Sprintf("Sample log entry #%d (batch)", counter),
+					"level":     "debug",
+					"tags":      []string{"prod", "edge", "batch"},
+					"timestamp": time.Now().Unix(),
+				},
+			}
+		default:
+			// Handle unknown shape
+			fmt.Printf("Error: Unknown shape %q. Valid options: nested, flat, list\n", *shape)
+>>>>>>> a27df3038796d09fe2bed04b25692f2cf7521c2d
 			os.Exit(1)
 		}
 

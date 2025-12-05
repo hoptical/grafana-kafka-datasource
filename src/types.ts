@@ -54,6 +54,9 @@ export interface KafkaDataSourceOptions extends DataSourceJsonData {
   timeout?: number;
   // Avro Configuration (moved to query level)
   schemaRegistryUrl?: string;
+  // Advanced Json flattening settings
+  flattenMaxDepth?: number;
+  flattenFieldCap?: number;
 }
 
 // Default options used when creating a new Kafka datasource
@@ -70,6 +73,8 @@ export const defaultDataSourceOptions: Partial<KafkaDataSourceOptions> = {
   tlsSkipVerify: false,
   serverName: '',
   timeout: 0,
+  flattenMaxDepth: 5,
+  flattenFieldCap: 1000,
 };
 
 export interface KafkaSecureJsonData {

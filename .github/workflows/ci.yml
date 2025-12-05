@@ -136,6 +136,9 @@ jobs:
       - name: Resolve Grafana E2E versions
         id: resolve-versions
         uses: grafana/plugin-actions/e2e-version@main
+        with:
+          skip-grafana-dev-image: true
+
 
   playwright-tests:
     needs: [resolve-versions, build]
@@ -213,7 +216,8 @@ jobs:
       #     retention-days: 5
 
   publish-report:
-    if: ${{ always() && !cancelled() }}
+    # Skip for fork PRs (no write permissions for GITHUB_TOKEN)
+    if: ${{ always() && !cancelled() && github.event.pull_request.head.repo.full_name == github.repository }}
     needs: [playwright-tests]
     runs-on: ubuntu-latest
     steps:

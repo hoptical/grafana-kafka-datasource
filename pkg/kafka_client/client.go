@@ -55,6 +55,8 @@ type Options struct {
 	SchemaRegistryUrl      string `json:"schemaRegistryUrl"`
 	SchemaRegistryUsername string `json:"schemaRegistryUsername"`
 	SchemaRegistryPassword string `json:"schemaRegistryPassword"`
+	FlattenMaxDepth        int    `json:"flattenMaxDepth"`
+	FlattenFieldCap        int    `json:"flattenFieldCap"`
 }
 
 type KafkaClient struct {

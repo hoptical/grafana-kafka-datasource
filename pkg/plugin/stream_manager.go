@@ -18,7 +18,10 @@ import (
 
 // StreamManager handles the streaming logic for Kafka messages.
 type StreamManager struct {
-	client KafkaClientAPI
+	client          KafkaClientAPI
+	flattenMaxDepth int
+	flattenFieldCap int
+	fieldBuilder    *FieldBuilder // Maintains type registry across messages
 }
 
 // createErrorFrame creates a data frame containing error information
@@ -62,8 +65,13 @@ type StreamConfig struct {
 }
 
 // NewStreamManager creates a new StreamManager instance.
-func NewStreamManager(client KafkaClientAPI) *StreamManager {
-	return &StreamManager{client: client}
+func NewStreamManager(client KafkaClientAPI, flattenMaxDepth, flattenFieldCap int) *StreamManager {
+	return &StreamManager{
+		client:          client,
+		flattenMaxDepth: flattenMaxDepth,
+		flattenFieldCap: flattenFieldCap,
+		fieldBuilder:    NewFieldBuilder(),
+	}
 }
 
 // UpdateStreamConfig updates the streaming configuration dynamically.
@@ -195,24 +203,30 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 	frame := data.NewFrame("response")
 
 	// Add time field
-	frame.Fields = append(frame.Fields, data.NewField("time", nil, make([]time.Time, 1)))
-
+	timeField := data.NewField("time", nil, make([]time.Time, 1))
 	var frameTime time.Time
 	if config.TimestampMode == "now" {
 		frameTime = time.Now()
 	} else {
 		frameTime = msg.Timestamp
 	}
-	frame.Fields[0].Set(0, frameTime)
+	timeField.Set(0, frameTime)
 
-	// Add partition field
-	frame.Fields = append(frame.Fields, data.NewField("partition", nil, make([]int32, 1)))
-	frame.Fields[1].Set(0, partition)
+	fields := []*data.Field{timeField}
+
+	fields := []*data.Field{timeField}
+
+	// Add partition field when consuming from multiple partitions
+	if len(partitions) > 1 {
+		partitionField := data.NewField("partition", nil, make([]int32, 1))
+		partitionField.Set(0, partition)
+		fields = append(fields, partitionField)
+	}
 
 	// Add offset field
-	offsetFieldIndex := len(frame.Fields)
-	frame.Fields = append(frame.Fields, data.NewField("offset", nil, make([]int64, 1)))
-	frame.Fields[offsetFieldIndex].Set(0, msg.Offset)
+	offsetField := data.NewField("offset", nil, make([]int64, 1))
+	offsetField.Set(0, msg.Offset)
+	fields = append(fields, offsetField)
 
 	// Flatten and process message values
 	flat := make(map[string]interface{})
@@ -228,27 +242,7 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 		messageValue = wrappedValue
 	}
 
-	log.DefaultLogger.Debug("Processing message value for flattening",
-		"messageValueType", fmt.Sprintf("%T", messageValue),
-		"isMap", fmt.Sprintf("%t", func() bool {
-			_, ok := messageValue.(map[string]interface{})
-			return ok
-		}()))
-
-	FlattenJSON("", messageValue, flat, 0, defaultFlattenMaxDepth, defaultFlattenFieldCap)
-
-	log.DefaultLogger.Debug("Flattened message data",
-		"flattenedFieldCount", len(flat),
-		"flattenedKeys", func() []string {
-			keys := make([]string, 0, len(flat))
-			for k := range flat {
-				keys = append(keys, k)
-			}
-			return keys
-		}())
-
-	fieldBuilder := NewFieldBuilder()
-	fieldIndex := len(frame.Fields)
+	FlattenJSON("", messageValue, flat, 0, sm.flattenMaxDepth, sm.flattenFieldCap)
 
 	// Collect keys and sort them for deterministic field ordering
 	keys := make([]string, 0, len(flat))
@@ -257,10 +251,17 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 	}
 	sort.Strings(keys)
 
-	for _, key := range keys {
+	// Pre-allocate fields slice
+	msgFieldStart := len(fields)
+	totalFields := len(fields) + len(keys)
+	frame.Fields = make([]*data.Field, totalFields)
+	copy(frame.Fields, fields)
+
+	// Add message fields by direct assignment
+	for i, key := range keys {
 		value := flat[key]
-		fieldBuilder.AddValueToFrame(frame, key, value, fieldIndex)
-		fieldIndex++
+		fieldIdx := msgFieldStart + i
+		sm.fieldBuilder.AddValueToFrame(frame, key, value, fieldIdx)
 	}
 
 	return frame, nil
