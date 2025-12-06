@@ -139,12 +139,12 @@ const (
 		"fields": [
 			{"name": "host_name", "type": "string"},
 			{"name": "host_ip", "type": "string"},
-			{"name": "metrics_cpu_load", "type": "double"},
+			{"name": "metrics_cpu_load", "type": ["null", "double"], "default": null},
 			{"name": "metrics_cpu_temp", "type": "double"},
 			{"name": "metrics_mem_used", "type": "int"},
 			{"name": "metrics_mem_free", "type": "int"},
-			{"name": "value1", "type": "double"},
-			{"name": "value2", "type": "double"},
+			{"name": "value1", "type": ["null", "double"], "default": null},
+			{"name": "value2", "type": ["null", "double"], "default": null},
 			{"name": "tags", "type": {"type": "array", "items": "string"}}
 		]
 	}`
@@ -169,7 +169,7 @@ const (
 						"type": "record",
 						"name": "CPU",
 						"fields": [
-							{"name": "load", "type": "double"},
+							{"name": "load", "type": ["null", "double"], "default": null},
 							{"name": "temp", "type": "double"}
 						]
 					}},
@@ -183,8 +183,8 @@ const (
 					}}
 				]
 			}},
-			{"name": "value1", "type": "double"},
-			{"name": "value2", "type": "double"},
+			{"name": "value1", "type": ["null", "double"], "default": null},
+			{"name": "value2", "type": ["null", "double"], "default": null},
 			{"name": "tags", "type": {"type": "array", "items": "string"}},
 			{"name": "alerts", "type": {
 				"type": "array",
@@ -242,18 +242,56 @@ func ConvertToAvroData(shape string, data interface{}, verbose bool) (interface{
 	switch shape {
 	case "flat":
 		if m, ok := data.(map[string]interface{}); ok {
-			// Data should already be in correct Avro format from producer
-			if verbose {
-				fmt.Printf("[PRODUCER DEBUG] Flat data conversion - input keys: %v\n", getMapKeys(m))
+			// Convert field names from dot notation to underscore for Avro schema
+			avroData := make(map[string]interface{})
+			for k, v := range m {
+				// Replace dots with underscores to match Avro schema field names
+				var avroKey string
+				switch k {
+				case "host.name":
+					avroKey = "host_name"
+				case "host.ip":
+					avroKey = "host_ip"
+				case "metrics.cpu.load":
+					avroKey = "metrics_cpu_load"
+					v = wrapUnionValue(v) // Nullable field
+				case "metrics.cpu.temp":
+					avroKey = "metrics_cpu_temp"
+				case "metrics.mem.used":
+					avroKey = "metrics_mem_used"
+				case "metrics.mem.free":
+					avroKey = "metrics_mem_free"
+				case "value1":
+					avroKey = "value1"
+					v = wrapUnionValue(v) // Nullable field
+				case "value2":
+					avroKey = "value2"
+					v = wrapUnionValue(v) // Nullable field
+				default:
+					avroKey = k
+				}
+				avroData[avroKey] = v
 			}
-			return m, nil
+			if verbose {
+				fmt.Printf("[PRODUCER DEBUG] Flat data conversion - input keys: %v, output keys: %v\n", getMapKeys(m), getMapKeys(avroData))
+			}
+			return avroData, nil
 		}
 	case "nested":
 		if m, ok := data.(map[string]interface{}); ok {
+			// Convert nullable fields to Avro union format
+			if metrics, ok := m["metrics"].(map[string]interface{}); ok {
+				if cpu, ok := metrics["cpu"].(map[string]interface{}); ok {
+					cpu["load"] = wrapUnionValue(cpu["load"])
+				}
+			}
+			m["value1"] = wrapUnionValue(m["value1"])
+			m["value2"] = wrapUnionValue(m["value2"])
+
 			if verbose {
 				fmt.Printf("[PRODUCER DEBUG] Nested data conversion - input keys: %v\n", getMapKeys(m))
 			}
-			return m, nil // Already in correct format
+			return m, nil
 		}
 	}
 	return nil, fmt.Errorf("cannot convert data for shape: %s", shape)
@@ -296,11 +334,17 @@ func EncodeAvroMessage(shape string, data interface{}, schemaRegistryURL string,
 
 	// If schema registry URL is provided, use schema registry
 	if schemaRegistryURL != "" {
-		client := NewSchemaRegistryClient(schemaRegistryURL)
+		// Ensure URL has http:// prefix
+		registryURL := schemaRegistryURL
+		if !hasHTTPPrefix(registryURL) {
+			registryURL = "http://" + registryURL
+		}
+
+		client := NewSchemaRegistryClient(registryURL)
 		subject := fmt.Sprintf("%s-value", topic) // Kafka convention: topic-value
 
 		if verbose {
-			fmt.Printf("[PRODUCER DEBUG] Registering schema with registry for topic: %s, subject: %s\n", topic, subject)
+			fmt.Printf("[PRODUCER DEBUG] Registering schema with registry for topic: %s, subject: %s, URL: %s\n", topic, subject, registryURL)
 		}
 
 		schemaID, err := client.RegisterSchema(subject, schema.Schema)
@@ -351,4 +395,19 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// hasHTTPPrefix checks if a URL has http:// or https:// prefix
+func hasHTTPPrefix(url string) bool {
+	return len(url) >= 7 && (url[:7] == "http://" || (len(url) >= 8 && url[:8] == "https://"))
+}
+
+// wrapUnionValue wraps a value in the Avro union format required by goavro
+// For union type ["null", "double"], nil values become {"null": nil} and
+// non-nil values become {"double": value}
+func wrapUnionValue(v interface{}) interface{} {
+	if v == nil {
+		return map[string]interface{}{"null": nil}
+	}
+	return map[string]interface{}{"double": v}
 }
