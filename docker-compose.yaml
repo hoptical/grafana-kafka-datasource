@@ -42,7 +42,7 @@ services:
       - ./tests/certs:/bitnami/kafka/config/certs:ro
 
   schema-registry:
-    image: bitnami/schema-registry:7.6
+    image: bitnamilegacy/schema-registry:7.6
     container_name: schema-registry
     environment:
       - SCHEMA_REGISTRY_KAFKA_BROKERS=PLAINTEXT://kafka:9092
