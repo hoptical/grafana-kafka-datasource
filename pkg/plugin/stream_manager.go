@@ -420,8 +420,8 @@ func (sm *StreamManager) readFromPartition(
 
 			// Add a timeout context to prevent infinite blocking
 			msgCtx, msgCancel := context.WithTimeout(ctx, messageReadTimeout)
+			defer msgCancel()
 			msg, err := sm.client.ConsumerPull(msgCtx, reader, config.MessageFormat)
-			msgCancel()
 
 			if err != nil {
 				log.DefaultLogger.Error("Error reading from partition",

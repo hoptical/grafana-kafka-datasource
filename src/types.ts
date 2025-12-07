@@ -54,6 +54,7 @@ export interface KafkaDataSourceOptions extends DataSourceJsonData {
   timeout?: number;
   // Avro Configuration (moved to query level)
   schemaRegistryUrl?: string;
+  schemaRegistryUsername?: string;
   // Advanced Json flattening settings
   flattenMaxDepth?: number;
   flattenFieldCap?: number;
@@ -85,7 +86,6 @@ export interface KafkaSecureJsonData {
   tlsClientCert?: string;
   tlsClientKey?: string;
   // Schema Registry Authentication
-  schemaRegistryUsername?: string;
   schemaRegistryPassword?: string;
 }
 

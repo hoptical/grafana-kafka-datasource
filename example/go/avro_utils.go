@@ -13,15 +13,19 @@ import (
 
 // SchemaRegistryClient handles communication with Confluent Schema Registry
 type SchemaRegistryClient struct {
-	BaseURL string
-	Client  *http.Client
+	BaseURL  string
+	Username string
+	Password string
+	Client   *http.Client
 }
 
 // NewSchemaRegistryClient creates a new schema registry client
-func NewSchemaRegistryClient(baseURL string) *SchemaRegistryClient {
+func NewSchemaRegistryClient(baseURL, username, password string) *SchemaRegistryClient {
 	return &SchemaRegistryClient{
-		BaseURL: baseURL,
-		Client:  &http.Client{},
+		BaseURL:  baseURL,
+		Username: username,
+		Password: password,
+		Client:   &http.Client{},
 	}
 }
 
@@ -43,6 +47,11 @@ func (src *SchemaRegistryClient) RegisterSchema(subject string, schema string) (
 	}
 
 	req.Header.Set("Content-Type", "application/vnd.schemaregistry.v1+json")
+
+	// Add basic auth if credentials are provided
+	if src.Username != "" && src.Password != "" {
+		req.SetBasicAuth(src.Username, src.Password)
+	}
 
 	resp, err := src.Client.Do(req)
 	if err != nil {
@@ -307,7 +316,7 @@ func getMapKeys(m map[string]interface{}) []string {
 }
 
 // EncodeAvroMessage encodes a message using Avro
-func EncodeAvroMessage(shape string, data interface{}, schemaRegistryURL string, topic string, verbose bool) ([]byte, error) {
+func EncodeAvroMessage(shape string, data interface{}, schemaRegistryURL, schemaRegistryUser, schemaRegistryPass, topic string, verbose bool) ([]byte, error) {
 	if verbose {
 		fmt.Printf("[PRODUCER DEBUG] Starting Avro encoding for shape: %s\n", shape)
 		if schemaRegistryURL != "" {
@@ -340,7 +349,7 @@ func EncodeAvroMessage(shape string, data interface{}, schemaRegistryURL string,
 			registryURL = "http://" + registryURL
 		}
 
-		client := NewSchemaRegistryClient(registryURL)
+		client := NewSchemaRegistryClient(registryURL, schemaRegistryUser, schemaRegistryPass)
 		subject := fmt.Sprintf("%s-value", topic) // Kafka convention: topic-value
 
 		if verbose {

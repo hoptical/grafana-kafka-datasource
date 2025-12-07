@@ -69,6 +69,8 @@ func main() {
 	shape := flag.String("shape", "nested", "Payload shape: nested, flat, or list")
 	format := flag.String("format", "json", "Message format: json or avro")
 	schemaRegistryURL := flag.String("schema-registry", "", "Schema registry URL (for Avro with schema registry)")
+	schemaRegistryUser := flag.String("schema-registry-user", "", "Schema registry username (optional)")
+	schemaRegistryPass := flag.String("schema-registry-pass", "", "Schema registry password (optional)")
 	verbose := flag.Bool("verbose", false, "Enable verbose logging")
 	flag.Parse()
 
@@ -124,16 +126,33 @@ func main() {
 		var payload interface{}
 		switch *shape {
 		case "flat":
-			payload = map[string]interface{}{
-				"host.name":        hostName,
-				"host.ip":          hostIP,
-				"metrics.cpu.load": value1,
-				"metrics.cpu.temp": 60.0 + rand.Float64()*10.0,
-				"metrics.mem.used": 1000 + rand.Intn(2000),
-				"metrics.mem.free": 8000 + rand.Intn(2000),
-				"value1":           value1,
-				"value2":           value2,
-				"tags":             []string{"prod", "edge"},
+			// Use appropriate field names based on format
+			if *format == "avro" {
+				// Avro requires valid field names (no dots)
+				payload = map[string]interface{}{
+					"host_name":        hostName,
+					"host_ip":          hostIP,
+					"metrics_cpu_load": value1,
+					"metrics_cpu_temp": 60.0 + rand.Float64()*10.0,
+					"metrics_mem_used": 1000 + rand.Intn(2000),
+					"metrics_mem_free": 8000 + rand.Intn(2000),
+					"value1":           value1,
+					"value2":           value2,
+					"tags":             []string{"prod", "edge"},
+				}
+			} else {
+				// JSON can use dotted field names
+				payload = map[string]interface{}{
+					"host.name":        hostName,
+					"host.ip":          hostIP,
+					"metrics.cpu.load": value1,
+					"metrics.cpu.temp": 60.0 + rand.Float64()*10.0,
+					"metrics.mem.used": 1000 + rand.Intn(2000),
+					"metrics.mem.free": 8000 + rand.Intn(2000),
+					"value1":           value1,
+					"value2":           value2,
+					"tags":             []string{"prod", "edge"},
+				}
 			}
 		case "nested":
 			payload = map[string]interface{}{
@@ -215,18 +234,13 @@ func main() {
 			if *verbose {
 				fmt.Printf("[PRODUCER DEBUG] Using Avro format for message #%d\n", counter)
 			}
-			messageData, err = EncodeAvroMessage(*shape, payload, *schemaRegistryURL, *topic, *verbose)
+			messageData, err = EncodeAvroMessage(*shape, payload, *schemaRegistryURL, *schemaRegistryUser, *schemaRegistryPass, *topic, *verbose)
 		}
 
 		if err != nil {
 			fmt.Printf("Error encoding message: %v\n", err)
+			continue
 		}
-
-		// Send the message
-		err = w.WriteMessages(context.Background(), kafka.Message{
-			Key:   []byte(fmt.Sprintf("key-%d", counter)),
-			Value: messageData,
-		})
 
 		if *verbose {
 			fmt.Printf("[PRODUCER DEBUG] Final message length: %d bytes, format: %s\n", len(messageData), *format)
@@ -240,6 +254,7 @@ func main() {
 		// Produce message
 		err = w.WriteMessages(context.Background(),
 			kafka.Message{
+				Key:   []byte(fmt.Sprintf("key-%d", counter)),
 				Value: messageData,
 			},
 		)

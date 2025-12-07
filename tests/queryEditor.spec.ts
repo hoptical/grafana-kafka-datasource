@@ -81,7 +81,8 @@ test.describe('Kafka Query Editor', () => {
     await expect(page.getByText('Message Format')).toBeVisible();
     
     // Test Avro format selection and schema configuration - use more robust selectors
-    await page.waitForTimeout(1000); // Wait for form to fully render
+    // Wait for form to fully render by checking for a stable element
+    await expect(page.getByRole('textbox', { name: 'Enter topic name' })).toBeVisible({ timeout: 5000 });
     
     // Look for the message format select - try multiple approaches
     let messageFormatClicked = false;
@@ -128,8 +129,9 @@ test.describe('Kafka Query Editor', () => {
       console.warn('Could not find message format selector - skipping Avro tests');
     }
     
-        // Test select interactions with better selectors - wait for elements to be ready
-    await page.waitForTimeout(2000);
+    // Test select interactions with better selectors - wait for elements to be ready
+    // Wait for selectors to be stable by checking for a visible element
+    await expect(page.getByText('Offset')).toBeVisible({ timeout: 5000 });
     
     // More robust selector approach for dropdowns with correct clickable elements
     const offsetSelector = page.getByText('Latest', { exact: false }).locator('..').locator('.css-1eu65zc')
@@ -150,7 +152,7 @@ test.describe('Kafka Query Editor', () => {
         await offsetSelector.first().click({ force: true });
       }
       
-      await page.waitForTimeout(500);
+      // Wait for dropdown menu to appear
       await expect(page.getByText('Last N messages')).toBeVisible({ timeout: 5000 });
       await expect(page.getByText('Earliest')).toBeVisible();
       
@@ -171,8 +173,8 @@ test.describe('Kafka Query Editor', () => {
         await timestampSelector.first().click({ force: true });
       }
       
-      await page.waitForTimeout(500);
-      await expect(page.getByText('Dashboard received time')).toBeVisible();
+      // Wait for dropdown menu to appear
+      await expect(page.getByText('Dashboard received time')).toBeVisible({ timeout: 5000 });
       
       if (isV10) {
         await page.getByLabel('Select options menu').getByText('Kafka Event Time').click();
@@ -189,7 +191,8 @@ test.describe('Kafka Query Editor', () => {
       await offsetSelector.click({ force: true });
     }
     
-    await page.waitForTimeout(500);
+    // Wait for dropdown options to be available
+    await expect(page.getByText('Last N messages')).toBeVisible({ timeout: 5000 });
     
     if (isV10) {
       await page.getByLabel('Select options menu').getByText('Last N messages').click();
@@ -274,7 +277,8 @@ test.describe('Kafka Query Editor', () => {
     await page.getByRole('textbox', { name: 'Enter topic name' }).fill('test-topic');
 
     // Test Message Format selection to Avro with robust selectors
-    await page.waitForTimeout(2000);
+    // Wait for the page to stabilize after filling topic name
+    await expect(page.getByText('Message Format')).toBeVisible({ timeout: 5000 });
     
     console.log('Looking for Message Format selector among buttons...');
     
@@ -306,7 +310,8 @@ test.describe('Kafka Query Editor', () => {
       // Wait for element to be ready and try clicking
       await foundSelector.waitFor({ state: 'visible', timeout: 5000 });
       await foundSelector.scrollIntoViewIfNeeded();
-      await page.waitForTimeout(500);
+      // Ensure element is stable and clickable
+      await expect(foundSelector).toBeEnabled({ timeout: 3000 });
       
       try {
         await foundSelector.click({ timeout: 5000 });
@@ -316,7 +321,7 @@ test.describe('Kafka Query Editor', () => {
         return;
       }
       
-      await page.waitForTimeout(1000);
+      // Wait for dropdown menu to appear by checking for options
       console.log('Looking for Avro option after click...');
       
       const avroOption = page.getByRole('option', { name: 'Avro' })
@@ -338,7 +343,7 @@ test.describe('Kafka Query Editor', () => {
     }
 
     // Avro configuration fields should appear with better waiting
-    await page.waitForTimeout(1500);
+    // Wait for Avro configuration to appear after format change
     const avroSchemaSourceText = page.getByText('Avro Schema Source')
       .or(page.getByText('Schema Source'))
       .or(page.locator('label').filter({ hasText: /schema.*source/i }));
@@ -366,8 +371,7 @@ test.describe('Kafka Query Editor', () => {
     
     if (await avroSchemaSourceSelector.first().isVisible({ timeout: 5000 })) {
       await avroSchemaSourceSelector.first().click();
-      await page.waitForTimeout(500);
-      
+      // Wait for dropdown options to appear
       const inlineSchemaOption = page.getByRole('option', { name: 'Inline Schema' })
         .or(page.getByText('Inline Schema', { exact: true }));
       
@@ -382,8 +386,7 @@ test.describe('Kafka Query Editor', () => {
       return; 
     }
 
-    // Now the schema textarea should appear - wait and find it
-    await page.waitForTimeout(1000);
+    // Now the schema textarea should appear - wait by checking for it
     const schemaTextarea = page.locator('textarea[placeholder*="schema"]')
       .or(page.getByRole('textbox', { name: /schema/i }))
       .or(page.getByPlaceholder(/paste.*schema|avro.*schema/i))
@@ -450,8 +453,7 @@ test.describe('Kafka Query Editor', () => {
         await offsetSelector.first().click({ force: true });
       }
       
-      await page.waitForTimeout(500);
-      
+      // Wait for dropdown options to be visible
       const lastNOption = page.getByRole('option', { name: 'Last N messages' })
         .or(page.getByText('Last N messages', { exact: true }));
       
@@ -533,8 +535,7 @@ test.describe('Kafka Query Editor', () => {
 
     // Open partition select and ensure options present (All partitions + partition 0,1,2)
     // Use the same approach as Message Format selector - find the clickable parent
-    await page.waitForTimeout(1000);
-    
+    // Wait for partition selector to be ready
     const partitionSelector = page.locator('#query-editor-partition')
       .or(page.getByText('All partitions').locator('..').locator('.css-1eu65zc'))
       .or(page.getByText('test-topic').locator('..').locator('.css-1eu65zc'));
@@ -548,11 +549,7 @@ test.describe('Kafka Query Editor', () => {
         await partitionSelector.first().click({ force: true });
       }
       
-      await page.waitForTimeout(1000);
-      
       // Check for partition options with multiple approaches
-      await page.waitForTimeout(1000);
-      
       // First check if dropdown menu is open - be more specific to avoid navigation menus
       const dropdownMenu = page.locator('[role="listbox"]')
         .filter({ has: page.locator('[role="option"]') })
@@ -603,9 +600,7 @@ test.describe('Kafka Query Editor', () => {
       // Continue with test even if partition selection fails
     }
 
-    // Wait for data columns - be more flexible
-    await page.waitForTimeout(3000);
-    
+    // Wait for data columns by checking for table cells
     // Check if any table data appears - be more flexible
     const tableCells = page.locator('table tbody tr td');
     const hasTableData = await tableCells.first().isVisible({ timeout: 5000 }).catch(() => false);
