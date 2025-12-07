@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/linkedin/goavro/v2"
 )
@@ -25,7 +26,9 @@ func NewSchemaRegistryClient(baseURL, username, password string) *SchemaRegistry
 		BaseURL:  baseURL,
 		Username: username,
 		Password: password,
-		Client:   &http.Client{},
+		Client: &http.Client{
+			Timeout: 30 * time.Second,
+		},
 	}
 }
 

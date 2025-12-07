@@ -185,10 +185,13 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 			}
 		}
 	} else {
+		config.mu.RLock()
+		messageFormat := config.MessageFormat
+		config.mu.RUnlock()
 		log.DefaultLogger.Debug("Using pre-decoded message value or non-Avro format",
 			"partition", partition,
 			"offset", msg.Offset,
-			"configMessageFormat", config.MessageFormat,
+			"configMessageFormat", messageFormat,
 			"hasParsedValue", msg.Value != nil,
 			"rawValueLength", len(msg.RawValue))
 	}
