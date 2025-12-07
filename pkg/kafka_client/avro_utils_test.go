@@ -183,7 +183,7 @@ func TestGetSubjectName(t *testing.T) {
 			name:         "topicName strategy",
 			topic:        "user-events",
 			strategy:     "topicName",
-			expectedName: "user-events",
+			expectedName: "user-events-value",
 		},
 		{
 			name:         "recordName strategy",
@@ -201,13 +201,13 @@ func TestGetSubjectName(t *testing.T) {
 			name:         "default strategy (empty)",
 			topic:        "orders",
 			strategy:     "",
-			expectedName: "orders",
+			expectedName: "orders-value",
 		},
 		{
 			name:         "default strategy (unknown)",
 			topic:        "products",
 			strategy:     "unknown",
-			expectedName: "products",
+			expectedName: "products-value",
 		},
 	}
 

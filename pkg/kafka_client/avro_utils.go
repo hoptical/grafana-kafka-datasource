@@ -180,6 +180,7 @@ func DecodeAvroMessage(data []byte, schema string) (interface{}, error) {
 }
 
 // GetSubjectName generates a subject name based on the strategy
+// For TopicNameStrategy (default), returns "{topic}-value" to match Confluent Schema Registry convention
 func GetSubjectName(topic, strategy string) string {
 	var subject string
 	switch strategy {
@@ -187,8 +188,8 @@ func GetSubjectName(topic, strategy string) string {
 		subject = topic + "-value"
 	case "topicRecordName":
 		subject = topic + "-" + topic + "-value"
-	default: // "topicName"
-		subject = topic
+	default: // "topicName" - matches Confluent Schema Registry TopicNameStrategy
+		subject = topic + "-value"
 	}
 
 	log.DefaultLogger.Debug("Generated subject name",
