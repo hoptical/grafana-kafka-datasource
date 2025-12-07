@@ -97,6 +97,10 @@ export class QueryEditor extends PureComponent<Props, State> {
       clearTimeout(this.topicBlurTimeout);
       this.topicBlurTimeout = undefined;
     }
+    if (this.schemaValidationTimeout) {
+      clearTimeout(this.schemaValidationTimeout);
+      this.schemaValidationTimeout = undefined;
+    }
   }
 
   fetchPartitions = async () => {
@@ -262,11 +266,32 @@ export class QueryEditor extends PureComponent<Props, State> {
     const { onChange, query, onRunQuery } = this.props;
     const file = event.target.files?.[0];
     if (file) {
+      // Validate file type
+      if (!file.name.match(/\.(avsc|json)$/i)) {
+        this.setState({
+          schemaValidation: { status: 'invalid', message: 'Please upload a .avsc or .json file' },
+        });
+        return;
+      }
+      // Validate file size (5MB limit)
+      if (file.size > 5 * 1024 * 1024) {
+        this.setState({
+          schemaValidation: { status: 'invalid', message: 'File size must be less than 5MB' },
+        });
+        return;
+      }
       const reader = new FileReader();
       reader.onload = (e) => {
         const schema = e.target?.result as string;
         onChange({ ...query, avroSchema: schema });
         onRunQuery();
+        // Validate the uploaded schema
+        this.validateAvroSchema(schema);
+      };
+      reader.onerror = () => {
+        this.setState({
+          schemaValidation: { status: 'invalid', message: 'Failed to read file' },
+        });
       };
       reader.readAsText(file);
     }

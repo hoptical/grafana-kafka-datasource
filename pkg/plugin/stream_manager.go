@@ -94,32 +94,7 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 
 	// If there's an error in the message, create a frame with error information
 	if msg.Error != nil {
-		log.DefaultLogger.Warn("Processing message with error",
-			"partition", partition,
-			"offset", msg.Offset,
-			"error", msg.Error)
-
-		frame := data.NewFrame("response")
-
-		// Add time field
-		frame.Fields = append(frame.Fields, data.NewField("time", nil, make([]time.Time, 1)))
-		frame.Fields[0].Set(0, msg.Timestamp)
-
-		// Add partition field
-		frame.Fields = append(frame.Fields, data.NewField("partition", nil, make([]int32, 1)))
-		frame.Fields[1].Set(0, partition)
-
-		// Add offset field
-		offsetFieldIndex := len(frame.Fields)
-		frame.Fields = append(frame.Fields, data.NewField("offset", nil, make([]int64, 1)))
-		frame.Fields[offsetFieldIndex].Set(0, msg.Offset)
-
-		// Add error field
-		errorFieldIndex := len(frame.Fields)
-		frame.Fields = append(frame.Fields, data.NewField("error", nil, make([]string, 1)))
-		frame.Fields[errorFieldIndex].Set(0, msg.Error.Error())
-
-		return frame, nil
+		return createErrorFrame(msg, partition, partitions, msg.Error)
 	}
 
 	// Check if message needs Avro decoding
