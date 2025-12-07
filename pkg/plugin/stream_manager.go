@@ -126,7 +126,7 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 			"offset", msg.Offset,
 			"rawValueLength", len(msg.RawValue),
 			"topic", topic,
-			"avroSchemaSource", config.AvroSchemaSource)
+			"avroSchemaSource", avroSchemaSource)
 
 		// Try to decode as Avro
 		// Note: nil StreamManager means no caching available in this context
@@ -200,8 +200,11 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 
 	// Add time field
 	timeField := data.NewField("time", nil, make([]time.Time, 1))
+	config.mu.RLock()
+	timestampMode := config.TimestampMode
+	config.mu.RUnlock()
 	var frameTime time.Time
-	if config.TimestampMode == "now" {
+	if timestampMode == "now" {
 		frameTime = time.Now()
 	} else {
 		frameTime = msg.Timestamp
@@ -267,26 +270,31 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 // decodeAvroMessage decodes an Avro message using the appropriate schema
 // If sm is provided, it uses cached Schema Registry client and schema cache for better performance
 func decodeAvroMessage(sm *StreamManager, client KafkaClientAPI, data []byte, config *StreamConfig, topic string) (interface{}, error) {
+	config.mu.RLock()
+	avroSchemaSource := config.AvroSchemaSource
+	avroSchema := config.AvroSchema
+	config.mu.RUnlock()
+
 	log.DefaultLogger.Debug("Starting Avro message decoding",
 		"dataLength", len(data),
 		"topic", topic,
-		"avroSchemaSource", config.AvroSchemaSource,
-		"avroSchemaLength", len(config.AvroSchema),
+		"avroSchemaSource", avroSchemaSource,
+		"avroSchemaLength", len(avroSchema),
 		"partition", "unknown") // Note: partition not available here
 
 	// Add detailed debugging for configuration
 	log.DefaultLogger.Debug("Detailed Avro config debugging",
-		"AvroSchemaSource", config.AvroSchemaSource,
-		"AvroSchemaSourceType", fmt.Sprintf("%T", config.AvroSchemaSource),
-		"AvroSchemaEmpty", config.AvroSchema == "",
-		"AvroSchemaSourceEquals", config.AvroSchemaSource == "inlineSchema")
+		"AvroSchemaSource", avroSchemaSource,
+		"AvroSchemaSourceType", fmt.Sprintf("%T", avroSchemaSource),
+		"AvroSchemaEmpty", avroSchema == "",
+		"AvroSchemaSourceEquals", avroSchemaSource == "inlineSchema")
 
 	var schema string
 	var err error
 
-	if config.AvroSchemaSource == "inlineSchema" && config.AvroSchema != "" {
+	if avroSchemaSource == "inlineSchema" && avroSchema != "" {
 		// Use inline schema
-		schema = config.AvroSchema
+		schema = avroSchema
 		log.DefaultLogger.Debug("Using inline Avro schema",
 			"schemaLength", len(schema),
 			"schemaPreview", func() string {
@@ -295,13 +303,13 @@ func decodeAvroMessage(sm *StreamManager, client KafkaClientAPI, data []byte, co
 				}
 				return schema
 			}())
-	} else if config.AvroSchemaSource == "inlineSchema" && config.AvroSchema == "" {
+	} else if avroSchemaSource == "inlineSchema" && avroSchema == "" {
 		// Inline schema was selected but no schema provided - this is an error
 		log.DefaultLogger.Error("Inline Avro schema selected but no schema provided")
 		return nil, fmt.Errorf("inline Avro schema selected but no schema provided - please provide a valid Avro schema")
 	} else {
 		log.DefaultLogger.Debug("Using Schema Registry for Avro schema",
-			"avroSchemaSource", config.AvroSchemaSource,
+			"avroSchemaSource", avroSchemaSource,
 			"schemaRegistryConfigured", client.GetSchemaRegistryUrl() != "")
 		// Use Schema Registry
 		schemaRegistryUrl := client.GetSchemaRegistryUrl()
@@ -475,14 +483,51 @@ func (sm *StreamManager) ProcessMessage(
 		}
 		messageValue = decoded
 		log.DefaultLogger.Debug("Avro decoding successful")
+	} else if messageFormat == "json" && msg.Value == nil && len(msg.RawValue) > 0 {
+		log.DefaultLogger.Debug("Attempting JSON decoding for message",
+			"partition", partition,
+			"offset", msg.Offset,
+			"rawValueLength", len(msg.RawValue))
+
+		// Try to decode as JSON since the consumer didn't parse it
+		var v interface{}
+		dec := json.NewDecoder(bytes.NewReader(msg.RawValue))
+		dec.UseNumber()
+		if err := dec.Decode(&v); err != nil {
+			log.DefaultLogger.Error("Failed to decode JSON message",
+				"error", err,
+				"rawValueLength", len(msg.RawValue),
+				"partition", partition,
+				"offset", msg.Offset)
+			return createErrorFrame(msg, partition, partitions, fmt.Errorf("json decoding failed: %w", err))
+		} else {
+			// Accept both objects and arrays at the top level
+			switch v := v.(type) {
+			case map[string]interface{}, []interface{}:
+				log.DefaultLogger.Debug("JSON decoding successful",
+					"partition", partition,
+					"offset", msg.Offset,
+					"decodedType", fmt.Sprintf("%T", v))
+				messageValue = v
+			default:
+				log.DefaultLogger.Error("JSON decoded but not object/array",
+					"partition", partition,
+					"offset", msg.Offset,
+					"decodedType", fmt.Sprintf("%T", v))
+				return createErrorFrame(msg, partition, partitions, fmt.Errorf("decoded JSON is not a valid object or array: %T", v))
+			}
+		}
 	}
 
 	frame := data.NewFrame("response")
 
 	// Add time field
 	timeField := data.NewField("time", nil, make([]time.Time, 1))
+	config.mu.RLock()
+	timestampMode := config.TimestampMode
+	config.mu.RUnlock()
 	var frameTime time.Time
-	if config.TimestampMode == "now" {
+	if timestampMode == "now" {
 		frameTime = time.Now()
 	} else {
 		frameTime = msg.Timestamp
@@ -563,13 +608,16 @@ func (sm *StreamManager) readFromPartition(
 	config *StreamConfig,
 	messagesCh chan<- messageWithPartition,
 ) {
+	config.mu.RLock()
+	autoOffsetReset := config.AutoOffsetReset
+	config.mu.RUnlock()
 	log.DefaultLogger.Info("Starting partition reader",
 		"topic", qm.Topic,
 		"partition", partition,
-		"autoOffsetReset", config.AutoOffsetReset,
+		"autoOffsetReset", autoOffsetReset,
 		"lastN", qm.LastN)
 
-	reader, err := sm.client.NewStreamReader(ctx, qm.Topic, partition, config.AutoOffsetReset, qm.LastN)
+	reader, err := sm.client.NewStreamReader(ctx, qm.Topic, partition, autoOffsetReset, qm.LastN)
 	if err != nil {
 		log.DefaultLogger.Error("Failed to create stream reader", "topic", qm.Topic, "partition", partition, "error", err)
 		return
