@@ -456,7 +456,8 @@ func (sm *StreamManager) ProcessMessage(
 
 	// Check if Value is nil - this indicates parsing/decoding failure for non-Avro formats
 	// For Avro format, Value is intentionally nil as decoding is deferred
-	if msg.Value == nil && messageFormat != "avro" {
+	// Also allow nil values if there is raw data available (might be Avro data with wrong format)
+	if msg.Value == nil && messageFormat != "avro" && len(msg.RawValue) == 0 {
 		return createErrorFrame(msg, partition, partitions, fmt.Errorf("message value is nil - possible decoding failure"))
 	}
 
