@@ -84,13 +84,15 @@ func (sm *StreamManager) UpdateStreamConfig(config *StreamConfig, newMessageForm
 
 // ProcessMessageToFrame converts a Kafka message into a Grafana data frame.
 // This is a shared function that can be used by both streaming and data query handlers.
-func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage, partition int32, partitions []int32, config *StreamConfig, topic string) (*data.Frame, error) {
+func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage, partition int32, partitions []int32, config *StreamConfig, topic string, flattenMaxDepth int, flattenFieldCap int) (*data.Frame, error) {
 	log.DefaultLogger.Debug("Processing message",
 		"partition", partition,
 		"offset", msg.Offset,
 		"rawValueLength", len(msg.RawValue),
 		"hasParsedValue", msg.Value != nil,
-		"hasError", msg.Error != nil)
+		"hasError", msg.Error != nil,
+		"flattenMaxDepth", flattenMaxDepth,
+		"flattenFieldCap", flattenFieldCap)
 
 	// If there's an error in the message, create a frame with error information
 	if msg.Error != nil {
@@ -217,9 +219,8 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 		messageValue = wrappedValue
 	}
 
-	// Note: ProcessMessageToFrame is a standalone function and doesn't have access to StreamManager config
-	// For proper configuration support, use StreamManager.ProcessMessage instead
-	FlattenJSON("", messageValue, flat, 0, defaultFlattenMaxDepth, defaultFlattenFieldCap)
+	// Use passed-in flatten configuration parameters
+	FlattenJSON("", messageValue, flat, 0, flattenMaxDepth, flattenFieldCap)
 
 	// Collect keys and sort them for deterministic field ordering
 	keys := make([]string, 0, len(flat))
