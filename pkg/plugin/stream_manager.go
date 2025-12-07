@@ -67,7 +67,7 @@ type StreamConfig struct {
 	AvroSchema       string
 	AutoOffsetReset  string
 	TimestampMode    string
-	LastN            int32 // Added to track lastN changes
+	LastN            int32        // Added to track lastN changes
 	mu               sync.RWMutex // Protects concurrent access to config fields
 }
 
@@ -449,15 +449,16 @@ func (sm *StreamManager) ProcessMessage(
 		return createErrorFrame(msg, partition, partitions, msg.Error)
 	}
 
-	// Check if Value is nil - this indicates parsing/decoding failure
-	if msg.Value == nil {
-		return createErrorFrame(msg, partition, partitions, fmt.Errorf("message value is nil - possible decoding failure"))
-	}
-
-	// Check if message needs Avro decoding
+	// Check if message needs Avro decoding first to determine if nil Value is expected
 	config.mu.RLock()
 	messageFormat := config.MessageFormat
 	config.mu.RUnlock()
+
+	// Check if Value is nil - this indicates parsing/decoding failure for non-Avro formats
+	// For Avro format, Value is intentionally nil as decoding is deferred
+	if msg.Value == nil && messageFormat != "avro" {
+		return createErrorFrame(msg, partition, partitions, fmt.Errorf("message value is nil - possible decoding failure"))
+	}
 
 	messageValue := msg.Value
 	if messageFormat == "avro" && len(msg.RawValue) > 0 {
