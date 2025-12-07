@@ -229,7 +229,7 @@ const (
 			{"name": "timestamp", "type": "long"},
 			{"name": "message", "type": ["string", "null"]},
 			{"name": "level", "type": ["string", "null"]},
-			{"name": "tags", "type": ["array", "null"], "items": "string"}
+			{"name": "tags", "type": [{"type": "array", "items": "string"}, "null"]}
 		]
 	}`
 )

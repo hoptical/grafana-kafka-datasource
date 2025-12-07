@@ -7,7 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net/url"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
@@ -18,11 +20,14 @@ import (
 
 // StreamManager handles the streaming logic for Kafka messages.
 type StreamManager struct {
-	client          KafkaClientAPI
-	flattenMaxDepth int
-	flattenFieldCap int
-	fieldBuilder    *FieldBuilder     // Maintains type registry across messages
-	schemaCache     map[string]string // Cache for schemas by subject name
+	client               KafkaClientAPI
+	flattenMaxDepth      int
+	flattenFieldCap      int
+	fieldBuilder         *FieldBuilder                      // Maintains type registry across messages
+	schemaCache          map[string]string                  // Cache for schemas by subject name
+	schemaCacheMu        sync.RWMutex                       // Protects schemaCache for concurrent access
+	schemaRegistryClient *kafka_client.SchemaRegistryClient // Cached Schema Registry client
+	schemaClientMu       sync.RWMutex                       // Protects schemaRegistryClient
 }
 
 // createErrorFrame creates a data frame containing error information
@@ -116,7 +121,8 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 			"avroSchemaSource", config.AvroSchemaSource)
 
 		// Try to decode as Avro
-		decoded, err := decodeAvroMessage(client, msg.RawValue, config, topic)
+		// Note: nil StreamManager means no caching available in this context
+		decoded, err := decodeAvroMessage(nil, client, msg.RawValue, config, topic)
 		if err != nil {
 			log.DefaultLogger.Error("Failed to decode Avro message",
 				"error", err,
@@ -248,7 +254,8 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 }
 
 // decodeAvroMessage decodes an Avro message using the appropriate schema
-func decodeAvroMessage(client KafkaClientAPI, data []byte, config *StreamConfig, topic string) (interface{}, error) {
+// If sm is provided, it uses cached Schema Registry client and schema cache for better performance
+func decodeAvroMessage(sm *StreamManager, client KafkaClientAPI, data []byte, config *StreamConfig, topic string) (interface{}, error) {
 	log.DefaultLogger.Debug("Starting Avro message decoding",
 		"dataLength", len(data),
 		"topic", topic,
@@ -287,8 +294,19 @@ func decodeAvroMessage(client KafkaClientAPI, data []byte, config *StreamConfig,
 			"schemaRegistryConfigured", client.GetSchemaRegistryUrl() != "")
 		// Use Schema Registry
 		schemaRegistryUrl := client.GetSchemaRegistryUrl()
+
+		// Redact credentials from URL for logging
+		redactedUrl := schemaRegistryUrl
+		if parsedUrl, err := url.Parse(schemaRegistryUrl); err == nil {
+			if parsedUrl.User != nil {
+				// Remove user info from URL for safe logging
+				parsedUrl.User = nil
+				redactedUrl = parsedUrl.String()
+			}
+		}
+
 		log.DefaultLogger.Debug("Attempting to get schema from registry",
-			"schemaRegistryUrl", schemaRegistryUrl,
+			"schemaRegistryUrl", redactedUrl,
 			"hasUsername", client.GetSchemaRegistryUsername() != "",
 			"hasPassword", client.GetSchemaRegistryPassword() != "",
 			"topic", topic)
@@ -298,26 +316,38 @@ func decodeAvroMessage(client KafkaClientAPI, data []byte, config *StreamConfig,
 			return nil, fmt.Errorf("schema registry URL not configured")
 		}
 
-		subject := kafka_client.GetSubjectName(topic, client.GetAvroSubjectNamingStrategy()) // Note: using actual topic
+		subject := kafka_client.GetSubjectName(topic, client.GetAvroSubjectNamingStrategy())
 		log.DefaultLogger.Debug("Generated subject name",
 			"subject", subject,
 			"strategy", client.GetAvroSubjectNamingStrategy())
 
-		// Note: Schema Registry client is created per-message here
-		// For better performance, consider caching schemas using StreamManager.getSchemaWithCache
-		schemaClient := kafka_client.NewSchemaRegistryClient(
-			schemaRegistryUrl,
-			client.GetSchemaRegistryUsername(),
-			client.GetSchemaRegistryPassword(),
-		)
-
-		log.DefaultLogger.Debug("Fetching latest schema from registry", "subject", subject)
-		schema, err = schemaClient.GetLatestSchema(subject)
-		if err != nil {
-			log.DefaultLogger.Error("Failed to get schema from registry",
-				"subject", subject,
-				"error", err)
-			return nil, fmt.Errorf("failed to get schema from registry: %w", err)
+		// Use cached Schema Registry client and schema if StreamManager is available
+		if sm != nil {
+			schema, err = sm.getSchemaFromRegistryWithCache(schemaRegistryUrl,
+				client.GetSchemaRegistryUsername(),
+				client.GetSchemaRegistryPassword(),
+				subject)
+			if err != nil {
+				log.DefaultLogger.Error("Failed to get schema from registry",
+					"subject", subject,
+					"error", err)
+				return nil, fmt.Errorf("failed to get schema from registry: %w", err)
+			}
+		} else {
+			// Fallback: create client per-message if StreamManager not available
+			log.DefaultLogger.Debug("StreamManager not available, creating Schema Registry client per-message")
+			schemaClient := kafka_client.NewSchemaRegistryClient(
+				schemaRegistryUrl,
+				client.GetSchemaRegistryUsername(),
+				client.GetSchemaRegistryPassword(),
+			)
+			schema, err = schemaClient.GetLatestSchema(subject)
+			if err != nil {
+				log.DefaultLogger.Error("Failed to get schema from registry",
+					"subject", subject,
+					"error", err)
+				return nil, fmt.Errorf("failed to get schema from registry: %w", err)
+			}
 		}
 		log.DefaultLogger.Debug("Successfully retrieved schema from registry",
 			"subject", subject,
@@ -339,11 +369,14 @@ func decodeAvroMessage(client KafkaClientAPI, data []byte, config *StreamConfig,
 // getSchemaWithCache retrieves a schema from the cache or fetches it from the registry
 // This method provides schema caching for better performance in high-throughput scenarios
 func (sm *StreamManager) getSchemaWithCache(subject string, schemaClient *kafka_client.SchemaRegistryClient) (string, error) {
-	// Check cache first
+	// Check cache first with read lock
+	sm.schemaCacheMu.RLock()
 	if cachedSchema, exists := sm.schemaCache[subject]; exists {
+		sm.schemaCacheMu.RUnlock()
 		log.DefaultLogger.Debug("Using cached schema", "subject", subject)
 		return cachedSchema, nil
 	}
+	sm.schemaCacheMu.RUnlock()
 
 	// Fetch from registry
 	log.DefaultLogger.Debug("Fetching schema from registry (not in cache)", "subject", subject)
@@ -352,11 +385,37 @@ func (sm *StreamManager) getSchemaWithCache(subject string, schemaClient *kafka_
 		return "", err
 	}
 
-	// Store in cache
+	// Store in cache with write lock
+	sm.schemaCacheMu.Lock()
 	sm.schemaCache[subject] = schema
+	sm.schemaCacheMu.Unlock()
+
 	log.DefaultLogger.Debug("Cached schema", "subject", subject, "schemaLength", len(schema))
 
 	return schema, nil
+}
+
+// getSchemaFromRegistryWithCache gets or creates the Schema Registry client and retrieves schema with caching
+func (sm *StreamManager) getSchemaFromRegistryWithCache(registryUrl, username, password, subject string) (string, error) {
+	// Get or create Schema Registry client with read lock first
+	sm.schemaClientMu.RLock()
+	schemaClient := sm.schemaRegistryClient
+	sm.schemaClientMu.RUnlock()
+
+	if schemaClient == nil {
+		// Create client with write lock
+		sm.schemaClientMu.Lock()
+		// Double-check after acquiring write lock
+		if sm.schemaRegistryClient == nil {
+			log.DefaultLogger.Debug("Creating Schema Registry client (first use)")
+			sm.schemaRegistryClient = kafka_client.NewSchemaRegistryClient(registryUrl, username, password)
+		}
+		schemaClient = sm.schemaRegistryClient
+		sm.schemaClientMu.Unlock()
+	}
+
+	// Use the cached schema retrieval method
+	return sm.getSchemaWithCache(subject, schemaClient)
 }
 
 // ProcessMessage converts a Kafka message into a Grafana data frame.
@@ -392,7 +451,7 @@ func (sm *StreamManager) ProcessMessage(
 			"offset", msg.Offset,
 			"rawValueLength", len(msg.RawValue))
 
-		decoded, err := decodeAvroMessage(sm.client, msg.RawValue, config, topic)
+		decoded, err := decodeAvroMessage(sm, sm.client, msg.RawValue, config, topic)
 		if err != nil {
 			log.DefaultLogger.Error("Failed to decode Avro message", "error", err)
 			return createErrorFrame(msg, partition, partitions, fmt.Errorf("avro decoding failed: %w", err))
@@ -521,8 +580,8 @@ func (sm *StreamManager) readFromPartition(
 
 			// Add a timeout context to prevent infinite blocking
 			msgCtx, msgCancel := context.WithTimeout(ctx, messageReadTimeout)
-			defer msgCancel()
 			msg, err := sm.client.ConsumerPull(msgCtx, reader, config.MessageFormat)
+			msgCancel() // Cancel immediately after use to avoid resource leaks in long-running loop
 
 			if err != nil {
 				log.DefaultLogger.Error("Error reading from partition",
