@@ -68,6 +68,7 @@ type StreamConfig struct {
 	AutoOffsetReset  string
 	TimestampMode    string
 	LastN            int32 // Added to track lastN changes
+	mu               sync.RWMutex // Protects concurrent access to config fields
 }
 
 // NewStreamManager creates a new StreamManager instance.
@@ -83,7 +84,9 @@ func NewStreamManager(client KafkaClientAPI, flattenMaxDepth, flattenFieldCap in
 
 // UpdateStreamConfig updates the streaming configuration dynamically.
 func (sm *StreamManager) UpdateStreamConfig(config *StreamConfig, newMessageFormat string) {
+	config.mu.Lock()
 	config.MessageFormat = newMessageFormat
+	config.mu.Unlock()
 	log.DefaultLogger.Info("Updated stream message format", "newFormat", newMessageFormat)
 }
 
@@ -105,14 +108,19 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 	}
 
 	// Check if message needs Avro decoding
+	config.mu.RLock()
+	messageFormat := config.MessageFormat
+	avroSchemaSource := config.AvroSchemaSource
+	config.mu.RUnlock()
+
 	log.DefaultLogger.Debug("Processing message with configuration",
 		"partition", partition,
 		"offset", msg.Offset,
-		"configMessageFormat", config.MessageFormat,
-		"configAvroSchemaSource", config.AvroSchemaSource)
+		"configMessageFormat", messageFormat,
+		"configAvroSchemaSource", avroSchemaSource)
 
 	messageValue := msg.Value
-	if config.MessageFormat == "avro" && len(msg.RawValue) > 0 {
+	if messageFormat == "avro" && len(msg.RawValue) > 0 {
 		log.DefaultLogger.Debug("Attempting Avro decoding for message",
 			"partition", partition,
 			"offset", msg.Offset,
@@ -138,11 +146,11 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 				"decodedType", fmt.Sprintf("%T", decoded))
 			messageValue = decoded
 		}
-	} else if config.MessageFormat == "avro" {
+	} else if messageFormat == "avro" {
 		log.DefaultLogger.Debug("Avro format specified but no raw data available",
 			"hasParsedValue", msg.Value != nil,
 			"rawValueLength", len(msg.RawValue))
-	} else if config.MessageFormat == "json" && msg.Value == nil && len(msg.RawValue) > 0 {
+	} else if messageFormat == "json" && msg.Value == nil && len(msg.RawValue) > 0 {
 		log.DefaultLogger.Debug("Attempting JSON decoding for message",
 			"partition", partition,
 			"offset", msg.Offset,
@@ -444,8 +452,12 @@ func (sm *StreamManager) ProcessMessage(
 	}
 
 	// Check if message needs Avro decoding
+	config.mu.RLock()
+	messageFormat := config.MessageFormat
+	config.mu.RUnlock()
+
 	messageValue := msg.Value
-	if config.MessageFormat == "avro" && len(msg.RawValue) > 0 {
+	if messageFormat == "avro" && len(msg.RawValue) > 0 {
 		log.DefaultLogger.Debug("Attempting Avro decoding for message",
 			"partition", partition,
 			"offset", msg.Offset,
@@ -580,7 +592,10 @@ func (sm *StreamManager) readFromPartition(
 
 			// Add a timeout context to prevent infinite blocking
 			msgCtx, msgCancel := context.WithTimeout(ctx, messageReadTimeout)
-			msg, err := sm.client.ConsumerPull(msgCtx, reader, config.MessageFormat)
+			config.mu.RLock()
+			messageFormat := config.MessageFormat
+			config.mu.RUnlock()
+			msg, err := sm.client.ConsumerPull(msgCtx, reader, messageFormat)
 			msgCancel() // Cancel immediately after use to avoid resource leaks in long-running loop
 
 			if err != nil {
