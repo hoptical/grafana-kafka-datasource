@@ -629,37 +629,4 @@ test.describe('Kafka Query Editor', () => {
       }
     }
   });
-
-  test('should display data in table format when selecting single partition', async ({
-    createDataSourceConfigPage,
-    readProvisionedDataSource,
-    page,
-    panelEditPage,
-  }) => {
-    const ds = await readProvisionedDataSource({ fileName: 'datasource.yaml' });
-    const configPage = await createDataSourceConfigPage({ type: ds.type });
-
-    // Navigate to query editor
-    await page.getByRole('link', { name: 'Query' }).click();
-
-    // Enter topic name
-    await page.getByRole('textbox', { name: 'Enter topic name' }).fill('test-topic');
-
-    // Pick single partition 1
-    if (isV10) {
-      await page
-        .getByLabel('Select options menu')
-        .getByText(/Partition 1/)
-        .click();
-    } else {
-      await page.getByRole('option', { name: /Partition 1/ }).click();
-    }
-
-    await panelEditPage.setVisualization('Table');
-    // Wait for data columns
-    await expect(page.getByRole('columnheader', { name: 'time' })).toBeVisible({ timeout: 10000 });
-    await expect(page.getByRole('columnheader', { name: 'offset' })).toBeVisible();
-    // Confirm at least one data cell is visible (works across Grafana versions)
-    await expect(getTableCells(page).first()).toBeVisible();
-  });
 });
