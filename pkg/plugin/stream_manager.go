@@ -21,7 +21,8 @@ type StreamManager struct {
 	client          KafkaClientAPI
 	flattenMaxDepth int
 	flattenFieldCap int
-	fieldBuilder    *FieldBuilder // Maintains type registry across messages
+	fieldBuilder    *FieldBuilder     // Maintains type registry across messages
+	schemaCache     map[string]string // Cache for schemas by subject name
 }
 
 // createErrorFrame creates a data frame containing error information
@@ -71,6 +72,7 @@ func NewStreamManager(client KafkaClientAPI, flattenMaxDepth, flattenFieldCap in
 		flattenMaxDepth: flattenMaxDepth,
 		flattenFieldCap: flattenFieldCap,
 		fieldBuilder:    NewFieldBuilder(),
+		schemaCache:     make(map[string]string),
 	}
 }
 
@@ -240,6 +242,8 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 		messageValue = wrappedValue
 	}
 
+	// Note: ProcessMessageToFrame is a standalone function and doesn't have access to StreamManager config
+	// For proper configuration support, use StreamManager.ProcessMessage instead
 	FlattenJSON("", messageValue, flat, 0, defaultFlattenMaxDepth, defaultFlattenFieldCap)
 
 	// Collect keys and sort them for deterministic field ordering
@@ -323,6 +327,8 @@ func decodeAvroMessage(client KafkaClientAPI, data []byte, config *StreamConfig,
 			"subject", subject,
 			"strategy", client.GetAvroSubjectNamingStrategy())
 
+		// Note: Schema Registry client is created per-message here
+		// For better performance, consider caching schemas using StreamManager.getSchemaWithCache
 		schemaClient := kafka_client.NewSchemaRegistryClient(
 			schemaRegistryUrl,
 			client.GetSchemaRegistryUsername(),
@@ -354,7 +360,31 @@ func decodeAvroMessage(client KafkaClientAPI, data []byte, config *StreamConfig,
 	return decoded, nil
 }
 
+// getSchemaWithCache retrieves a schema from the cache or fetches it from the registry
+// This method provides schema caching for better performance in high-throughput scenarios
+func (sm *StreamManager) getSchemaWithCache(subject string, schemaClient *kafka_client.SchemaRegistryClient) (string, error) {
+	// Check cache first
+	if cachedSchema, exists := sm.schemaCache[subject]; exists {
+		log.DefaultLogger.Debug("Using cached schema", "subject", subject)
+		return cachedSchema, nil
+	}
+
+	// Fetch from registry
+	log.DefaultLogger.Debug("Fetching schema from registry (not in cache)", "subject", subject)
+	schema, err := schemaClient.GetLatestSchema(subject)
+	if err != nil {
+		return "", err
+	}
+
+	// Store in cache
+	sm.schemaCache[subject] = schema
+	log.DefaultLogger.Debug("Cached schema", "subject", subject, "schemaLength", len(schema))
+
+	return schema, nil
+}
+
 // ProcessMessage converts a Kafka message into a Grafana data frame.
+// This method uses the StreamManager's configured flatten settings.
 func (sm *StreamManager) ProcessMessage(
 	msg kafka_client.KafkaMessage,
 	partition int32,
@@ -362,7 +392,102 @@ func (sm *StreamManager) ProcessMessage(
 	config *StreamConfig,
 	topic string,
 ) (*data.Frame, error) {
-	return ProcessMessageToFrame(sm.client, msg, partition, partitions, config, topic)
+	log.DefaultLogger.Debug("Processing message with StreamManager",
+		"partition", partition,
+		"offset", msg.Offset,
+		"flattenMaxDepth", sm.flattenMaxDepth,
+		"flattenFieldCap", sm.flattenFieldCap)
+
+	// If there's an error in the message, create a frame with error information
+	if msg.Error != nil {
+		return createErrorFrame(msg, partition, partitions, msg.Error)
+	}
+
+	// Check if Value is nil - this indicates parsing/decoding failure
+	if msg.Value == nil {
+		return createErrorFrame(msg, partition, partitions, fmt.Errorf("message value is nil - possible decoding failure"))
+	}
+
+	// Check if message needs Avro decoding
+	messageValue := msg.Value
+	if config.MessageFormat == "avro" && len(msg.RawValue) > 0 {
+		log.DefaultLogger.Debug("Attempting Avro decoding for message",
+			"partition", partition,
+			"offset", msg.Offset,
+			"rawValueLength", len(msg.RawValue))
+
+		decoded, err := decodeAvroMessage(sm.client, msg.RawValue, config, topic)
+		if err != nil {
+			log.DefaultLogger.Error("Failed to decode Avro message", "error", err)
+			return createErrorFrame(msg, partition, partitions, fmt.Errorf("avro decoding failed: %w", err))
+		}
+		messageValue = decoded
+		log.DefaultLogger.Debug("Avro decoding successful")
+	}
+
+	frame := data.NewFrame("response")
+
+	// Add time field
+	timeField := data.NewField("time", nil, make([]time.Time, 1))
+	var frameTime time.Time
+	if config.TimestampMode == "now" {
+		frameTime = time.Now()
+	} else {
+		frameTime = msg.Timestamp
+	}
+	timeField.Set(0, frameTime)
+
+	fields := []*data.Field{timeField}
+
+	// Add partition field when consuming from multiple partitions
+	if len(partitions) > 1 {
+		partitionField := data.NewField("partition", nil, make([]int32, 1))
+		partitionField.Set(0, partition)
+		fields = append(fields, partitionField)
+	}
+
+	// Add offset field
+	offsetField := data.NewField("offset", nil, make([]int64, 1))
+	offsetField.Set(0, msg.Offset)
+	fields = append(fields, offsetField)
+
+	// Flatten and process message values using configured settings
+	flat := make(map[string]interface{})
+
+	// Handle top-level arrays by wrapping them in an object
+	if arr, ok := messageValue.([]interface{}); ok {
+		wrappedValue := make(map[string]interface{})
+		for i, element := range arr {
+			key := fmt.Sprintf("item_%d", i)
+			wrappedValue[key] = element
+		}
+		messageValue = wrappedValue
+	}
+
+	// Use StreamManager's configured flatten settings
+	FlattenJSON("", messageValue, flat, 0, sm.flattenMaxDepth, sm.flattenFieldCap)
+
+	// Collect keys and sort them for deterministic field ordering
+	keys := make([]string, 0, len(flat))
+	for key := range flat {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	// Pre-allocate fields slice
+	msgFieldStart := len(fields)
+	totalFields := len(fields) + len(keys)
+	frame.Fields = make([]*data.Field, totalFields)
+	copy(frame.Fields, fields)
+
+	// Add message fields by direct assignment
+	for i, key := range keys {
+		value := flat[key]
+		fieldIdx := msgFieldStart + i
+		sm.fieldBuilder.AddValueToFrame(frame, key, value, fieldIdx)
+	}
+
+	return frame, nil
 }
 
 // StartPartitionReaders starts goroutines to read from each partition and sends messages to the channel.

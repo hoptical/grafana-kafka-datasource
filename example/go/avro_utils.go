@@ -398,14 +398,6 @@ func EncodeAvroMessage(shape string, data interface{}, schemaRegistryURL, schema
 	return encoded, nil
 }
 
-// min returns the minimum of two integers
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 // hasHTTPPrefix checks if a URL has http:// or https:// prefix
 func hasHTTPPrefix(url string) bool {
 	return len(url) >= 7 && (url[:7] == "http://" || (len(url) >= 8 && url[:8] == "https://"))

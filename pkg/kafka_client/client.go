@@ -90,11 +90,11 @@ type KafkaClient struct {
 }
 
 type KafkaMessage struct {
-	Value     interface{} // Can be map[string]interface{} or []interface{}
-	RawValue  []byte      // Raw message bytes for Avro decoding
-	Timestamp time.Time
-	Offset    int64
-	Error     error // Error if decoding failed
+	Value     interface{} `json:"value,omitempty"` // Can be map[string]interface{} or []interface{}
+	RawValue  []byte      `json:"-"`               // Raw message bytes for Avro decoding - not serialized
+	Timestamp time.Time   `json:"timestamp"`
+	Offset    int64       `json:"offset"`
+	Error     error       `json:"-"` // Error if decoding failed - not serialized
 }
 
 // ErrTopicNotFound indicates the requested topic does not exist.
