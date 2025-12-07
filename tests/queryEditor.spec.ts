@@ -3,8 +3,6 @@ import { exec, ChildProcess } from 'child_process';
 import { accessSync, constants } from 'fs';
 import { Page, Locator } from '@playwright/test';
 
-const isV10 = (process.env.GRAFANA_VERSION || '').startsWith('10.');
-
 // Helper to get table cells compatible across Grafana versions
 // Grafana v12.2.0+ uses 'gridcell' role, older versions use 'cell'
 function getTableCells(page: Page): Locator {
@@ -71,11 +69,9 @@ test.describe('Kafka Query Editor', () => {
     
     // Test partition selection using the ID selector
     await page.locator('#query-editor-partition').click();
-    if (isV10) {
-      await page.getByLabel('Select options menu').getByText('All partitions').click();
-    } else {
-      await page.getByRole('option', { name: /^All partitions$/ }).click();
-    }
+    const allPartitionsFirstTest = page.getByLabel('Select options menu').getByText('All partitions')
+      .or(page.getByRole('option', { name: /^All partitions$/ }));
+    await allPartitionsFirstTest.first().click();
     
     // Test Message Format selector (new field)
     await expect(page.getByText('Message Format')).toBeVisible();
@@ -134,71 +130,66 @@ test.describe('Kafka Query Editor', () => {
     await expect(page.getByText('Offset')).toBeVisible({ timeout: 5000 });
     
     // More robust selector approach for dropdowns with correct clickable elements
-    const offsetSelector = page.getByText('Latest', { exact: false }).locator('..').locator('.css-1eu65zc')
+    const offsetSelector = page.locator('div').filter({ hasText: /^Latest$/ }).nth(3)
+      .or(page.getByText('Latest', { exact: false }).locator('..').locator('.css-1eu65zc'))
       .or(page.getByRole('combobox').filter({ hasText: /Latest/ }).first())
       .or(page.locator('select').filter({ hasText: /Latest/ }));
     
     const timestampSelector = page.getByText('Kafka Event Time', { exact: false }).locator('..').locator('.css-1eu65zc')
       .or(page.getByRole('combobox').filter({ hasText: /Kafka Event Time/ }).first())
-      .or(page.locator('select').filter({ hasText: /Kafka Event Time/ }));
+      .or(page.locator('select').filter({ hasText: /Kafka Event Time/ }))
+      .or(page.locator('div').filter({ hasText: /^Kafka Event Time$/ }).nth(2));
 
-    // Test Offset options with improved selector
-    if (await offsetSelector.first().isVisible({ timeout: 5000 })) {
-      console.log('Offset selector found');
-      try {
-        await offsetSelector.first().click({ timeout: 10000 });
-      } catch (error) {
-        console.log('Offset selector click failed, trying force click');
-        await offsetSelector.first().click({ force: true });
-      }
-      
-      // Wait for dropdown menu to appear
-      await expect(page.getByText('Last N messages')).toBeVisible({ timeout: 5000 });
-      await expect(page.getByText('Earliest')).toBeVisible();
-      
-      if (isV10) {
-        await page.getByLabel('Select options menu').getByText('Latest').click();
-      } else {
-        await page.getByRole('option', { name: 'Latest' }).click();
-      }
-    }
-
-    // Test Timestamp Mode options with improved selector
-    if (await timestampSelector.first().isVisible({ timeout: 5000 })) {
-      console.log('Timestamp selector found');
-      try {
-        await timestampSelector.first().click({ timeout: 10000 });
-      } catch (error) {
-        console.log('Timestamp selector click failed, trying force click');
-        await timestampSelector.first().click({ force: true });
-      }
-      
-      // Wait for dropdown menu to appear
-      await expect(page.getByText('Dashboard received time')).toBeVisible({ timeout: 5000 });
-      
-      if (isV10) {
-        await page.getByLabel('Select options menu').getByText('Kafka Event Time').click();
-      } else {
-        await page.getByRole('option', { name: 'Kafka Event Time' }).click();
-      }
+    // Test Offset options with improved selector - MUST be found
+    await expect(offsetSelector.first()).toBeVisible({ timeout: 5000 });
+    console.log('Offset selector found');
+    try {
+      await offsetSelector.first().click({ timeout: 10000 });
+    } catch (error) {
+      console.log('Offset selector click failed, trying force click');
+      await offsetSelector.first().click({ force: true });
     }
     
-    // Test LastN configuration with retry mechanism
+    // Wait for dropdown menu to appear
+    await expect(page.getByText('Last N messages')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('Earliest')).toBeVisible();
+    
+    const latestOption = page.getByLabel('Select options menu').getByText('Latest')
+      .or(page.getByRole('option', { name: 'Latest' }));
+    await latestOption.first().click();
+
+    // Test Timestamp Mode options with improved selector - MUST be found
+    await expect(timestampSelector.first()).toBeVisible({ timeout: 5000 });
+    console.log('Timestamp selector found');
     try {
-      await offsetSelector.click({ timeout: 10000 });
+      await timestampSelector.first().click({ timeout: 10000 });
+    } catch (error) {
+      console.log('Timestamp selector click failed, trying force click');
+      await timestampSelector.first().click({ force: true });
+    }
+    
+    // Wait for dropdown menu to appear
+    await expect(page.getByText('Dashboard received time')).toBeVisible({ timeout: 5000 });
+    
+    const kafkaEventTimeOption = page.getByLabel('Select options menu').getByText('Kafka Event Time')
+      .or(page.getByRole('option', { name: 'Kafka Event Time' }));
+    await kafkaEventTimeOption.first().click();
+    
+    // Test LastN configuration - click offset selector again to change to Last N
+    await expect(offsetSelector.first()).toBeVisible({ timeout: 5000 });
+    try {
+      await offsetSelector.first().click({ timeout: 10000 });
     } catch (error) {
       console.log('Offset selector click failed for LastN, trying force click');
-      await offsetSelector.click({ force: true });
+      await offsetSelector.first().click({ force: true });
     }
     
     // Wait for dropdown options to be available
     await expect(page.getByText('Last N messages')).toBeVisible({ timeout: 5000 });
     
-    if (isV10) {
-      await page.getByLabel('Select options menu').getByText('Last N messages').click();
-    } else {
-      await page.getByRole('option', { name: 'Last N messages' }).click();
-    }
+    const lastNMessagesOption = page.getByLabel('Select options menu').getByText('Last N messages')
+      .or(page.getByRole('option', { name: 'Last N messages' }));
+    await lastNMessagesOption.first().click();
     
     // Last N input field should appear with default value - be more specific
     const lastNInput = page.locator('#query-editor-last-n')
@@ -228,17 +219,20 @@ test.describe('Kafka Query Editor', () => {
     // Fill in the query editor fields
     await page.getByRole('textbox', { name: 'Enter topic name' }).fill('test-topic');
     await page.getByRole('button', { name: 'Fetch' }).click();
-    await page
-        .locator('div')
-        .filter({ hasText: /^All partitions$/ })
-        .nth(2)
-        .click();
+    
+    // Wait for partition selector to be available after fetch
+    const partitionSelector = page.locator('div').filter({ hasText: /^All partitions$/ }).nth(2)
+      .or(page.locator('#query-editor-partition'))
+      .or(page.getByText('All partitions').locator('..').locator('.css-1eu65zc'));
+    
+    // Partition selector MUST be found after fetch
+    await expect(partitionSelector.first()).toBeVisible({ timeout: 5000 });
+    await partitionSelector.first().click();
 
-      if (isV10) {
-        await page.getByLabel('Select options menu').getByText('All partitions').click();
-      } else {
-        await page.getByRole('option', { name: /^All partitions$/ }).click();
-      }
+    // Select "All partitions" option - works for both v10 and v12+
+    const allPartitionsOption = page.getByLabel('Select options menu').getByText('All partitions')
+      .or(page.getByRole('option', { name: /^All partitions$/ }));
+    await allPartitionsOption.first().click();
 
     // Set visualization with minimal timeout to avoid page closure
     try {
@@ -441,26 +435,26 @@ test.describe('Kafka Query Editor', () => {
     await page.getByRole('textbox', { name: 'Enter topic name' }).fill('test-topic');
 
     // Select Last N messages offset mode with improved selector
-    const offsetSelector = page.getByText('Latest', { exact: false }).locator('..').locator('.css-1eu65zc')
+    const offsetSelector = page.locator('div').filter({ hasText: /^Latest$/ }).nth(3)
+      .or(page.getByText('Latest', { exact: false }).locator('..').locator('.css-1eu65zc'))
       .or(page.getByRole('combobox').filter({ hasText: /Latest|Earliest|Last N/ }).first());
     
-    if (await offsetSelector.first().isVisible({ timeout: 5000 })) {
-      console.log('Last N offset selector found');
-      try {
-        await offsetSelector.first().click({ timeout: 10000 });
-      } catch (error) {
-        console.log('Last N offset selector click failed, trying force click');
-        await offsetSelector.first().click({ force: true });
-      }
-      
-      // Wait for dropdown options to be visible
-      const lastNOption = page.getByRole('option', { name: 'Last N messages' })
-        .or(page.getByText('Last N messages', { exact: true }));
-      
-      if (await lastNOption.first().isVisible({ timeout: 3000 })) {
-        await lastNOption.first().click();
-      }
+    // Offset selector MUST be found - fail test if not
+    await expect(offsetSelector.first()).toBeVisible({ timeout: 5000 });
+    console.log('Last N offset selector found');
+    try {
+      await offsetSelector.first().click({ timeout: 10000 });
+    } catch (error) {
+      console.log('Last N offset selector click failed, trying force click');
+      await offsetSelector.first().click({ force: true });
     }
+    
+    // Wait for dropdown options to be visible
+    const lastNOption = page.getByRole('option', { name: 'Last N messages' })
+      .or(page.getByText('Last N messages', { exact: true }));
+    
+    await expect(lastNOption.first()).toBeVisible({ timeout: 5000 });
+    await lastNOption.first().click();
 
     // Last N input field should appear with default value
     const lastNInput = page.locator('#query-editor-last-n')
@@ -590,11 +584,9 @@ test.describe('Kafka Query Editor', () => {
     
     if (await partition1Option.first().isVisible({ timeout: 3000 })) {
       console.log('Partition 1 option found, selecting it');
-      if (isV10) {
-        await page.getByLabel('Select options menu').getByText(/Partition 1/).click();
-      } else {
-        await partition1Option.first().click();
-      }
+      const partition1SelectOption = page.getByLabel('Select options menu').getByText(/Partition 1/)
+        .or(partition1Option);
+      await partition1SelectOption.first().click();
     } else {
       console.log('Partition 1 option not found, skipping partition selection');
       // Continue with test even if partition selection fails
