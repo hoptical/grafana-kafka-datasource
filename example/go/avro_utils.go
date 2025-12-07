@@ -261,7 +261,7 @@ func ConvertToAvroData(shape string, data interface{}, verbose bool) (interface{
 					avroKey = "host_name"
 				case "host.ip":
 					avroKey = "host_ip"
-				case "metrics.cpu.load":
+				case "metrics.cpu.load", "metrics_cpu_load":
 					avroKey = "metrics_cpu_load"
 					v = wrapUnionValue(v) // Nullable field
 				case "metrics.cpu.temp":
