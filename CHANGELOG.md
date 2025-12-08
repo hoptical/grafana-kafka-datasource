@@ -1,5 +1,10 @@
 # Changelog
 
+## [v1.2.0](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.2.0)
+[Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v1.1.0...v1.2.0)
+- Feat: Implement Avro support ([#96](https://github.com/hoptical/grafana-kafka-datasource/pull/96)) — add Avro parsing and support for Avro-encoded messages in the plugin.
+- Chore: Bump `@grafana/create-plugin` configuration to 6.4.3 ([#109](https://github.com/hoptical/grafana-kafka-datasource/pull/109))
+
 ## [v1.1.0](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.1.0)
 [Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v1.0.1...v1.1.0)
 - Fix: Address security issues in dependencies and configuration ([#107](https://github.com/hoptical/grafana-kafka-datasource/pull/107))
