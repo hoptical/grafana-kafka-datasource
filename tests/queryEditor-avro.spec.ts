@@ -10,32 +10,37 @@ function getTableCells(page: Page): Locator {
   return page.locator('[role="gridcell"], [role="cell"]');
 }
 
-function startAvroKafkaProducer(): Promise<ChildProcess> {
+function startAvroKafkaProducer(): { producer: ChildProcess; exitPromise: Promise<void> } {
   const producerPath = './dist/producer';
   try {
     accessSync(producerPath, constants.X_OK); // Check if file exists and is executable
   } catch (err) {
     throw new Error(`Kafka producer executable not found or not executable at path: ${producerPath}`);
   }
-  return new Promise((resolve, reject) => {
-    const producer = exec(
-      `${producerPath} -broker localhost:9094 -topic test-avro-topic -connect-timeout 500 -num-partitions 3 -format avro -schema-registry http://localhost:8081`,
-      { encoding: 'utf-8' }
-    );
+  
+  const producer = exec(
+    `${producerPath} -broker localhost:9094 -topic test-avro-topic -connect-timeout 500 -num-partitions 3 -format avro -schema-registry http://localhost:8081`,
+    { encoding: 'utf-8' }
+  );
 
-    producer.stdout?.on('data', (data) => {
-      console.log('[Avro Producer stdout]', data);
-    });
-    producer.stderr?.on('data', (data) => {
-      console.error('[Avro Producer stderr]', data);
-    });
+  producer.stdout?.on('data', (data) => {
+    console.log('[Avro Producer stdout]', data);
+  });
+  producer.stderr?.on('data', (data) => {
+    console.error('[Avro Producer stderr]', data);
+  });
+  
+  const exitPromise = new Promise<void>((resolve, reject) => {
     producer.on('exit', (code) => {
       if (code !== 0) {
         reject(new Error(`Avro Kafka producer exited with code ${code}`));
+      } else {
+        resolve();
       }
     });
-    resolve(producer);
   });
+  
+  return { producer, exitPromise };
 }
 
 async function findMessageFormatSelector(page: Page): Promise<Locator | null> {
@@ -206,7 +211,7 @@ test.describe('Kafka Query Editor - Avro Tests', () => {
     await panelEditPage.datasource.set(ds.name);
 
     // Start the Avro Kafka producer with schema registry
-    await startAvroKafkaProducer();
+    const { producer } = startAvroKafkaProducer();
     // Wait for some data to be produced
     await new Promise((resolve) => setTimeout(resolve, 3000));
 
@@ -266,7 +271,7 @@ test.describe('Kafka Query Editor - Avro Tests', () => {
     await panelEditPage.datasource.set(ds.name);
 
     // Start the Avro Kafka producer with schema registry
-    await startAvroKafkaProducer();
+    const { producer } = startAvroKafkaProducer();
     // Wait for some data to be produced
     await new Promise((resolve) => setTimeout(resolve, 3000));
 

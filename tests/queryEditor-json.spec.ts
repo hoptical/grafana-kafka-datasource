@@ -9,32 +9,37 @@ function getTableCells(page: Page): Locator {
   // Use a CSS selector that works for both roles
   return page.locator('[role="gridcell"], [role="cell"]');
 }
-function startKafkaProducer(): Promise<ChildProcess> {
+function startKafkaProducer(): { producer: ChildProcess; exitPromise: Promise<void> } {
   const producerPath = './dist/producer';
   try {
     accessSync(producerPath, constants.X_OK); // Check if file exists and is executable
   } catch (err) {
     throw new Error(`Kafka producer executable not found or not executable at path: ${producerPath}`);
   }
-  return new Promise((resolve, reject) => {
-    const producer = exec(
-      `${producerPath} -broker localhost:9094 -topic test-topic -connect-timeout 500 -num-partitions 3`,
-      { encoding: 'utf-8' }
-    );
+  
+  const producer = exec(
+    `${producerPath} -broker localhost:9094 -topic test-topic -connect-timeout 500 -num-partitions 3`,
+    { encoding: 'utf-8' }
+  );
 
-    producer.stdout?.on('data', (data) => {
-      console.log('[Producer stdout]', data);
-    });
-    producer.stderr?.on('data', (data) => {
-      console.error('[Producer stderr]', data);
-    });
+  producer.stdout?.on('data', (data) => {
+    console.log('[Producer stdout]', data);
+  });
+  producer.stderr?.on('data', (data) => {
+    console.error('[Producer stderr]', data);
+  });
+  
+  const exitPromise = new Promise<void>((resolve, reject) => {
     producer.on('exit', (code) => {
       if (code !== 0) {
         reject(new Error(`Kafka producer exited with code ${code}`));
+      } else {
+        resolve();
       }
     });
-    resolve(producer);
   });
+  
+  return { producer, exitPromise };
 }
 
 test.describe('Kafka Query Editor - JSON Tests', () => {
@@ -165,7 +170,7 @@ test.describe('Kafka Query Editor - JSON Tests', () => {
     await panelEditPage.datasource.set(ds.name);
 
     // Start the Kafka producer
-    await startKafkaProducer();
+    const { producer } = startKafkaProducer();
     // Wait for some data to be produced
     await new Promise((resolve) => setTimeout(resolve, 3000));
 
@@ -310,7 +315,7 @@ test.describe('Kafka Query Editor - JSON Tests', () => {
     await panelEditPage.datasource.set(ds.name);
 
     // Start producer
-    await startKafkaProducer();
+    const { producer } = startKafkaProducer();
     await new Promise((r) => setTimeout(r, 3000));
 
     // Fetch partitions for existing topic
