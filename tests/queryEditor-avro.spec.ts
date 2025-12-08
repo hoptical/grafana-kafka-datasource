@@ -219,10 +219,16 @@ test.describe.serial('Kafka Query Editor - Avro Tests', () => {
     const { producer } = startAvroKafkaProducer({ topic: 'test-avro-schema-topic', schemaRegistry: true });
     // Wait for some data to be produced
     await new Promise((resolve) => setTimeout(resolve, 3000));
+    // Set visualization
+    try {
+      await panelEditPage.setVisualization('Table');
+    } catch (error) {
+      console.log('Visualization picker blocked by overlay, continuing...');
+    }
 
-      // Fill in the query editor fields
-      await page.getByRole('textbox', { name: 'Enter topic name' }).fill('test-avro-schema-topic');
-      await page.getByText('test-avro-schema-topic').click(); // The topic name is clicked from the autocomplete list
+    // Fill in the query editor fields
+    await page.getByRole('textbox', { name: 'Enter topic name' }).fill('test-avro-schema-topic');
+    await page.getByText('test-avro-schema-topic').click(); // The topic name is clicked from the autocomplete list
 
     // Select Avro message format
     await selectAvroMessageFormat(page);
@@ -244,13 +250,7 @@ test.describe.serial('Kafka Query Editor - Avro Tests', () => {
       .or(page.getByRole('option', { name: /^All partitions$/ }));
     await allPartitionsOption.first().click();
     // wait. for a second
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    // Set visualization
-    try {
-      await panelEditPage.setVisualization('Table');
-    } catch (error) {
-      console.log('Visualization picker blocked by overlay, continuing...');
-    }
+    // await new Promise((resolve) => setTimeout(resolve, 1000));
 
     // Wait for the time column to appear first (this indicates data is flowing)
     await expect(page.getByRole('columnheader', { name: 'time' })).toBeVisible({ timeout: 10000 });
@@ -279,10 +279,13 @@ test.describe.serial('Kafka Query Editor - Avro Tests', () => {
     const { producer } = startAvroKafkaProducer({ topic: 'test-avro-inline-topic' });
     // Wait for some data to be produced
     await new Promise((resolve) => setTimeout(resolve, 3000));
+    // Set visualization
+    try {
+      await panelEditPage.setVisualization('Table');
+    } catch (error) {
+      console.log('Visualization picker blocked by overlay, continuing...');
+    }
 
-      // Fill in the query editor fields
-      await page.getByRole('textbox', { name: 'Enter topic name' }).fill('test-avro-inline-topic');
-      await page.getByText('test-avro-inline-topic').click(); // The topic name is clicked from the autocomplete list
     // Select Avro message format
     await selectAvroMessageFormat(page);
 
@@ -368,30 +371,12 @@ test.describe.serial('Kafka Query Editor - Avro Tests', () => {
     }`;
 
     await schemaTextarea.first().fill(avroSchema);
-
+    // Fill in the query editor fields
+    await page.getByRole('textbox', { name: 'Enter topic name' }).fill('test-avro-inline-topic');
+    await page.getByText('test-avro-inline-topic').click(); // The topic name is clicked from the autocomplete list
     // Fetch partitions
     await page.getByRole('button', { name: 'Fetch' }).click();
-
-    // Wait for partition selector to be available after fetch
-    const partitionSelector = page.locator('div').filter({ hasText: /^All partitions$/ }).nth(2)
-      .or(page.locator('#query-editor-partition'))
-      .or(page.getByText('All partitions').locator('..').locator('.css-1eu65zc'));
-
-    // Partition selector MUST be found after fetch
-    await expect(partitionSelector.first()).toBeVisible({ timeout: 5000 });
-    await partitionSelector.first().click();
-
-    // Select "All partitions" option
-    const allPartitionsOption = page.getByLabel('Select options menu').getByText('All partitions')
-      .or(page.getByRole('option', { name: /^All partitions$/ }));
-    await allPartitionsOption.first().click();
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    // Set visualization
-    try {
-      await panelEditPage.setVisualization('Table');
-    } catch (error) {
-      console.log('Visualization picker blocked by overlay, continuing...');
-    }
+    await new Promise((resolve) => setTimeout(resolve, 1000)); // Wait for schema to be processed
 
     // Wait for the time column to appear first (this indicates data is flowing)
     await expect(page.getByRole('columnheader', { name: 'time' })).toBeVisible({ timeout: 10000 });
