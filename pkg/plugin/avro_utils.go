@@ -23,15 +23,15 @@ func UnwrapAvroUnions(in interface{}) interface{} {
 					// This is an Avro union wrapper with primitive type, return the unwrapped value
 					return typeValue
 				default:
-					// This is an Avro union wrapper with a complex type (record/array/map/named type)
-					// Recursively unwrap it to handle nested unions
+					// Check if this is an Avro union wrapper with a complex type (record/array/map/named type)
+					// Only unwrap if the value itself is a complex structure
 					switch typeValue.(type) {
 					case map[string]interface{}, []interface{}:
 						return UnwrapAvroUnions(typeValue)
-					default:
-						// Non-primitive but also not a complex structure, return as-is
-						return typeValue
 					}
+					// If it's neither a known primitive nor a complex structure,
+					// this might be a legitimate single-field record, so fall through
+					// to normal map handling
 				}
 			}
 		}
