@@ -1,6 +1,6 @@
 import { test, expect } from '@grafana/plugin-e2e';
 import { Page, Locator } from '@playwright/test';
-import { ChildProcess, exec } from 'child_process';
+import { ChildProcess, spawn } from 'child_process';
 import { accessSync, constants } from 'fs';
 
 // Helper to get table cells compatible across Grafana versions
@@ -17,19 +17,18 @@ function startKafkaProducer(): { producer: ChildProcess; exitPromise: Promise<vo
     throw new Error(`Kafka producer executable not found or not executable at path: ${producerPath}`);
   }
   
-  const producer = exec(
-    `${producerPath} -broker localhost:9094 -topic test-topic -connect-timeout 500 -num-partitions 3`,
-    { encoding: 'utf-8' }
-  );
+  const args = ['-broker', 'localhost:9094', '-topic', 'test-topic', '-connect-timeout', '500', '-num-partitions', '3'];
+  const producer = spawn(producerPath, args, { stdio: ['ignore', 'pipe', 'pipe'] });
 
   producer.stdout?.on('data', (data) => {
-    console.log('[Producer stdout]', data);
+    console.log('[Producer stdout]', data.toString());
   });
   producer.stderr?.on('data', (data) => {
-    console.error('[Producer stderr]', data);
+    console.error('[Producer stderr]', data.toString());
   });
-  
+
   const exitPromise = new Promise<void>((resolve, reject) => {
+    producer.on('error', (err) => reject(err));
     producer.on('exit', (code) => {
       if (code !== 0) {
         reject(new Error(`Kafka producer exited with code ${code}`));

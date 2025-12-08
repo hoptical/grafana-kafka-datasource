@@ -1,6 +1,6 @@
 import { test, expect } from '@grafana/plugin-e2e';
 import { Page, Locator } from '@playwright/test';
-import { ChildProcess, exec } from 'child_process';
+import { ChildProcess, spawn } from 'child_process';
 import { accessSync, constants } from 'fs';
 
 // Helper to get table cells compatible across Grafana versions
@@ -10,27 +10,33 @@ function getTableCells(page: Page): Locator {
   return page.locator('[role="gridcell"], [role="cell"]');
 }
 
-function startAvroKafkaProducer(): { producer: ChildProcess; exitPromise: Promise<void> } {
+interface AvroProducerOptions {
+  topic: string;
+  schemaRegistry?: boolean;
+}
+
+function startAvroKafkaProducer({ topic, schemaRegistry }: AvroProducerOptions): { producer: ChildProcess; exitPromise: Promise<void> } {
   const producerPath = './dist/producer';
   try {
     accessSync(producerPath, constants.X_OK); // Check if file exists and is executable
   } catch (err) {
     throw new Error(`Kafka producer executable not found or not executable at path: ${producerPath}`);
   }
-  
-  const producer = exec(
-    `${producerPath} -broker localhost:9094 -topic test-avro-topic -connect-timeout 500 -num-partitions 3 -format avro -schema-registry http://localhost:8081`,
-    { encoding: 'utf-8' }
-  );
+  const args = ['-broker', 'localhost:9094', '-topic', topic, '-connect-timeout', '500', '-num-partitions', '3', '-format', 'avro'];
+  if (schemaRegistry) {
+    args.push('-schema-registry', 'http://localhost:8081');
+  }
+  const producer = spawn(producerPath, args, { stdio: ['ignore', 'pipe', 'pipe'] });
 
   producer.stdout?.on('data', (data) => {
-    console.log('[Avro Producer stdout]', data);
+    console.log('[Avro Producer stdout]', data.toString());
   });
   producer.stderr?.on('data', (data) => {
-    console.error('[Avro Producer stderr]', data);
+    console.error('[Avro Producer stderr]', data.toString());
   });
-  
+
   const exitPromise = new Promise<void>((resolve, reject) => {
+    producer.on('error', (err) => reject(err));
     producer.on('exit', (code) => {
       if (code !== 0) {
         reject(new Error(`Avro Kafka producer exited with code ${code}`));
@@ -39,7 +45,6 @@ function startAvroKafkaProducer(): { producer: ChildProcess; exitPromise: Promis
       }
     });
   });
-  
   return { producer, exitPromise };
 }
 
@@ -123,7 +128,7 @@ async function selectInlineSchema(page: Page): Promise<void> {
   await inlineSchemaOption.first().click();
 }
 
-test.describe('Kafka Query Editor - Avro Tests', () => {
+test.describe.serial('Kafka Query Editor - Avro Tests', () => {
   test('should configure Avro message format and validate schema', async ({
     readProvisionedDataSource,
     page,
@@ -210,14 +215,14 @@ test.describe('Kafka Query Editor - Avro Tests', () => {
     // Select the Kafka datasource
     await panelEditPage.datasource.set(ds.name);
 
-    // Start the Avro Kafka producer with schema registry
-    const { producer } = startAvroKafkaProducer();
+    // Start the Avro Kafka producer with schema registry and topic 'test-avro-schema-topic'
+    const { producer } = startAvroKafkaProducer({ topic: 'test-avro-schema-topic', schemaRegistry: true });
     // Wait for some data to be produced
     await new Promise((resolve) => setTimeout(resolve, 3000));
 
-    // Fill in the query editor fields
-    await page.getByRole('textbox', { name: 'Enter topic name' }).fill('test-avro-topic');
-    await page.getByText('test-avro-topic').click(); // The topic name is clicked from the autocomplete list
+      // Fill in the query editor fields
+      await page.getByRole('textbox', { name: 'Enter topic name' }).fill('test-avro-schema-topic');
+      await page.getByText('test-avro-schema-topic').click(); // The topic name is clicked from the autocomplete list
 
     // Select Avro message format
     await selectAvroMessageFormat(page);
@@ -270,14 +275,14 @@ test.describe('Kafka Query Editor - Avro Tests', () => {
     // Select the Kafka datasource
     await panelEditPage.datasource.set(ds.name);
 
-    // Start the Avro Kafka producer with schema registry
-    const { producer } = startAvroKafkaProducer();
+    // Start the Avro Kafka producer WITHOUT schema registry and topic 'test-avro-inline-topic'
+    const { producer } = startAvroKafkaProducer({ topic: 'test-avro-inline-topic' });
     // Wait for some data to be produced
     await new Promise((resolve) => setTimeout(resolve, 3000));
 
-    // Fill in the query editor fields
-    await page.getByRole('textbox', { name: 'Enter topic name' }).fill('test-avro-topic');
-    await page.getByText('test-avro-topic').click(); // The topic name is clicked from the autocomplete list
+      // Fill in the query editor fields
+      await page.getByRole('textbox', { name: 'Enter topic name' }).fill('test-avro-inline-topic');
+      await page.getByText('test-avro-inline-topic').click(); // The topic name is clicked from the autocomplete list
     // Select Avro message format
     await selectAvroMessageFormat(page);
 
