@@ -92,7 +92,9 @@ func (sm *StreamManager) UpdateStreamConfig(config *StreamConfig, newMessageForm
 
 // ProcessMessageToFrame converts a Kafka message into a Grafana data frame.
 // This is a shared function that can be used by both streaming and data query handlers.
-func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage, partition int32, partitions []int32, config *StreamConfig, topic string, flattenMaxDepth int, flattenFieldCap int) (*data.Frame, error) {
+// Note: fieldBuilder should be a persistent instance (e.g., from StreamManager) to maintain
+// type registry across messages for proper null value handling.
+func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage, partition int32, partitions []int32, config *StreamConfig, topic string, flattenMaxDepth int, flattenFieldCap int, fieldBuilder *FieldBuilder) (*data.Frame, error) {
 	log.DefaultLogger.Debug("Processing message",
 		"partition", partition,
 		"offset", msg.Offset,
@@ -225,6 +227,17 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 	offsetField.Set(0, msg.Offset)
 	fields = append(fields, offsetField)
 
+	// Unwrap Avro union types before flattening (for Avro messages)
+	// This must happen BEFORE flattening to avoid creating keys like "value1.double"
+	config.mu.RLock()
+	isAvro := config.MessageFormat == "avro"
+	config.mu.RUnlock()
+
+	if isAvro {
+		messageValue = UnwrapAvroUnions(messageValue)
+		log.DefaultLogger.Debug("Unwrapped Avro unions before flattening")
+	}
+
 	// Flatten and process message values
 	flat := make(map[string]interface{})
 
@@ -255,7 +268,8 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 	frame.Fields = make([]*data.Field, totalFields)
 	copy(frame.Fields, fields)
 
-	fieldBuilder := NewFieldBuilder()
+	// Use the passed-in fieldBuilder to maintain type registry across messages
+	// This is critical for proper null value handling in Avro messages
 
 	// Add message fields by direct assignment
 	for i, key := range keys {
@@ -547,6 +561,17 @@ func (sm *StreamManager) ProcessMessage(
 	offsetField := data.NewField("offset", nil, make([]int64, 1))
 	offsetField.Set(0, msg.Offset)
 	fields = append(fields, offsetField)
+
+	// Unwrap Avro union types before flattening (for Avro messages)
+	// This must happen BEFORE flattening to avoid creating keys like "value1.double"
+	config.mu.RLock()
+	isAvro := config.MessageFormat == "avro"
+	config.mu.RUnlock()
+
+	if isAvro {
+		messageValue = UnwrapAvroUnions(messageValue)
+		log.DefaultLogger.Debug("Unwrapped Avro unions before flattening in ProcessMessage")
+	}
 
 	// Flatten and process message values using configured settings
 	flat := make(map[string]interface{})

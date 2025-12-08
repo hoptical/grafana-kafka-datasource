@@ -477,3 +477,183 @@ func TestFieldBuilder_NilFirstBehavior(t *testing.T) {
 		t.Errorf("Step 2: Expected nil value")
 	}
 }
+
+// TestFieldBuilder_AvroUnionHandling tests the unwrapping of Avro union values
+// as returned by goavro when decoding messages with nullable fields
+func TestFieldBuilder_AvroUnionHandling(t *testing.T) {
+	tests := []struct {
+		name          string
+		unionValue    interface{} // Avro union wrapper value from goavro
+		expectedValue interface{} // Expected unwrapped value
+		expectedType  data.FieldType
+		expectNil     bool
+	}{
+		{
+			name:          "Avro union null value",
+			unionValue:    map[string]interface{}{"null": nil},
+			expectedValue: nil,
+			expectedType:  data.FieldTypeNullableFloat64, // Default for unknown nil
+			expectNil:     true,
+		},
+		{
+			name:          "Avro union double value",
+			unionValue:    map[string]interface{}{"double": 42.5},
+			expectedValue: 42.5,
+			expectedType:  data.FieldTypeNullableFloat64,
+			expectNil:     false,
+		},
+		{
+			name:          "Avro union long value",
+			unionValue:    map[string]interface{}{"long": int64(123)},
+			expectedValue: int64(123),
+			expectedType:  data.FieldTypeNullableInt64,
+			expectNil:     false,
+		},
+		{
+			name:          "Avro union string value",
+			unionValue:    map[string]interface{}{"string": "hello"},
+			expectedValue: "hello",
+			expectedType:  data.FieldTypeNullableString,
+			expectNil:     false,
+		},
+		{
+			name:          "Avro union boolean value",
+			unionValue:    map[string]interface{}{"boolean": true},
+			expectedValue: true,
+			expectedType:  data.FieldTypeNullableBool,
+			expectNil:     false,
+		},
+		{
+			name:          "Plain nil (not wrapped)",
+			unionValue:    nil,
+			expectedValue: nil,
+			expectedType:  data.FieldTypeNullableFloat64,
+			expectNil:     true,
+		},
+		{
+			name:          "Plain value (not wrapped)",
+			unionValue:    42.0,
+			expectedValue: 42.0,
+			expectedType:  data.FieldTypeNullableFloat64,
+			expectNil:     false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fb := NewFieldBuilder()
+			frame := newFrameWithCapacity("test", 1)
+			fb.AddValueToFrame(frame, "field", tt.unionValue, 0)
+
+			if len(frame.Fields) != 1 {
+				t.Fatalf("Expected 1 field, got %d", len(frame.Fields))
+			}
+
+			field := frame.Fields[0]
+
+			// Check field type
+			if field.Type() != tt.expectedType {
+				t.Errorf("Expected field type %v, got %v", tt.expectedType, field.Type())
+			}
+
+			// Check if value is nil
+			if tt.expectNil {
+				if !field.NilAt(0) {
+					t.Errorf("Expected nil value at index 0, but got non-nil")
+				}
+			} else {
+				if field.NilAt(0) {
+					t.Errorf("Expected non-nil value at index 0, but got nil")
+				}
+
+				// For non-nil values, check the actual value
+				actualValue := field.At(0)
+				var compareValue interface{}
+				switch v := actualValue.(type) {
+				case *string:
+					if v != nil {
+						compareValue = *v
+					}
+				case *int64:
+					if v != nil {
+						compareValue = *v
+					}
+				case *float64:
+					if v != nil {
+						compareValue = *v
+					}
+				case *bool:
+					if v != nil {
+						compareValue = *v
+					}
+				default:
+					compareValue = actualValue
+				}
+
+				if compareValue != tt.expectedValue {
+					t.Errorf("Expected value %v (%T), got %v (%T)",
+						tt.expectedValue, tt.expectedValue, compareValue, compareValue)
+				}
+			}
+		})
+	}
+}
+
+// TestFieldBuilder_AvroNullSequence tests that Avro union null values work correctly
+// across multiple messages, maintaining type registry
+func TestFieldBuilder_AvroNullSequence(t *testing.T) {
+	fb := NewFieldBuilder()
+
+	// Message 1: double value (wrapped in Avro union)
+	frame1 := newFrameWithCapacity("test", 1)
+	fb.AddValueToFrame(frame1, "value1", map[string]interface{}{"double": 23.5}, 0)
+
+	if len(frame1.Fields) != 1 {
+		t.Fatalf("Message 1: Expected 1 field, got %d", len(frame1.Fields))
+	}
+	field1 := frame1.Fields[0]
+	if field1.Type() != data.FieldTypeNullableFloat64 {
+		t.Errorf("Message 1: Expected NullableFloat64, got %v", field1.Type())
+	}
+	if field1.NilAt(0) {
+		t.Error("Message 1: Expected non-nil value")
+	}
+
+	// Message 2: null value (wrapped in Avro union)
+	frame2 := newFrameWithCapacity("test", 1)
+	fb.AddValueToFrame(frame2, "value1", map[string]interface{}{"null": nil}, 0)
+
+	if len(frame2.Fields) != 1 {
+		t.Fatalf("Message 2: Expected 1 field, got %d", len(frame2.Fields))
+	}
+	field2 := frame2.Fields[0]
+	if field2.Type() != data.FieldTypeNullableFloat64 {
+		t.Errorf("Message 2: Expected NullableFloat64 (from registry), got %v", field2.Type())
+	}
+	if !field2.NilAt(0) {
+		t.Error("Message 2: Expected nil value")
+	}
+
+	// Message 3: double value again (wrapped in Avro union)
+	frame3 := newFrameWithCapacity("test", 1)
+	fb.AddValueToFrame(frame3, "value1", map[string]interface{}{"double": 24.0}, 0)
+
+	if len(frame3.Fields) != 1 {
+		t.Fatalf("Message 3: Expected 1 field, got %d", len(frame3.Fields))
+	}
+	field3 := frame3.Fields[0]
+	if field3.Type() != data.FieldTypeNullableFloat64 {
+		t.Errorf("Message 3: Expected NullableFloat64, got %v", field3.Type())
+	}
+	if field3.NilAt(0) {
+		t.Error("Message 3: Expected non-nil value")
+	}
+
+	// Verify type registry
+	storedType, exists := fb.typeRegistry["value1"]
+	if !exists {
+		t.Error("Type registry should have entry for 'value1'")
+	} else if storedType != data.FieldTypeNullableFloat64 {
+		t.Errorf("Registry type should be NullableFloat64, got %v", storedType)
+	}
+}
