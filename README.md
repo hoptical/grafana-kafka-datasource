@@ -72,7 +72,6 @@ You can automatically configure the Kafka datasource using Grafana's provisionin
     - **Authentication** (SASL, SSL/TLS, optional)
     - **Avro Schema Registry** (if using Avro format)
     - **Timeout settings** (default: two seconds)
-ß
 
 ### Build the Query
 
