@@ -201,7 +201,7 @@ test.describe('Kafka Query Editor - JSON Tests', () => {
 
     // Verify that data is flowing correctly with proper formats
     // Check for timestamp format in time column (YYYY-MM-DD HH:MM:SS)
-    await expect(getTableCells(page).filter({ hasText: /\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/ })).toBeVisible();
+    await expect(getTableCells(page).filter({ hasText: /\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/ }).first()).toBeVisible();
     // Check for float numbers in value columns (just verify at least one numeric cell exists)
     await expect(
       getTableCells(page)

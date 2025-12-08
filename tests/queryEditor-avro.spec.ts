@@ -246,8 +246,7 @@ test.describe('Kafka Query Editor - Avro Tests', () => {
 
     // Verify that Avro data is flowing correctly
     // Check for timestamp format in time column (YYYY-MM-DD HH:MM:SS)
-    await expect(getTableCells(page).filter({ hasText: /\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/ })).toBeVisible();
-
+    await expect(getTableCells(page).filter({ hasText: /\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/ }).first()).toBeVisible();
     // Check for Avro-specific fields (host_name, host_ip, etc.)
     await expect(getTableCells(page).filter({ hasText: 'severity' })).toBeVisible(); // host_ip
   });
@@ -389,7 +388,7 @@ test.describe('Kafka Query Editor - Avro Tests', () => {
 
     // Verify that Avro data is flowing correctly with inline schema
     // Check for timestamp format in time column (YYYY-MM-DD HH:MM:SS)
-    await expect(getTableCells(page).filter({ hasText: /\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/ })).toBeVisible();
+    await expect(getTableCells(page).filter({ hasText: /\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/ }).first()).toBeVisible();
 
     // Check for nested Avro fields (host.name, host.ip, etc.)
     await expect(getTableCells(page).filter({ hasText: 'severity' })).toBeVisible(); // host.name
