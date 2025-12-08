@@ -235,7 +235,6 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 
 	if isAvro {
 		messageValue = UnwrapAvroUnions(messageValue)
-		log.DefaultLogger.Debug("Unwrapped Avro unions before flattening")
 	}
 
 	// Flatten and process message values
@@ -570,7 +569,6 @@ func (sm *StreamManager) ProcessMessage(
 
 	if isAvro {
 		messageValue = UnwrapAvroUnions(messageValue)
-		log.DefaultLogger.Debug("Unwrapped Avro unions before flattening in ProcessMessage")
 	}
 
 	// Flatten and process message values using configured settings
