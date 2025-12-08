@@ -10,30 +10,32 @@ function getTableCells(page: Page): Locator {
   return page.locator('[role="gridcell"], [role="cell"]');
 }
 
-function startAvroKafkaProducer(): ChildProcess {
+function startAvroKafkaProducer(): Promise<ChildProcess> {
   const producerPath = './dist/producer';
   try {
     accessSync(producerPath, constants.X_OK); // Check if file exists and is executable
   } catch (err) {
     throw new Error(`Kafka producer executable not found or not executable at path: ${producerPath}`);
   }
-  const producer = exec(
-    `${producerPath} -broker localhost:9094 -topic test-avro-topic -connect-timeout 500 -num-partitions 3 -format avro -schema-registry http://localhost:8081`,
-    { encoding: 'utf-8' }
-  );
+  return new Promise((resolve, reject) => {
+    const producer = exec(
+      `${producerPath} -broker localhost:9094 -topic test-avro-topic -connect-timeout 500 -num-partitions 3 -format avro -schema-registry http://localhost:8081`,
+      { encoding: 'utf-8' }
+    );
 
-  producer.stdout?.on('data', (data) => {
-    console.log('[Avro Producer stdout]', data);
+    producer.stdout?.on('data', (data) => {
+      console.log('[Avro Producer stdout]', data);
+    });
+    producer.stderr?.on('data', (data) => {
+      console.error('[Avro Producer stderr]', data);
+    });
+    producer.on('exit', (code) => {
+      if (code !== 0) {
+        reject(new Error(`Avro Kafka producer exited with code ${code}`));
+      }
+    });
+    resolve(producer);
   });
-  producer.stderr?.on('data', (data) => {
-    console.error('[Avro Producer stderr]', data);
-  });
-  producer.on('exit', (code) => {
-    if (code !== 0) {
-      throw new Error(`Avro Kafka producer exited with code ${code}`);
-    }
-  });
-  return producer;
 }
 
 async function findMessageFormatSelector(page: Page): Promise<Locator | null> {
@@ -127,7 +129,6 @@ test.describe('Kafka Query Editor - Avro Tests', () => {
 
     // Fill in topic name
     await page.getByRole('textbox', { name: 'Enter topic name' }).fill('test-topic');
-
     // Select Avro message format
     await selectAvroMessageFormat(page);
 
@@ -205,12 +206,13 @@ test.describe('Kafka Query Editor - Avro Tests', () => {
     await panelEditPage.datasource.set(ds.name);
 
     // Start the Avro Kafka producer with schema registry
-    startAvroKafkaProducer();
+    await startAvroKafkaProducer();
     // Wait for some data to be produced
     await new Promise((resolve) => setTimeout(resolve, 3000));
 
     // Fill in the query editor fields
     await page.getByRole('textbox', { name: 'Enter topic name' }).fill('test-avro-topic');
+    await page.getByText('test-avro-topic').click(); // The topic name is clicked from the autocomplete list
 
     // Select Avro message format
     await selectAvroMessageFormat(page);
@@ -263,13 +265,12 @@ test.describe('Kafka Query Editor - Avro Tests', () => {
     await panelEditPage.datasource.set(ds.name);
 
     // Start the Avro Kafka producer with schema registry
-    startAvroKafkaProducer();
+    await startAvroKafkaProducer();
     // Wait for some data to be produced
     await new Promise((resolve) => setTimeout(resolve, 3000));
 
     // Fill in the query editor fields
     await page.getByRole('textbox', { name: 'Enter topic name' }).fill('test-avro-topic');
-
     await page.getByText('test-avro-topic').click(); // The topic name is clicked from the autocomplete list
     // Select Avro message format
     await selectAvroMessageFormat(page);

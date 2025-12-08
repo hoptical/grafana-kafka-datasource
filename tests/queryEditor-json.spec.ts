@@ -9,30 +9,32 @@ function getTableCells(page: Page): Locator {
   // Use a CSS selector that works for both roles
   return page.locator('[role="gridcell"], [role="cell"]');
 }
-function startKafkaProducer(): ChildProcess {
+function startKafkaProducer(): Promise<ChildProcess> {
   const producerPath = './dist/producer';
   try {
     accessSync(producerPath, constants.X_OK); // Check if file exists and is executable
   } catch (err) {
     throw new Error(`Kafka producer executable not found or not executable at path: ${producerPath}`);
   }
-  const producer = exec(
-    `${producerPath} -broker localhost:9094 -topic test-topic -connect-timeout 500 -num-partitions 3`,
-    { encoding: 'utf-8' }
-  );
+  return new Promise((resolve, reject) => {
+    const producer = exec(
+      `${producerPath} -broker localhost:9094 -topic test-topic -connect-timeout 500 -num-partitions 3`,
+      { encoding: 'utf-8' }
+    );
 
-  producer.stdout?.on('data', (data) => {
-    console.log('[Producer stdout]', data);
+    producer.stdout?.on('data', (data) => {
+      console.log('[Producer stdout]', data);
+    });
+    producer.stderr?.on('data', (data) => {
+      console.error('[Producer stderr]', data);
+    });
+    producer.on('exit', (code) => {
+      if (code !== 0) {
+        reject(new Error(`Kafka producer exited with code ${code}`));
+      }
+    });
+    resolve(producer);
   });
-  producer.stderr?.on('data', (data) => {
-    console.error('[Producer stderr]', data);
-  });
-  producer.on('exit', (code) => {
-    if (code !== 0) {
-      throw new Error(`Kafka producer exited with code ${code}`);
-    }
-  });
-  return producer;
 }
 
 test.describe('Kafka Query Editor - JSON Tests', () => {
@@ -163,13 +165,14 @@ test.describe('Kafka Query Editor - JSON Tests', () => {
     await panelEditPage.datasource.set(ds.name);
 
     // Start the Kafka producer
-    startKafkaProducer();
+    await startKafkaProducer();
     // Wait for some data to be produced
     await new Promise((resolve) => setTimeout(resolve, 3000));
 
     // Fill in the query editor fields
     await page.getByRole('textbox', { name: 'Enter topic name' }).fill('test-topic');
     await page.getByRole('button', { name: 'Fetch' }).click();
+    await page.getByText('test-topic').click(); // The topic name is clicked from the autocomplete list
 
     // Wait for partition selector to be available after fetch
     const partitionSelector = page.locator('div').filter({ hasText: /^All partitions$/ }).nth(2)
@@ -307,7 +310,7 @@ test.describe('Kafka Query Editor - JSON Tests', () => {
     await panelEditPage.datasource.set(ds.name);
 
     // Start producer
-    startKafkaProducer();
+    await startKafkaProducer();
     await new Promise((r) => setTimeout(r, 3000));
 
     // Fetch partitions for existing topic
