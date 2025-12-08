@@ -233,7 +233,8 @@ test.describe('Kafka Query Editor - Avro Tests', () => {
     const allPartitionsOption = page.getByLabel('Select options menu').getByText('All partitions')
       .or(page.getByRole('option', { name: /^All partitions$/ }));
     await allPartitionsOption.first().click();
-
+    // wait. for a second
+    await new Promise((resolve) => setTimeout(resolve, 1000));
     // Set visualization
     try {
       await panelEditPage.setVisualization('Table');
@@ -374,7 +375,7 @@ test.describe('Kafka Query Editor - Avro Tests', () => {
     const allPartitionsOption = page.getByLabel('Select options menu').getByText('All partitions')
       .or(page.getByRole('option', { name: /^All partitions$/ }));
     await allPartitionsOption.first().click();
-
+    await new Promise((resolve) => setTimeout(resolve, 1000));
     // Set visualization
     try {
       await panelEditPage.setVisualization('Table');
