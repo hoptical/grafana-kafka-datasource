@@ -16,12 +16,22 @@ func UnwrapAvroUnions(in interface{}) interface{} {
 				return nil
 			}
 
-			// Check for other Avro primitive types
+			// Check for other Avro types (primitives and complex types)
 			for typeName, typeValue := range val {
 				switch typeName {
 				case "string", "bytes", "int", "long", "float", "double", "boolean":
-					// This is an Avro union wrapper, return the unwrapped value
+					// This is an Avro union wrapper with primitive type, return the unwrapped value
 					return typeValue
+				default:
+					// This is an Avro union wrapper with a complex type (record/array/map/named type)
+					// Recursively unwrap it to handle nested unions
+					switch typeValue.(type) {
+					case map[string]interface{}, []interface{}:
+						return UnwrapAvroUnions(typeValue)
+					default:
+						// Non-primitive but also not a complex structure, return as-is
+						return typeValue
+					}
 				}
 			}
 		}
