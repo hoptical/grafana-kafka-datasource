@@ -248,7 +248,7 @@ test.describe('Kafka Query Editor - Avro Tests', () => {
     // Check for timestamp format in time column (YYYY-MM-DD HH:MM:SS)
     await expect(getTableCells(page).filter({ hasText: /\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/ }).first()).toBeVisible();
     // Check for Avro-specific fields (host_name, host_ip, etc.)
-    await expect(getTableCells(page).filter({ hasText: 'severity' })).toBeVisible(); // host_ip
+    await expect(getTableCells(page).filter({ hasText: 'severity' }).first()).toBeVisible();
   });
 
   // Test streaming Avro data from Kafka topic with Inline Schema
@@ -391,6 +391,6 @@ test.describe('Kafka Query Editor - Avro Tests', () => {
     await expect(getTableCells(page).filter({ hasText: /\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/ }).first()).toBeVisible();
 
     // Check for nested Avro fields (host.name, host.ip, etc.)
-    await expect(getTableCells(page).filter({ hasText: 'severity' })).toBeVisible(); // host.name
+    await expect(getTableCells(page).filter({ hasText: 'severity' }).first()).toBeVisible();
   });
 });
