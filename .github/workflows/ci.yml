@@ -67,6 +67,13 @@ jobs:
           version: latest
           args: coverage
 
+      - name: Test backend with race detector
+        if: steps.check-for-backend.outputs.has-backend == 'true'
+        uses: magefile/mage-action@v3
+        with:
+          version: latest
+          args: testRace
+
       - name: Build backend
         if: steps.check-for-backend.outputs.has-backend == 'true'
         uses: magefile/mage-action@v3
