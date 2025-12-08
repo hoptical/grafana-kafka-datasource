@@ -46,7 +46,7 @@ The dev container does not have Docker CLI/daemon access. This means `npm run se
 
 - Grafana v10.2+
 - Node.js v22.15+
-- Go 1.24.1+
+- Go 1.24.6+
 - Mage v1.15.0+
 - Docker
 
