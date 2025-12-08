@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	grafanalog "github.com/grafana/grafana-plugin-sdk-go/backend/log"
 	"github.com/segmentio/kafka-go/sasl"
 	"github.com/segmentio/kafka-go/sasl/plain"
 	"github.com/segmentio/kafka-go/sasl/scram"
@@ -48,9 +49,14 @@ type Options struct {
 	TLSClientCert     string `json:"tlsClientCert"`
 	TLSClientKey      string `json:"tlsClientKey"`
 	// Advanced settings
-	Timeout         int32 `json:"timeout"` // ms; primary timeout
-	FlattenMaxDepth int   `json:"flattenMaxDepth"`
-	FlattenFieldCap int   `json:"flattenFieldCap"`
+	Timeout int32 `json:"timeout"` // ms; primary timeout
+	// Avro Configuration
+	MessageFormat          string `json:"messageFormat"`
+	SchemaRegistryUrl      string `json:"schemaRegistryUrl"`
+	SchemaRegistryUsername string `json:"schemaRegistryUsername"`
+	SchemaRegistryPassword string `json:"schemaRegistryPassword"`
+	FlattenMaxDepth        int    `json:"flattenMaxDepth"`
+	FlattenFieldCap        int    `json:"flattenFieldCap"`
 }
 
 type KafkaClient struct {
@@ -76,16 +82,96 @@ type KafkaClient struct {
 	TLSClientKey      string
 	// Advanced settings
 	Timeout int32 // effective timeout (ms)
+	// Avro Configuration
+	MessageFormat          string
+	SchemaRegistryUrl      string
+	SchemaRegistryUsername string
+	SchemaRegistryPassword string
 }
 
 type KafkaMessage struct {
-	Value     interface{} // Can be map[string]interface{} or []interface{}
-	Timestamp time.Time
-	Offset    int64
+	Value     interface{} `json:"value,omitempty"` // Can be map[string]interface{} or []interface{}
+	RawValue  []byte      `json:"-"`               // Raw message bytes for Avro decoding - not serialized
+	Timestamp time.Time   `json:"timestamp"`
+	Offset    int64       `json:"offset"`
+	Error     error       `json:"-"` // Error if decoding failed - not serialized
 }
 
 // ErrTopicNotFound indicates the requested topic does not exist.
 var ErrTopicNotFound = errors.New("topic not found")
+
+// decodeMessageValue decodes the message value based on the specified format.
+// For "avro", it returns nil (decoding deferred).
+// For "json", it attempts JSON decoding and returns an error if it fails.
+// For other formats, it attempts JSON decoding but doesn't return an error on failure.
+func (client *KafkaClient) decodeMessageValue(data []byte, format string) (interface{}, error) {
+	if format == "avro" {
+		grafanalog.DefaultLogger.Debug("Skipping JSON decoding for Avro format message",
+			"valueLength", len(data))
+		// For Avro format, don't attempt JSON parsing
+		return nil, nil
+	} else if format == "json" {
+		// For JSON format, require successful JSON decoding
+		var doc interface{}
+		dec := json.NewDecoder(bytes.NewReader(data))
+		dec.UseNumber()
+		if err := dec.Decode(&doc); err != nil {
+			previewLen := 10
+			if len(data) < previewLen {
+				previewLen = len(data)
+			}
+			grafanalog.DefaultLogger.Error("JSON decoding failed for JSON format message",
+				"error", err,
+				"valueLength", len(data),
+				"errorType", fmt.Sprintf("%T", err),
+				"firstBytes", fmt.Sprintf("%x", data[:previewLen]))
+			return nil, fmt.Errorf("failed to decode message as JSON: %w", err)
+		} else {
+			// Accept both objects and arrays at the top level
+			switch v := doc.(type) {
+			case map[string]interface{}, []interface{}:
+				grafanalog.DefaultLogger.Debug("JSON decoding successful",
+					"decodedType", fmt.Sprintf("%T", v))
+				return v, nil
+			default:
+				grafanalog.DefaultLogger.Error("JSON decoded but not object/array for JSON format",
+					"decodedType", fmt.Sprintf("%T", v))
+				return nil, fmt.Errorf("decoded JSON is not a valid object or array: %T", v)
+			}
+		}
+	} else {
+		// For other formats or unspecified, try JSON for backward compatibility but don't fail
+		var doc interface{}
+		dec := json.NewDecoder(bytes.NewReader(data))
+		dec.UseNumber()
+		if err := dec.Decode(&doc); err != nil {
+			previewLen := 10
+			if len(data) < previewLen {
+				previewLen = len(data)
+			}
+			grafanalog.DefaultLogger.Debug("JSON decoding failed, message may be binary",
+				"error", err,
+				"valueLength", len(data),
+				"errorType", fmt.Sprintf("%T", err),
+				"firstBytes", fmt.Sprintf("%x", data[:previewLen]))
+			// If JSON decoding fails, we'll handle it later
+			return nil, nil
+		} else {
+			// Accept both objects and arrays at the top level
+			switch v := doc.(type) {
+			case map[string]interface{}, []interface{}:
+				grafanalog.DefaultLogger.Debug("JSON decoding successful",
+					"decodedType", fmt.Sprintf("%T", v))
+				return v, nil
+			default:
+				grafanalog.DefaultLogger.Debug("JSON decoded but not object/array",
+					"decodedType", fmt.Sprintf("%T", v))
+				// If it's not a valid JSON object/array, leave as nil
+				return nil, nil
+			}
+		}
+	}
+}
 
 func NewKafkaClient(options Options) KafkaClient {
 	// Build broker slice once
@@ -121,6 +207,11 @@ func NewKafkaClient(options Options) KafkaClient {
 		TLSClientCert:     options.TLSClientCert,
 		TLSClientKey:      options.TLSClientKey,
 		Timeout:           effectiveTimeoutMs,
+		// Avro Configuration
+		MessageFormat:          options.MessageFormat,
+		SchemaRegistryUrl:      options.SchemaRegistryUrl,
+		SchemaRegistryUsername: options.SchemaRegistryUsername,
+		SchemaRegistryPassword: options.SchemaRegistryPassword,
 	}
 }
 
@@ -234,6 +325,11 @@ func (client *KafkaClient) NewStreamReader(ctx context.Context, topic string, pa
 		if n <= 0 {
 			n = 100
 		}
+		grafanalog.DefaultLogger.Debug("Setting up lastN reader",
+			"topic", topic,
+			"partition", partition,
+			"requestedLastN", lastN,
+			"effectiveLastN", n)
 		if len(client.Brokers) == 0 {
 			reader.Close()
 			return nil, fmt.Errorf("no brokers configured to read offsets")
@@ -266,6 +362,13 @@ func (client *KafkaClient) NewStreamReader(ctx context.Context, topic string, pa
 		if start < earliest {
 			start = earliest
 		}
+		grafanalog.DefaultLogger.Debug("LastN offset calculation",
+			"topic", topic,
+			"partition", partition,
+			"earliest", earliest,
+			"latest", latest,
+			"requestedLastN", n,
+			"calculatedStart", start)
 		if err := reader.SetOffset(start); err != nil {
 			reader.Close()
 			return nil, fmt.Errorf("unable to set lastN start offset: %w", err)
@@ -279,30 +382,51 @@ func (client *KafkaClient) NewStreamReader(ctx context.Context, topic string, pa
 	return reader, nil
 }
 
-func (client *KafkaClient) ConsumerPull(ctx context.Context, reader *kafka.Reader) (KafkaMessage, error) {
+func (client *KafkaClient) ConsumerPull(ctx context.Context, reader *kafka.Reader, messageFormat string) (KafkaMessage, error) {
 	var message KafkaMessage
 	msg, err := reader.ReadMessage(ctx)
 	if err != nil {
 		return message, fmt.Errorf("error reading message from Kafka: %w", err)
 	}
-	// Decode while preserving numeric formats via UseNumber, and support both objects and arrays.
-	var doc interface{}
-	dec := json.NewDecoder(bytes.NewReader(msg.Value))
-	dec.UseNumber()
-	if err := dec.Decode(&doc); err != nil {
-		return message, fmt.Errorf("error unmarshalling message: %w", err)
+
+	grafanalog.DefaultLogger.Debug("Received Kafka message",
+		"topic", msg.Topic,
+		"partition", msg.Partition,
+		"offset", msg.Offset,
+		"valueLength", len(msg.Value),
+		"timestamp", msg.Time,
+		"messageFormat", messageFormat)
+
+	// Store raw bytes for potential Avro decoding
+	message.RawValue = msg.Value
+
+	// Log first few bytes for debugging
+	if len(msg.Value) > 0 {
+		preview := msg.Value
+		if len(preview) > 20 {
+			preview = preview[:20]
+		}
+		grafanalog.DefaultLogger.Debug("Message content preview",
+			"firstBytes", fmt.Sprintf("%x", preview),
+			"firstChars", string(preview))
 	}
 
-	// Accept both objects and arrays at the top level
-	switch v := doc.(type) {
-	case map[string]interface{}, []interface{}:
-		message.Value = v
-	default:
-		return message, fmt.Errorf("message JSON must be an object or array")
+	// Decode message value based on format
+	value, err := client.decodeMessageValue(msg.Value, messageFormat)
+	if err != nil {
+		message.Error = err
+		message.Value = nil
+	} else {
+		message.Value = value
 	}
 
 	message.Offset = msg.Offset
 	message.Timestamp = msg.Time
+
+	grafanalog.DefaultLogger.Debug("Message processing complete",
+		"hasParsedValue", message.Value != nil,
+		"rawValueLength", len(message.RawValue))
+
 	return message, nil
 }
 
@@ -413,4 +537,29 @@ func getKafkaLogger(level string) (kafka.LoggerFunc, kafka.LoggerFunc) {
 		errorLogger = func(msg string, args ...interface{}) { log.Printf("[KAFKA ERROR] "+msg, args...) }
 	}
 	return logger, errorLogger
+}
+
+// GetMessageFormat returns the message format setting
+func (client *KafkaClient) GetMessageFormat() string {
+	return client.MessageFormat
+}
+
+// GetSchemaRegistryUrl returns the Schema Registry URL
+func (client *KafkaClient) GetSchemaRegistryUrl() string {
+	return client.SchemaRegistryUrl
+}
+
+// GetSchemaRegistryUsername returns the Schema Registry username
+func (client *KafkaClient) GetSchemaRegistryUsername() string {
+	return client.SchemaRegistryUsername
+}
+
+// GetSchemaRegistryPassword returns the Schema Registry password
+func (client *KafkaClient) GetSchemaRegistryPassword() string {
+	return client.SchemaRegistryPassword
+}
+
+// GetAvroSubjectNamingStrategy returns the Avro subject naming strategy
+func (client *KafkaClient) GetAvroSubjectNamingStrategy() string {
+	return "recordName" // Uses record name from schema as subject name
 }

@@ -67,6 +67,13 @@ jobs:
           version: latest
           args: coverage
 
+      - name: Test backend with race detector
+        if: steps.check-for-backend.outputs.has-backend == 'true'
+        uses: magefile/mage-action@v3
+        with:
+          version: latest
+          args: testRace
+
       - name: Build backend
         if: steps.check-for-backend.outputs.has-backend == 'true'
         uses: magefile/mage-action@v3
@@ -76,7 +83,7 @@ jobs:
 
       - name: Build Kafka producer example
         run: |
-          go build -o dist/producer example/go/producer.go
+          go build -o dist/producer example/go/*.go
 
       - name: Check for E2E
         id: check-for-e2e

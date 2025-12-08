@@ -67,7 +67,24 @@ func main() {
 	valuesOffset := flag.Float64("values-offset", 1.0, "Offset for the values")
 	connectTimeout := flag.Int("connect-timeout", 5000, "Broker connect timeout in milliseconds")
 	shape := flag.String("shape", "nested", "Payload shape: nested, flat, or list")
+	format := flag.String("format", "json", "Message format: json or avro")
+	schemaRegistryURL := flag.String("schema-registry", "", "Schema registry URL (for Avro with schema registry)")
+	schemaRegistryUser := flag.String("schema-registry-user", "", "Schema registry username (optional)")
+	schemaRegistryPass := flag.String("schema-registry-pass", "", "Schema registry password (optional)")
+	verbose := flag.Bool("verbose", false, "Enable verbose logging")
 	flag.Parse()
+
+	// Validate format
+	if *format != "json" && *format != "avro" {
+		fmt.Printf("Error: Invalid format %q. Valid options: json, avro\n", *format)
+		os.Exit(1)
+	}
+
+	// Validate Avro compatibility
+	if *format == "avro" && *shape == "list" {
+		fmt.Printf("Error: Avro format does not support 'list' shape. Use 'flat' or 'nested' shapes with Avro.\n")
+		os.Exit(1)
+	}
 
 	// Create topic if it doesn't exist
 	timeout := time.Duration(*connectTimeout) * time.Millisecond
@@ -102,19 +119,40 @@ func main() {
 			value2 = nil
 		}
 
+		var messageData []byte
+		var err error
+
+		// Create payload based on shape
 		var payload interface{}
 		switch *shape {
 		case "flat":
-			payload = map[string]interface{}{
-				"host.name":        hostName,
-				"host.ip":          hostIP,
-				"metrics.cpu.load": value1,
-				"metrics.cpu.temp": 60.0 + rand.Float64()*10.0,
-				"metrics.mem.used": 1000 + rand.Intn(2000),
-				"metrics.mem.free": 8000 + rand.Intn(2000),
-				"value1":           value1,
-				"value2":           value2,
-				"tags":             []string{"prod", "edge"},
+			// Use appropriate field names based on format
+			if *format == "avro" {
+				// Avro requires valid field names (no dots)
+				payload = map[string]interface{}{
+					"host_name":        hostName,
+					"host_ip":          hostIP,
+					"metrics_cpu_load": value1,
+					"metrics_cpu_temp": 60.0 + rand.Float64()*10.0,
+					"metrics_mem_used": 1000 + rand.Intn(2000),
+					"metrics_mem_free": 8000 + rand.Intn(2000),
+					"value1":           value1,
+					"value2":           value2,
+					"tags":             []string{"prod", "edge"},
+				}
+			} else {
+				// JSON can use dotted field names
+				payload = map[string]interface{}{
+					"host.name":        hostName,
+					"host.ip":          hostIP,
+					"metrics.cpu.load": value1,
+					"metrics.cpu.temp": 60.0 + rand.Float64()*10.0,
+					"metrics.mem.used": 1000 + rand.Intn(2000),
+					"metrics.mem.free": 8000 + rand.Intn(2000),
+					"value1":           value1,
+					"value2":           value2,
+					"tags":             []string{"prod", "edge"},
+				}
 			}
 		case "nested":
 			payload = map[string]interface{}{
@@ -150,7 +188,7 @@ func main() {
 				"processes": []string{"nginx", "mysql", "redis"},
 			}
 		case "list":
-			// JSON that starts with an array containing multiple records
+			// Top-level array of records
 			payload = []interface{}{
 				map[string]interface{}{
 					"id":   counter,
@@ -179,33 +217,7 @@ func main() {
 						"name": hostName,
 						"ip":   hostIP,
 					},
-					"value":     rawValue1 * 1.5,
-					"timestamp": time.Now().Unix(),
-				},
-				map[string]interface{}{
-					"id":   counter + 1001,
-					"type": "event",
-					"host": map[string]interface{}{
-						"name": hostName,
-						"ip":   hostIP,
-					},
-					"value":     rawValue2 * 0.8,
-					"timestamp": time.Now().Unix(),
-				},
-				map[string]interface{}{
-					"id":        counter + 2000,
-					"type":      "log",
-					"message":   fmt.Sprintf("Sample log entry #%d", counter),
-					"level":     "info",
-					"tags":      []string{"prod", "edge"},
-					"timestamp": time.Now().Unix(),
-				},
-				map[string]interface{}{
-					"id":        counter + 2001,
-					"type":      "log",
-					"message":   fmt.Sprintf("Sample log entry #%d (batch)", counter),
-					"level":     "debug",
-					"tags":      []string{"prod", "edge", "batch"},
+					"message":   "Sample log entry",
 					"timestamp": time.Now().Unix(),
 				},
 			}
@@ -215,17 +227,35 @@ func main() {
 			os.Exit(1)
 		}
 
-		// Convert payload to JSON
-		jsonData, err := json.Marshal(payload)
+		// Encode based on format
+		if *format == "json" {
+			messageData, err = json.Marshal(payload)
+		} else if *format == "avro" {
+			if *verbose {
+				fmt.Printf("[PRODUCER DEBUG] Using Avro format for message #%d\n", counter)
+			}
+			messageData, err = EncodeAvroMessage(*shape, payload, *schemaRegistryURL, *schemaRegistryUser, *schemaRegistryPass, *topic, *verbose)
+		}
+
 		if err != nil {
-			fmt.Printf("Error marshaling JSON: %v\n", err)
-			os.Exit(1)
+			fmt.Printf("Error encoding message: %v\n", err)
+			continue
+		}
+
+		if *verbose {
+			fmt.Printf("[PRODUCER DEBUG] Final message length: %d bytes, format: %s\n", len(messageData), *format)
+			if len(messageData) > 0 && len(messageData) <= 20 {
+				fmt.Printf("[PRODUCER DEBUG] Message content: %x\n", messageData)
+			} else if len(messageData) > 20 {
+				fmt.Printf("[PRODUCER DEBUG] Message preview: %x...\n", messageData[:20])
+			}
 		}
 
 		// Produce message
 		err = w.WriteMessages(context.Background(),
 			kafka.Message{
-				Value: jsonData,
+				Key:   []byte(fmt.Sprintf("key-%d", counter)),
+				Value: messageData,
 			},
 		)
 		if err != nil {
@@ -233,7 +263,11 @@ func main() {
 			os.Exit(1)
 		}
 
-		fmt.Printf("Sample #%d produced to topic %s (shape=%s)!\n", counter, *topic, *shape)
+		if *verbose {
+			fmt.Printf("Sample #%d produced to topic %s (shape=%s, format=%s)!\n", counter, *topic, *shape, *format)
+		} else {
+			fmt.Printf("Sample #%d produced to topic %s\n", counter, *topic)
+		}
 		counter++
 		time.Sleep(time.Duration(*sleepTime) * time.Millisecond)
 	}

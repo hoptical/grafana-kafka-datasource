@@ -3,7 +3,7 @@ import React, { ChangeEvent, PureComponent } from 'react';
 import { InlineField, InlineFieldRow, Input, Select, Button, Spinner, Alert, InlineLabel } from '@grafana/ui';
 import { QueryEditorProps } from '@grafana/data';
 import { DataSource } from './datasource';
-import { defaultQuery, KafkaDataSourceOptions, KafkaQuery, AutoOffsetReset, TimestampMode } from './types';
+import { defaultQuery, KafkaDataSourceOptions, KafkaQuery, AutoOffsetReset, TimestampMode, AvroSchemaSource, MessageFormat } from './types';
 
 // Constants for Last N messages input
 const LAST_N_MIN = 1;
@@ -21,6 +21,16 @@ const timestampModes: Array<{ label: string; value: TimestampMode }> = [
   { label: 'Dashboard received time', value: TimestampMode.Now },
 ];
 
+const avroSchemaSources: Array<{ label: string; value: AvroSchemaSource }> = [
+  { label: 'Schema Registry', value: AvroSchemaSource.SCHEMA_REGISTRY },
+  { label: 'Inline Schema', value: AvroSchemaSource.INLINE_SCHEMA },
+];
+
+const messageFormats: Array<{ label: string; value: MessageFormat }> = [
+  { label: 'JSON', value: MessageFormat.JSON },
+  { label: 'Avro', value: MessageFormat.AVRO },
+];
+
 const partitionOptions: Array<{ label: string; value: number | 'all' }> = [{ label: 'All partitions', value: 'all' }];
 
 type Props = QueryEditorProps<DataSource, KafkaQuery, KafkaDataSourceOptions>;
@@ -31,13 +41,23 @@ interface State {
   showingSuggestions: boolean;
   loadingPartitions: boolean;
   partitionSuccess?: string;
+  schemaValidation?: {
+    status: 'valid' | 'invalid' | 'loading';
+    message?: string;
+  };
+  schemaRegistryValidation?: {
+    status: 'valid' | 'invalid' | 'loading';
+    message?: string;
+  };
 }
 
 export class QueryEditor extends PureComponent<Props, State> {
   private debouncedSearchTopics: DebouncedFunc<(input: string) => void>;
+  private debouncedRunQuery: DebouncedFunc<() => void>;
   private lastCommittedTopic = '';
   private fetchPartitionsTimeoutId?: ReturnType<typeof setTimeout>;
   private topicBlurTimeout?: ReturnType<typeof setTimeout>;
+  private schemaValidationTimeout?: ReturnType<typeof setTimeout>;
 
   constructor(props: Props) {
     super(props);
@@ -50,6 +70,10 @@ export class QueryEditor extends PureComponent<Props, State> {
     };
 
     this.debouncedSearchTopics = debounce(this.searchTopics, 300);
+    // Add debounced version of query execution to handle rapid changes better
+    this.debouncedRunQuery = debounce(() => {
+      this.props.onRunQuery();
+    }, 500);
   }
 
   componentDidMount() {
@@ -63,6 +87,8 @@ export class QueryEditor extends PureComponent<Props, State> {
   componentWillUnmount() {
     // Cancel debounced topic search to avoid setState after unmount
     this.debouncedSearchTopics.cancel();
+    // Cancel debounced query execution to avoid issues after unmount
+    this.debouncedRunQuery.cancel();
     if (this.fetchPartitionsTimeoutId) {
       clearTimeout(this.fetchPartitionsTimeoutId);
       this.fetchPartitionsTimeoutId = undefined;
@@ -71,10 +97,14 @@ export class QueryEditor extends PureComponent<Props, State> {
       clearTimeout(this.topicBlurTimeout);
       this.topicBlurTimeout = undefined;
     }
+    if (this.schemaValidationTimeout) {
+      clearTimeout(this.schemaValidationTimeout);
+      this.schemaValidationTimeout = undefined;
+    }
   }
 
   fetchPartitions = async () => {
-    const { datasource, query } = this.props;
+    const { datasource, query, onChange, onRunQuery } = this.props;
     if (!query.topicName) {
       this.setState({ availablePartitions: [] });
       return;
@@ -88,6 +118,13 @@ export class QueryEditor extends PureComponent<Props, State> {
         loadingPartitions: false,
         partitionSuccess: `Fetched ${partCount} partition${partCount === 1 ? '' : 's'}`,
       });
+      
+      // Auto-apply "all partitions" if not already set and trigger query
+      if (query.partition === undefined || query.partition === null) {
+        onChange({ ...query, partition: 'all' });
+        onRunQuery();
+      }
+      
       // Clear success after 5s
       if (this.fetchPartitionsTimeoutId) {
         clearTimeout(this.fetchPartitionsTimeoutId);
@@ -170,6 +207,9 @@ export class QueryEditor extends PureComponent<Props, State> {
   onPartitionChange = (value: number | 'all') => {
     const { onChange, query, onRunQuery } = this.props;
     onChange({ ...query, partition: value });
+    // Cancel any pending debounced query to prevent race conditions
+    this.debouncedRunQuery.cancel();
+    // Run query immediately for partition changes
     onRunQuery();
   };
 
@@ -201,11 +241,131 @@ export class QueryEditor extends PureComponent<Props, State> {
     onRunQuery();
   };
 
+  onAvroSchemaSourceChanged = (value: AvroSchemaSource) => {
+    const { onChange, query, onRunQuery } = this.props;
+    onChange({ ...query, avroSchemaSource: value });
+    onRunQuery();
+  };
+
+  onAvroSchemaChanged = (event: ChangeEvent<HTMLTextAreaElement>) => {
+    const { onChange, query, onRunQuery } = this.props;
+    const newSchema = event.target.value;
+    onChange({ ...query, avroSchema: newSchema });
+    onRunQuery();
+
+    // Validate the schema after a short delay
+    if (this.schemaValidationTimeout) {
+      clearTimeout(this.schemaValidationTimeout);
+    }
+    this.schemaValidationTimeout = setTimeout(() => {
+      this.validateAvroSchema(newSchema);
+    }, 500);
+  };
+
+  onAvroSchemaFileUpload = (event: ChangeEvent<HTMLInputElement>) => {
+    const { onChange, query, onRunQuery } = this.props;
+    const file = event.target.files?.[0];
+    if (file) {
+      // Validate file type
+      if (!file.name.match(/\.(avsc|json)$/i)) {
+        this.setState({
+          schemaValidation: { status: 'invalid', message: 'Please upload a .avsc or .json file' },
+        });
+        return;
+      }
+      // Validate file size (5MB limit)
+      if (file.size > 5 * 1024 * 1024) {
+        this.setState({
+          schemaValidation: { status: 'invalid', message: 'File size must be less than 5MB' },
+        });
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const schema = e.target?.result as string;
+        onChange({ ...query, avroSchema: schema });
+        onRunQuery();
+        // Validate the uploaded schema
+        this.validateAvroSchema(schema);
+      };
+      reader.onerror = () => {
+        this.setState({
+          schemaValidation: { status: 'invalid', message: 'Failed to read file' },
+        });
+      };
+      reader.readAsText(file);
+    }
+  };
+
+  validateAvroSchema = async (schema: string) => {
+    if (!schema.trim()) {
+      this.setState({
+        schemaValidation: { status: 'invalid', message: 'Schema cannot be empty' },
+      });
+      return;
+    }
+
+    this.setState({
+      schemaValidation: { status: 'loading' },
+    });
+
+    try {
+      const result = await this.props.datasource.validateAvroSchema(schema);
+      this.setState({
+        schemaValidation: {
+          status: result.status === 'error' ? 'invalid' : 'valid',
+          message: result.message,
+        },
+      });
+    } catch (error) {
+      this.setState({
+        schemaValidation: {
+          status: 'invalid',
+          message: 'Failed to validate schema',
+        },
+      });
+    }
+  };
+
+  validateSchemaRegistry = async () => {
+    this.setState({
+      schemaRegistryValidation: { status: 'loading' },
+    });
+
+    try {
+      const result = await this.props.datasource.validateSchemaRegistry();
+      this.setState({
+        schemaRegistryValidation: {
+          status: result.status === 'error' ? 'invalid' : 'valid',
+          message: result.message,
+        },
+      });
+    } catch (error) {
+      this.setState({
+        schemaRegistryValidation: {
+          status: 'invalid',
+          message: 'Failed to validate schema registry',
+        },
+      });
+    }
+  };
+
+  onMessageFormatChanged = (value: MessageFormat) => {
+    const { onChange, query, onRunQuery } = this.props;
+    onChange({ ...query, messageFormat: value });
+    // Cancel any pending debounced query to prevent race conditions
+    this.debouncedRunQuery.cancel();
+    // Run query immediately for message format changes
+    onRunQuery();
+  };
+
   onTopicSuggestionClick = (topic: string) => {
     const { onChange, query, onRunQuery } = this.props;
     onChange({ ...query, topicName: topic });
     this.setState({ showingSuggestions: false, topicSuggestions: [] });
     this.lastCommittedTopic = topic;
+    // Cancel any pending debounced query to prevent race conditions
+    this.debouncedRunQuery.cancel();
     onRunQuery();
   };
 
@@ -230,7 +390,7 @@ export class QueryEditor extends PureComponent<Props, State> {
 
   render() {
     const query = { ...defaultQuery, ...this.props.query };
-    const { topicName, partition, autoOffsetReset, timestampMode, lastN } = query;
+    const { topicName, partition, autoOffsetReset, timestampMode, lastN, messageFormat } = query;
 
     return (
       <>
@@ -387,6 +547,120 @@ export class QueryEditor extends PureComponent<Props, State> {
             />
           </InlineField>
         </InlineFieldRow>
+
+        <InlineFieldRow>
+          <InlineField 
+            label="Message Format" 
+            labelWidth={25} 
+            tooltip="Format of the Kafka messages (JSON or Avro)"
+          >
+            <Select
+              width={25}
+              value={messageFormat || MessageFormat.JSON}
+              options={messageFormats}
+              onChange={(value) => this.onMessageFormatChanged(value.value as MessageFormat)}
+            />
+          </InlineField>
+        </InlineFieldRow>
+
+        {/* Avro Configuration */}
+        {messageFormat === MessageFormat.AVRO && (
+          <>
+            <InlineFieldRow>
+              <InlineField
+                label="Avro Schema Source"
+                labelWidth={25}
+                tooltip="Source of the Avro schema for deserialization"
+              >
+                <Select
+                  width={25}
+                  value={query.avroSchemaSource || AvroSchemaSource.SCHEMA_REGISTRY}
+                  options={avroSchemaSources}
+                  onChange={(value) => this.onAvroSchemaSourceChanged(value.value as AvroSchemaSource)}
+                />
+              </InlineField>
+            </InlineFieldRow>
+
+            {query.avroSchemaSource === AvroSchemaSource.SCHEMA_REGISTRY && (
+              <InlineFieldRow>
+                <InlineField label="Schema Registry" labelWidth={25}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={this.validateSchemaRegistry}
+                      disabled={this.state.schemaRegistryValidation?.status === 'loading'}
+                    >
+                      {this.state.schemaRegistryValidation?.status === 'loading' ? (
+                        <>
+                          <Spinner size={12} />
+                          Validating...
+                        </>
+                      ) : (
+                        'Test Connection'
+                      )}
+                    </Button>
+                    {this.state.schemaRegistryValidation && (
+                      <InlineLabel color={this.state.schemaRegistryValidation.status === 'valid' ? 'green' : 'red'}>
+                        {this.state.schemaRegistryValidation.message}
+                      </InlineLabel>
+                    )}
+                  </div>
+                </InlineField>
+              </InlineFieldRow>
+            )}
+
+            {query.avroSchemaSource === AvroSchemaSource.INLINE_SCHEMA && (
+              <InlineFieldRow>
+                <InlineField
+                  label="Avro Schema"
+                  labelWidth={20}
+                  tooltip="Upload or paste your Avro schema (.avsc file)"
+                  style={{ minWidth: 400 }}
+                >
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: 400 }}>
+                    <input
+                      type="file"
+                      accept=".avsc,.json"
+                      onChange={this.onAvroSchemaFileUpload}
+                      style={{ marginBottom: '8px' }}
+                    />
+                    <textarea
+                      value={query.avroSchema || ''}
+                      onChange={this.onAvroSchemaChanged}
+                      placeholder="Paste your Avro schema JSON here..."
+                      rows={8}
+                      style={{
+                        width: '100%',
+                        fontFamily: 'monospace',
+                        fontSize: '12px',
+                        resize: 'vertical',
+                      }}
+                    />
+                    {this.state.schemaValidation && (
+                      <div style={{ marginTop: '4px' }}>
+                        {this.state.schemaValidation.status === 'loading' ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <Spinner size={12} />
+                            <span style={{ fontSize: '12px', color: '#666' }}>Validating schema...</span>
+                          </div>
+                        ) : (
+                          <InlineLabel
+                            color={this.state.schemaValidation.status === 'valid' ? 'green' : 'red'}
+                            style={{ fontSize: '12px' }}
+                          >
+                            {this.state.schemaValidation.message}
+                          </InlineLabel>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </InlineField>
+              </InlineFieldRow>
+            )}
+          </>
+        )}
+
         {autoOffsetReset !== AutoOffsetReset.LATEST && (
           <div style={{ marginTop: 8 }}>
             <Alert severity="warning" title="Potential higher load">

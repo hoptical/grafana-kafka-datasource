@@ -128,6 +128,26 @@ export const ConfigEditor = (props: Props) => {
   const onRequestFlattenMaxDepthChange = makeNumberChangeHandler("flattenMaxDepth");
   const onRequestFlattenFieldCapChange = makeNumberChangeHandler("flattenFieldCap");
 
+  const onSchemaRegistryUrlChange = (event: ChangeEvent<HTMLInputElement>) => {
+    onOptionsChange({ ...options, jsonData: { ...options.jsonData, schemaRegistryUrl: event.target.value } });
+  };
+
+  const onSchemaRegistryUsernameChange = (event: ChangeEvent<HTMLInputElement>) => {
+    onOptionsChange({ ...options, jsonData: { ...options.jsonData, schemaRegistryUsername: event.target.value } });
+  };
+
+  const onSchemaRegistryPasswordChange = (event: ChangeEvent<HTMLInputElement>) => {
+    onOptionsChange({ ...options, secureJsonData: { ...options.secureJsonData, schemaRegistryPassword: event.target.value } });
+  };
+
+  const onResetSchemaRegistryPassword = () => {
+    onOptionsChange({
+      ...options,
+      secureJsonFields: { ...options.secureJsonFields, schemaRegistryPassword: false },
+      secureJsonData: { ...options.secureJsonData, schemaRegistryPassword: '' },
+    });
+  };
+
   const jsonData = { ...defaultDataSourceOptions, ...options.jsonData };
   const secureJsonData = (options.secureJsonData || {}) as KafkaSecureJsonData;
   const { secureJsonFields } = options;
@@ -362,6 +382,59 @@ export const ConfigEditor = (props: Props) => {
       </ConfigSection>
 
       <Divider spacing={4} />
+
+      {/* Schema Registry Configuration */}
+      <ConfigSection title="Schema Registry" description="Configure Confluent Schema Registry for Avro message decoding">
+        <InlineField
+          label="Schema Registry URL"
+          labelWidth={25}
+          tooltip="URL of the Confluent Schema Registry (e.g., http://localhost:8081)"
+          grow
+        >
+          <Input
+            id="config-editor-schema-registry-url"
+            onChange={onSchemaRegistryUrlChange}
+            value={jsonData.schemaRegistryUrl || ''}
+            placeholder="http://localhost:8081"
+            width={40}
+          />
+        </InlineField>
+
+        <InlineField
+          label="Username"
+          labelWidth={25}
+          tooltip="Schema Registry authentication username (optional)"
+          grow
+        >
+          <Input
+            id="config-editor-schema-registry-username"
+            data-testid="schema-registry-username"
+            onChange={onSchemaRegistryUsernameChange}
+            value={jsonData.schemaRegistryUsername || ''}
+            placeholder="Schema Registry username"
+            width={40}
+          />
+        </InlineField>
+
+        <InlineField
+          label="Password"
+          labelWidth={25}
+          tooltip="Schema Registry authentication password (optional)"
+          grow
+        >
+          <SecretInput
+            id="config-editor-schema-registry-password"
+            isConfigured={(secureJsonFields && secureJsonFields.schemaRegistryPassword) as boolean}
+            value={secureJsonData.schemaRegistryPassword || ''}
+            placeholder="Schema Registry password"
+            width={40}
+            onReset={onResetSchemaRegistryPassword}
+            onChange={onSchemaRegistryPasswordChange}
+          />
+        </InlineField>
+      </ConfigSection>
+
+      <Divider spacing={4} />
       {/* Advanced Settings */}
       <ConfigSection
         title="Advanced Settings"
@@ -403,7 +476,7 @@ export const ConfigEditor = (props: Props) => {
           grow
         >
           <Input
-            id="config-editor-timeout"
+            id="config-editor-request-timeout"
             onChange={onRequestTimeoutChange}
             value={jsonData.timeout}
             type="number"

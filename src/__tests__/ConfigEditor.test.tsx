@@ -488,6 +488,29 @@ describe('ConfigEditor', () => {
     );
   });
 
+  it('renders schema registry section', () => {
+    renderConfigEditor();
+    expect(screen.getByText('Schema Registry')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('http://localhost:8081')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Schema Registry username')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Schema Registry password')).toBeInTheDocument();
+  });
+
+  it('calls onOptionsChange when schema registry URL changes', () => {
+    renderConfigEditor();
+    const input = screen.getByPlaceholderText('http://localhost:8081');
+
+    fireEvent.change(input, { target: { value: 'http://schema-registry:8081' } });
+
+    expect(mockOnOptionsChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jsonData: expect.objectContaining({
+          schemaRegistryUrl: 'http://schema-registry:8081',
+        }),
+      })
+    );
+  });
+
   it('calls onOptionsChange when JSON flatten depth changes', () => {
     renderConfigEditor();
     const input = screen.getByDisplayValue('5'); // Default flattenMaxDepth
@@ -498,6 +521,21 @@ describe('ConfigEditor', () => {
       expect.objectContaining({
         jsonData: expect.objectContaining({
           flattenMaxDepth: 10,
+        }),
+      })
+    );
+  });
+
+  it('calls onOptionsChange when schema registry username changes', () => {
+    renderConfigEditor();
+    const input = screen.getByPlaceholderText('Schema Registry username');
+
+    fireEvent.change(input, { target: { value: 'registry-user' } });
+
+    expect(mockOnOptionsChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jsonData: expect.objectContaining({
+          schemaRegistryUsername: 'registry-user',
         }),
       })
     );
@@ -518,6 +556,21 @@ describe('ConfigEditor', () => {
     );
   });
 
+  it('calls onOptionsChange when schema registry password changes', () => {
+    renderConfigEditor();
+    const input = screen.getByPlaceholderText('Schema Registry password');
+
+    fireEvent.change(input, { target: { value: 'registry-pass' } });
+
+    expect(mockOnOptionsChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        secureJsonData: expect.objectContaining({
+          schemaRegistryPassword: 'registry-pass',
+        }),
+      })
+    );
+  });
+
   it('calls onOptionsChange when JSON field limit changes', () => {
     renderConfigEditor();
     const input = screen.getByDisplayValue('1000'); // Default flattenFieldCap
@@ -528,6 +581,28 @@ describe('ConfigEditor', () => {
       expect.objectContaining({
         jsonData: expect.objectContaining({
           flattenFieldCap: 2000,
+        }),
+      })
+    );
+  });
+
+  it('handles schema registry password reset', () => {
+    renderConfigEditor(
+      {},
+      { schemaRegistryPassword: 'existing-password' },
+      { schemaRegistryPassword: true }
+    );
+
+    const resetButton = screen.getByTestId('reset-button');
+    fireEvent.click(resetButton);
+
+    expect(mockOnOptionsChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        secureJsonFields: expect.objectContaining({
+          schemaRegistryPassword: false,
+        }),
+        secureJsonData: expect.objectContaining({
+          schemaRegistryPassword: '',
         }),
       })
     );
@@ -560,10 +635,12 @@ describe('ConfigEditor', () => {
       timeout: 10000,
       flattenMaxDepth: 8,
       flattenFieldCap: 1500,
+      schemaRegistryUrl: 'http://existing-registry:8081',
     };
 
     renderConfigEditor(existingConfig);
 
+    expect(screen.getByDisplayValue('http://existing-registry:8081')).toBeInTheDocument();
     expect(screen.getByDisplayValue('existing-servers:9092')).toBeInTheDocument();
     expect(screen.getByDisplayValue('existing-client')).toBeInTheDocument();
     expect(screen.getByDisplayValue('existing-user')).toBeInTheDocument();

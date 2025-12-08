@@ -19,6 +19,24 @@ export type TimestampModeInterface = {
   [key in TimestampMode]: string;
 };
 
+export enum MessageFormat {
+  JSON = 'json',
+  AVRO = 'avro',
+}
+
+export enum AvroSchemaSource {
+  SCHEMA_REGISTRY = 'schemaRegistry',
+  INLINE_SCHEMA = 'inlineSchema',
+}
+
+export type MessageFormatInterface = {
+  [key in MessageFormat]: string;
+};
+
+export type AvroSchemaSourceInterface = {
+  [key in AvroSchemaSource]: string;
+};
+
 export interface KafkaDataSourceOptions extends DataSourceJsonData {
   bootstrapServers: string;
   clientId?: string;
@@ -34,6 +52,9 @@ export interface KafkaDataSourceOptions extends DataSourceJsonData {
   serverName?: string;
   // Advanced HTTP settings
   timeout?: number;
+  // Avro Configuration (moved to query level)
+  schemaRegistryUrl?: string;
+  schemaRegistryUsername?: string;
   // Advanced Json flattening settings
   flattenMaxDepth?: number;
   flattenFieldCap?: number;
@@ -64,6 +85,8 @@ export interface KafkaSecureJsonData {
   tlsCACert?: string;
   tlsClientCert?: string;
   tlsClientKey?: string;
+  // Schema Registry Authentication
+  schemaRegistryPassword?: string;
 }
 
 export interface KafkaQuery extends DataQuery {
@@ -72,6 +95,11 @@ export interface KafkaQuery extends DataQuery {
   autoOffsetReset: AutoOffsetReset;
   timestampMode: TimestampMode;
   lastN?: number;
+  // Message Format Configuration
+  messageFormat: MessageFormat;
+  // Avro Configuration
+  avroSchemaSource?: AvroSchemaSource;
+  avroSchema?: string;
 }
 
 export const defaultQuery: Partial<KafkaQuery> = {
@@ -79,4 +107,6 @@ export const defaultQuery: Partial<KafkaQuery> = {
   autoOffsetReset: AutoOffsetReset.LATEST,
   timestampMode: TimestampMode.Message, // Kafka Event Time is now default
   lastN: 100,
+  messageFormat: MessageFormat.JSON,
+  avroSchemaSource: AvroSchemaSource.SCHEMA_REGISTRY,
 };
