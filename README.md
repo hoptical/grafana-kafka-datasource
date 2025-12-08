@@ -3,7 +3,7 @@
 [![License](https://img.shields.io/github/license/hoptical/grafana-kafka-datasource)](LICENSE)
 [![CI](https://github.com/hoptical/grafana-kafka-datasource/actions/workflows/ci.yml/badge.svg)](https://github.com/hoptical/grafana-kafka-datasource/actions/workflows/ci.yml)
 [![Release](https://github.com/hoptical/grafana-kafka-datasource/actions/workflows/release.yml/badge.svg)](https://github.com/hoptical/grafana-kafka-datasource/actions/workflows/release.yml)
-[![Go Version](https://img.shields.io/badge/go-1.24.1-blue?logo=go)](https://golang.org/doc/go1.24)
+[![Go Version](https://img.shields.io/badge/go-1.24.6-blue?logo=go)](https://golang.org/doc/go1.24)
 [![Grafana v10.2+](https://img.shields.io/badge/grafana-10.2%2B-orange?logo=grafana)](https://grafana.com)
 
 ---
@@ -17,6 +17,7 @@
 - **Live streaming:** Monitor Kafka topics in real time.
 - **Flexible queries:** Select topics, partitions, offsets, and timestamp modes.
 - **Rich JSON support:** Handles flat, nested, and array data.
+- **Avro support:** Integrates with Schema Registry for Avro messages.
 - **Secure:** SASL authentication & SSL/TLS encryption.
 - **Easy setup:** Install and configure in minutes.
 
@@ -34,47 +35,61 @@ This plugin connects your Grafana instance directly to Kafka brokers, allowing y
 ## Features
 
 - Real-time monitoring of Kafka topics
+- Kafka authentication (SASL) & encryption (SSL/TLS)
 - Query all or specific partitions
 - Autocomplete for topic names
 - Flexible offset options (latest, last N, earliest)
 - Timestamp modes (Kafka event time, dashboard received time)
 - Advanced JSON support (flat, nested, arrays, mixed types)
-- Kafka authentication (SASL) & encryption (SSL/TLS)
+- Avro support with Schema Registry integration (inline schema or Schema Registry)
+- Configurable flattening depth (default: 5)
+- Configurable max fields per message (default: 1000)
 
 ## Installation
 
 ### Via grafana-cli
+
 ```bash
 grafana-cli plugins install hamedkarbasi93-kafka-datasource
 ```
 
 ### Via zip file
+
 Download the [latest release](https://github.com/hoptical/grafana-kafka-datasource/releases/latest) and unpack it into your Grafana plugins directory (default: `/var/lib/grafana/plugins`).
 
 ### Provisioning
+
 You can automatically configure the Kafka datasource using Grafana's provisioning feature. For a ready-to-use template and configuration options, refer to `provisioning/datasources/datasource.yaml` in this repository.
 
 ## Usage
 
 ### Configuration
+
 1. Add a new data source in Grafana and select "Kafka Datasource".
 2. Configure connection settings:
-	 - **Broker address** (e.g. `localhost:9094` or `kafka:9092`)
-	 - **Authentication** (SASL, SSL/TLS, optional)
-	 - **Timeout settings** (default: two seconds)
+
+    - **Broker address** (e.g. `localhost:9094` or `kafka:9092`)
+    - **Authentication** (SASL, SSL/TLS, optional)
+    - **Avro Schema Registry** (if using Avro format)
+    - **Timeout settings** (default: two seconds)
+ß
 
 ### Build the Query
+
 1. Create a new dashboard panel in Grafana.
 2. Select your Kafka data source.
 3. Configure the query:
-	 - **Topic**: Enter or select your Kafka topic (autocomplete available).
-	 - **Fetch Partitions**: Click to retrieve available partitions.
-	 - **Partition**: Choose a specific partition or "all" for all partitions.
-	 - **Offset Reset**:
-		 - `latest`: Only new messages
-		 - `last N messages`: Start from the most recent N messages (set N in the UI)
-		 - `earliest`: Start from the oldest message
-	 - **Timestamp Mode**: Choose between Kafka event time or dashboard received time.
+    - **Topic**: Enter or select your Kafka topic (autocomplete available).
+    - **Fetch Partitions**: Click to retrieve available partitions.
+    - **Partition**: Choose a specific partition or "all" for all partitions.
+    - **Message Format**:
+        - `JSON`: For JSON messages
+        - `Avro`: For Avro messages (requires schema)
+    - **Offset Reset**:
+        - `latest`: Only new messages
+        - `last N messages`: Start from the most recent N messages (set N in the UI)
+        - `earliest`: Start from the oldest message
+        - **Timestamp Mode**: Choose between Kafka event time or dashboard received time.
 
 **Tip:** Numeric fields become time series, string fields are labels, arrays and nested objects are automatically flattened for visualization.
 
@@ -88,42 +103,41 @@ You can automatically configure the Kafka datasource using Grafana's provisionin
 **Examples:**
 
 Simple flat object:
+
 ```json
 {
-	"temperature": 23.5,
-	"humidity": 65.2,
-	"status": "active"
+    "temperature": 23.5,
+    "humidity": 65.2,
+    "status": "active"
 }
 ```
 
 Nested object (flattened as `user.name`, `user.age`, `settings.theme`):
+
 ```json
 {
-	"user": {
-		"name": "John Doe",
-		"age": 30
-	},
-	"settings": {
-		"theme": "dark"
-	}
+    "user": {
+         "name": "John Doe",
+         "age": 30
+    },
+    "settings": {
+         "theme": "dark"
+    }
 }
 ```
 
 Top-level array (flattened as `item_0.id`, `item_0.value`, `item_1.id`, etc.):
+
 ```json
 [
-	{"id": 1, "value": 10.5},
-	{"id": 2, "value": 20.3}
+    {"id": 1, "value": 10.5},
+    {"id": 2, "value": 20.3}
 ]
 ```
 
 ## Limitations
 
-- Max flattening depth: configurable (default: 5)
-- Max fields per message: configurable (default: 1000)
-- Protobuf/AVRO not yet supported
-
-> **Performance Note:** There is no hard upper bound for flattening depth or fields per message. Extremely large values can drastically impact performance and memory usage. Use with caution.
+- Protobuf not yet supported (Avro is supported with schema registry integration)
 
 ## Live Demo
 
@@ -135,6 +149,12 @@ Want to test the plugin? Use our [Go sample producer](https://github.com/hoptica
 
 ```bash
 go run example/go/producer.go -broker localhost:9094 -topic test -interval 500 -num-partitions 3 -shape nested
+```
+
+Avro example (produce Avro messages using Schema Registry):
+
+```bash
+go run example/go/producer.go -broker localhost:9094 -topic test-avro -interval 500 -num-partitions 3 -format avro -schema-registry http://localhost:8081
 ```
 
 Supports flat, nested, and array JSON payloads, plus Avro format with **full schema registry integration**. Features verbose logging for debugging. See [example/README.md](https://github.com/hoptical/grafana-kafka-datasource/blob/main/example/README.md) for details.
