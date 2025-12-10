@@ -3,12 +3,7 @@ import { Page, Locator } from '@playwright/test';
 import { ChildProcess, spawn } from 'child_process';
 import { accessSync, constants } from 'fs';
 
-// Helper to get table cells compatible across Grafana versions
-// Grafana v12.2.0+ uses 'gridcell' role, older versions use 'cell'
-function getTableCells(page: Page): Locator {
-  // Use a CSS selector that works for both roles
-  return page.locator('[role="gridcell"], [role="cell"]');
-}
+
 
 interface AvroProducerOptions {
   topic: string;
@@ -249,19 +244,21 @@ test.describe.serial('Kafka Query Editor - Avro Tests', () => {
     const allPartitionsOption = page.getByLabel('Select options menu').getByText('All partitions')
       .or(page.getByRole('option', { name: /^All partitions$/ }));
     await allPartitionsOption.first().click();
-    // wait. for a second
-    // await new Promise((resolve) => setTimeout(resolve, 1000));
 
     // Wait for the time column to appear first (this indicates data is flowing)
     await expect(page.getByRole('columnheader', { name: 'time' })).toBeVisible({ timeout: 10000 });
     await expect(page.getByRole('columnheader', { name: 'offset' })).toBeVisible();
     await expect(page.getByRole('columnheader', { name: 'partition' })).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: 'host.ip' })).toBeVisible();
+
 
     // Verify that Avro data is flowing correctly
     // Check for timestamp format in time column (YYYY-MM-DD HH:MM:SS)
-    await expect(getTableCells(page).filter({ hasText: /\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/ }).first()).toBeVisible();
+    await expect(panelEditPage.panel.data.filter({ hasText: /\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/ })).not.toHaveCount(0);
+    // Check for float numbers in value columns (just verify at least one numeric cell exists)
+    await expect(panelEditPage.panel.data.filter({ hasText: /^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/ })).not.toHaveCount(0);
     // Check for Avro-specific fields (host_name, host_ip, etc.)
-    await expect(getTableCells(page).filter({ hasText: 'severity' }).first()).toBeVisible();
+    await expect(panelEditPage.panel.data.filter({ hasText: 'severity' })).not.toHaveCount(0);
   });
 
   // Test streaming Avro data from Kafka topic with Inline Schema
@@ -385,9 +382,9 @@ test.describe.serial('Kafka Query Editor - Avro Tests', () => {
 
     // Verify that Avro data is flowing correctly with inline schema
     // Check for timestamp format in time column (YYYY-MM-DD HH:MM:SS)
-    await expect(getTableCells(page).filter({ hasText: /\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/ }).first()).toBeVisible();
+    await expect(panelEditPage.panel.data.filter({ hasText: /\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/ })).not.toHaveCount(0);
 
     // Check for nested Avro fields (host.name, host.ip, etc.)
-    await expect(getTableCells(page).filter({ hasText: 'severity' }).first()).toBeVisible();
+    await expect(panelEditPage.panel.data.filter({ hasText: 'severity' })).not.toHaveCount(0);
   });
 });
