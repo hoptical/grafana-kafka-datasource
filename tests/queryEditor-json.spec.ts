@@ -1,5 +1,4 @@
 import { test, expect } from '@grafana/plugin-e2e';
-import { Page } from '@playwright/test';
 import { ChildProcess, spawn } from 'child_process';
 import { accessSync, constants } from 'fs';
 import { verifyPanelDataContains, verifyColumnHeadersVisible } from './test-utils';

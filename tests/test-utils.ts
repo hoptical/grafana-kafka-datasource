@@ -1,5 +1,7 @@
 // Shared test utilities for Kafka datasource e2e tests
 import { expect } from '@grafana/plugin-e2e';
+import type { Page } from '@playwright/test';
+import type { PanelEditPage } from '@grafana/plugin-e2e';
 
 // Common regex patterns for data validation
 export const TIMESTAMP_REGEX = /\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/;
@@ -11,7 +13,7 @@ export const COMMON_COLUMN_HEADERS = ['time', 'offset', 'partition', 'host.ip'];
 
 // Helper function to verify panel data contains expected patterns
 export async function verifyPanelDataContains(
-  panelEditPage: any,
+  panelEditPage: PanelEditPage,
   patterns: (string | RegExp)[] = [TIMESTAMP_REGEX, NUMERIC_REGEX, ALERTS_PATTERN]
 ): Promise<void> {
   for (const pattern of patterns) {
@@ -21,7 +23,7 @@ export async function verifyPanelDataContains(
 
 // Helper function to verify column headers are visible
 export async function verifyColumnHeadersVisible(
-  page: any,
+  page: Page,
   headers: string[] = COMMON_COLUMN_HEADERS
 ): Promise<void> {
   for (const header of headers) {
