@@ -1,14 +1,8 @@
 import { test, expect } from '@grafana/plugin-e2e';
-import { Page, Locator } from '@playwright/test';
 import { ChildProcess, spawn } from 'child_process';
 import { accessSync, constants } from 'fs';
+import { verifyPanelDataContains, verifyColumnHeadersVisible } from './test-utils';
 
-// Helper to get table cells compatible across Grafana versions
-// Grafana v12.2.0+ uses 'gridcell' role, older versions use 'cell'
-function getTableCells(page: Page): Locator {
-  // Use a CSS selector that works for both roles
-  return page.locator('[role="gridcell"], [role="cell"]');
-}
 function startKafkaProducer(): { producer: ChildProcess; exitPromise: Promise<void> } {
   const producerPath = './dist/producer';
   try {
@@ -202,20 +196,12 @@ test.describe('Kafka Query Editor - JSON Tests', () => {
     }
 
     // Wait for the time column to appear first (this indicates data is flowing)
-    await expect(page.getByRole('columnheader', { name: 'time' })).toBeVisible({ timeout: 10000 });
-    await expect(page.getByRole('columnheader', { name: 'offset' })).toBeVisible();
-    await expect(page.getByRole('columnheader', { name: 'partition' })).toBeVisible();
+    await verifyColumnHeadersVisible(page);
 
     // Verify that data is flowing correctly with proper formats
-    // Check for timestamp format in time column (YYYY-MM-DD HH:MM:SS)
-    await expect(getTableCells(page).filter({ hasText: /\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/ }).first()).toBeVisible();
-    // Check for float numbers in value columns (just verify at least one numeric cell exists)
-    await expect(
-      getTableCells(page)
-        .filter({ hasText: /^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/ })
-        .first()
-    ).toBeVisible();
+    await verifyPanelDataContains(panelEditPage);
   });
+
 
   test('should configure Last N messages with proper validation', async ({
     readProvisionedDataSource,
@@ -361,7 +347,7 @@ test.describe('Kafka Query Editor - JSON Tests', () => {
 
       // Wait for data columns by checking for table cells
       // Check if any table data appears - be more flexible
-      const tableCells = page.locator('table tbody tr td');
+      const tableCells = panelEditPage.panel.data;
       const hasTableData = await tableCells.first().isVisible({ timeout: 5000 }).catch(() => false);
 
       if (hasTableData) {
