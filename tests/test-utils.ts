@@ -4,7 +4,7 @@ import { expect } from '@grafana/plugin-e2e';
 // Common regex patterns for data validation
 export const TIMESTAMP_REGEX = /\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/;
 export const NUMERIC_REGEX = /^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/;
-export const SEVERITY_PATTERN = 'severity';
+export const ALERTS_PATTERN = 'severity';
 
 // Common column headers to check
 export const COMMON_COLUMN_HEADERS = ['time', 'offset', 'partition', 'host.ip'];
@@ -12,7 +12,7 @@ export const COMMON_COLUMN_HEADERS = ['time', 'offset', 'partition', 'host.ip'];
 // Helper function to verify panel data contains expected patterns
 export async function verifyPanelDataContains(
   panelEditPage: any,
-  patterns: (string | RegExp)[] = [TIMESTAMP_REGEX, NUMERIC_REGEX]
+  patterns: (string | RegExp)[] = [TIMESTAMP_REGEX, NUMERIC_REGEX, ALERTS_PATTERN]
 ): Promise<void> {
   for (const pattern of patterns) {
     await expect(panelEditPage.panel.data.filter({ hasText: pattern })).not.toHaveCount(0);
