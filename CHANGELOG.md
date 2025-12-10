@@ -1,5 +1,9 @@
 # Changelog
 
+## [v1.2.1](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.2.1)
+[Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v1.2.0...v1.2.1)
+- Refactor: Improve e2e test stability and maintainability ([#112](https://github.com/hoptical/grafana-kafka-datasource/pull/112))
+
 ## [v1.2.0](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.2.0)
 [Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v1.1.0...v1.2.0)
 - Feat: Implement Avro support ([#96](https://github.com/hoptical/grafana-kafka-datasource/pull/96)) — add Avro parsing and support for Avro-encoded messages in the plugin.
