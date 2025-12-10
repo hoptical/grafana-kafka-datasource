@@ -2,8 +2,7 @@ import { test, expect } from '@grafana/plugin-e2e';
 import { Page, Locator } from '@playwright/test';
 import { ChildProcess, spawn } from 'child_process';
 import { accessSync, constants } from 'fs';
-
-
+import { verifyPanelDataContains, verifyColumnHeadersVisible } from './test-utils';
 
 interface AvroProducerOptions {
   topic: string;
@@ -246,19 +245,10 @@ test.describe.serial('Kafka Query Editor - Avro Tests', () => {
     await allPartitionsOption.first().click();
 
     // Wait for the time column to appear first (this indicates data is flowing)
-    await expect(page.getByRole('columnheader', { name: 'time' })).toBeVisible({ timeout: 10000 });
-    await expect(page.getByRole('columnheader', { name: 'offset' })).toBeVisible();
-    await expect(page.getByRole('columnheader', { name: 'partition' })).toBeVisible();
-    await expect(page.getByRole('columnheader', { name: 'host.ip' })).toBeVisible();
-
+    await verifyColumnHeadersVisible(page);
 
     // Verify that Avro data is flowing correctly
-    // Check for timestamp format in time column (YYYY-MM-DD HH:MM:SS)
-    await expect(panelEditPage.panel.data.filter({ hasText: /\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/ })).not.toHaveCount(0);
-    // Check for float numbers in value columns (just verify at least one numeric cell exists)
-    await expect(panelEditPage.panel.data.filter({ hasText: /^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/ })).not.toHaveCount(0);
-    // Check for Avro-specific fields (host_name, host_ip, etc.)
-    await expect(panelEditPage.panel.data.filter({ hasText: 'severity' })).not.toHaveCount(0);
+    await verifyPanelDataContains(panelEditPage);
   });
 
   // Test streaming Avro data from Kafka topic with Inline Schema
@@ -376,15 +366,9 @@ test.describe.serial('Kafka Query Editor - Avro Tests', () => {
     await new Promise((resolve) => setTimeout(resolve, 1000)); // Wait for schema to be processed
 
     // Wait for the time column to appear first (this indicates data is flowing)
-    await expect(page.getByRole('columnheader', { name: 'time' })).toBeVisible({ timeout: 10000 });
-    await expect(page.getByRole('columnheader', { name: 'offset' })).toBeVisible();
-    await expect(page.getByRole('columnheader', { name: 'partition' })).toBeVisible();
+    await verifyColumnHeadersVisible(page);
 
     // Verify that Avro data is flowing correctly with inline schema
-    // Check for timestamp format in time column (YYYY-MM-DD HH:MM:SS)
-    await expect(panelEditPage.panel.data.filter({ hasText: /\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/ })).not.toHaveCount(0);
-
-    // Check for nested Avro fields (host.name, host.ip, etc.)
-    await expect(panelEditPage.panel.data.filter({ hasText: 'severity' })).not.toHaveCount(0);
+    await verifyPanelDataContains(panelEditPage);
   });
 });

@@ -2,7 +2,7 @@ import { test, expect } from '@grafana/plugin-e2e';
 import { Page } from '@playwright/test';
 import { ChildProcess, spawn } from 'child_process';
 import { accessSync, constants } from 'fs';
-
+import { verifyPanelDataContains, verifyColumnHeadersVisible } from './test-utils';
 
 function startKafkaProducer(): { producer: ChildProcess; exitPromise: Promise<void> } {
   const producerPath = './dist/producer';
@@ -197,16 +197,10 @@ test.describe('Kafka Query Editor - JSON Tests', () => {
     }
 
     // Wait for the time column to appear first (this indicates data is flowing)
-    await expect(page.getByRole('columnheader', { name: 'time' })).toBeVisible({ timeout: 10000 });
-    await expect(page.getByRole('columnheader', { name: 'offset' })).toBeVisible();
-    await expect(page.getByRole('columnheader', { name: 'partition' })).toBeVisible();
-    await expect(page.getByRole('columnheader', { name: 'host.ip' })).toBeVisible();
+    await verifyColumnHeadersVisible(page);
 
     // Verify that data is flowing correctly with proper formats
-    // Check for timestamp format in time column (YYYY-MM-DD HH:MM:SS)
-    await expect(panelEditPage.panel.data.filter({ hasText: /\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/ })).not.toHaveCount(0);
-    // Check for float numbers in value columns (just verify at least one numeric cell exists)
-    await expect(panelEditPage.panel.data.filter({ hasText: /^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/ })).not.toHaveCount(0);
+    await verifyPanelDataContains(panelEditPage);
   });
 
 
