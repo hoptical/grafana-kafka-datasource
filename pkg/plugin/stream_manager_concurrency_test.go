@@ -36,10 +36,8 @@ func TestStreamManager_SchemaCacheConcurrency(t *testing.T) {
 	}))
 	defer server.Close()
 
-	// Create a mock client with HTTPClient
-	mockClient := &kafka_client.KafkaClient{
-		HTTPClient: &http.Client{},
-	}
+	// Create a mock client that properly implements KafkaClientAPI
+	mockClient := &mockStreamClient{}
 
 	sm := NewStreamManager(mockClient, 5, 100)
 	subject := "test-topic-value"
@@ -105,10 +103,8 @@ func TestStreamManager_SchemaClientConcurrency(t *testing.T) {
 	}))
 	defer server.Close()
 
-	// Create a mock client with HTTPClient
-	mockClient := &kafka_client.KafkaClient{
-		HTTPClient: &http.Client{},
-	}
+	// Create a mock client that properly implements KafkaClientAPI
+	mockClient := &mockStreamClient{}
 
 	sm := NewStreamManager(mockClient, 5, 100)
 
@@ -154,10 +150,8 @@ func TestStreamConfig_ConcurrentAccess(t *testing.T) {
 		LastN:            100,
 	}
 
-	// Create a mock client with HTTPClient
-	mockClient := &kafka_client.KafkaClient{
-		HTTPClient: &http.Client{},
-	}
+	// Create a mock client that properly implements KafkaClientAPI
+	mockClient := &mockStreamClient{}
 
 	sm := NewStreamManager(mockClient, 5, 100)
 
@@ -291,10 +285,8 @@ func TestStreamManager_MixedOperations(t *testing.T) {
 	}))
 	defer server.Close()
 
-	// Create a mock client with HTTPClient
-	mockClient := &kafka_client.KafkaClient{
-		HTTPClient: &http.Client{},
-	}
+	// Create a mock client that properly implements KafkaClientAPI
+	mockClient := &mockStreamClient{}
 
 	sm := NewStreamManager(mockClient, 5, 100)
 
