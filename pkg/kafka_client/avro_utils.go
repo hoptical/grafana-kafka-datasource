@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 	"github.com/linkedin/goavro/v2"
@@ -23,6 +24,9 @@ type SchemaRegistryClient struct {
 // The httpClient should be created using grafana-plugin-sdk-go/backend/httpclient
 // to support Private Data Source Connect (PDC) with automatic SOCKS proxy handling
 func NewSchemaRegistryClient(baseURL, username, password string, httpClient *http.Client) *SchemaRegistryClient {
+	if httpClient == nil {
+		httpClient = &http.Client{Timeout: 30 * time.Second}
+	}
 	return &SchemaRegistryClient{
 		BaseURL:  strings.TrimSuffix(baseURL, "/"),
 		Username: username,
