@@ -91,6 +91,11 @@ type KafkaClient struct {
 	HTTPClient             *http.Client // HTTP client for Schema Registry (from grafana-plugin-sdk-go)
 }
 
+// GetHTTPClient returns the HTTP client used for Schema Registry connections
+func (client *KafkaClient) GetHTTPClient() *http.Client {
+	return client.HTTPClient
+}
+
 type KafkaMessage struct {
 	Value     interface{} `json:"value,omitempty"` // Can be map[string]interface{} or []interface{}
 	RawValue  []byte      `json:"-"`               // Raw message bytes for Avro decoding - not serialized

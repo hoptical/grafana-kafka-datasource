@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"net/http"
 	"net/url"
 	"sort"
 	"sync"
@@ -370,11 +369,8 @@ func decodeAvroMessage(sm *StreamManager, client KafkaClientAPI, data []byte, co
 			// Fallback: create client per-message if StreamManager not available
 			log.DefaultLogger.Debug("StreamManager not available, creating Schema Registry client per-message")
 
-			// Get HTTP client from KafkaClient (cast to access HTTPClient field)
-			var httpClient *http.Client
-			if kafkaClient, ok := client.(*kafka_client.KafkaClient); ok {
-				httpClient = kafkaClient.HTTPClient
-			}
+			// Get HTTP client from KafkaClient
+			httpClient := client.GetHTTPClient()
 			if httpClient == nil {
 				log.DefaultLogger.Error("HTTP client not available in KafkaClient")
 				return nil, fmt.Errorf("HTTP client not available for Schema Registry")
@@ -455,10 +451,7 @@ func (sm *StreamManager) getSchemaFromRegistryWithCache(registryUrl, username, p
 			log.DefaultLogger.Debug("Creating Schema Registry client (first use)")
 
 			// Get HTTP client from KafkaClient
-			var httpClient *http.Client
-			if kafkaClient, ok := sm.client.(*kafka_client.KafkaClient); ok {
-				httpClient = kafkaClient.HTTPClient
-			}
+			httpClient := sm.client.GetHTTPClient()
 			if httpClient == nil {
 				sm.schemaClientMu.Unlock()
 				return "", fmt.Errorf("HTTP client not available in KafkaClient")

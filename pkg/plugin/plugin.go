@@ -57,6 +57,7 @@ type KafkaClientAPI interface {
 	GetSchemaRegistryUsername() string
 	GetSchemaRegistryPassword() string
 	GetAvroSubjectNamingStrategy() string
+	GetHTTPClient() *http.Client
 }
 
 var (
@@ -437,10 +438,7 @@ func (d *KafkaDatasource) ValidateSchemaRegistry(ctx context.Context) (*backend.
 	// Use a dummy subject that likely doesn't exist to test connectivity
 
 	// Get HTTP client from KafkaClient
-	var httpClient *http.Client
-	if kafkaClient, ok := d.client.(*kafka_client.KafkaClient); ok {
-		httpClient = kafkaClient.HTTPClient
-	}
+	httpClient := d.client.GetHTTPClient()
 	if httpClient == nil {
 		return &backend.CheckHealthResult{
 			Status:  backend.HealthStatusError,
