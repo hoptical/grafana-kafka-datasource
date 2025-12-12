@@ -10,6 +10,10 @@ on:
       - master
       - main
 
+env:
+  GO_VERSION: 1.24.6
+  GOLANGCI_LINT_VERSION: v2.7.2
+
 permissions:
   contents: write
   id-token: write
@@ -58,7 +62,13 @@ jobs:
         if: steps.check-for-backend.outputs.has-backend == 'true'
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24.6'
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Lint backend
+        if: steps.check-for-backend.outputs.has-backend == 'true'
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: ${{ env.GOLANGCI_LINT_VERSION }}
 
       - name: Test backend
         if: steps.check-for-backend.outputs.has-backend == 'true'
@@ -145,7 +155,6 @@ jobs:
         uses: grafana/plugin-actions/e2e-version@main
         with:
           skip-grafana-dev-image: true
-
 
   playwright-tests:
     needs: [resolve-versions, build]

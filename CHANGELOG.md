@@ -1,16 +1,22 @@
 # Changelog
 
 ## [v1.2.1](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.2.1)
+
 [Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v1.2.0...v1.2.1)
+
 - Refactor: Improve e2e test stability and maintainability ([#112](https://github.com/hoptical/grafana-kafka-datasource/pull/112))
 
 ## [v1.2.0](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.2.0)
+
 [Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v1.1.0...v1.2.0)
+
 - Feat: Implement Avro support ([#96](https://github.com/hoptical/grafana-kafka-datasource/pull/96)) — add Avro parsing and support for Avro-encoded messages in the plugin.
 - Chore: Bump `@grafana/create-plugin` configuration to 6.4.3 ([#109](https://github.com/hoptical/grafana-kafka-datasource/pull/109))
 
 ## [v1.1.0](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.1.0)
+
 [Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v1.0.1...v1.1.0)
+
 - Fix: Address security issues in dependencies and configuration ([#107](https://github.com/hoptical/grafana-kafka-datasource/pull/107))
 - Fix: Use type registry with nullable types to prevent data loss when encountering null values ([#104](https://github.com/hoptical/grafana-kafka-datasource/pull/104))
 - Perf: Pre-allocate frame fields to eliminate append overhead ([#106](https://github.com/hoptical/grafana-kafka-datasource/pull/106))
@@ -23,11 +29,13 @@
 - CI: Skip publish-report for fork PRs ([#103](https://github.com/hoptical/grafana-kafka-datasource/pull/103))
 
 ## [v1.0.1](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.0.1)
+
 [Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v1.0.0...v1.0.1)
- - Restructure and split documentation (README, docs/development.md, docs/contributing.md, docs/code_of_conduct.md)
- - Add “Create Plugin Update” GitHub Action
- - Add release workflow pre‐check to ensure tag exists in CHANGELOG
- - Bump plugin and package versions to 1.0.1
+
+- Restructure and split documentation (README, docs/development.md, docs/contributing.md, docs/code_of_conduct.md)
+- Add “Create Plugin Update” GitHub Action
+- Add release workflow pre‐check to ensure tag exists in CHANGELOG
+- Bump plugin and package versions to 1.0.1
 
 ## [v1.0.0](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.0.0) (2025-08-14)
 
@@ -87,7 +95,7 @@
 - Add Kafka to docker compose [\#54](https://github.com/hoptical/grafana-kafka-datasource/pull/54) ([sizovilya](https://github.com/sizovilya))
 
 - \[BUG\] Cannot connect to the brokers [\#55](https://github.com/hoptical/grafana-kafka-datasource/issues/55)
-- \[BUG\] Plugin Unavailable  [\#45](https://github.com/hoptical/grafana-kafka-datasource/issues/45)
+- \[BUG\] Plugin Unavailable [\#45](https://github.com/hoptical/grafana-kafka-datasource/issues/45)
 - plugin unavailable [\#44](https://github.com/hoptical/grafana-kafka-datasource/issues/44)
 - \[BUG\] 2 Kafka panels on 1 dashboard [\#39](https://github.com/hoptical/grafana-kafka-datasource/issues/39)
 - \[BUG\] The yarn.lock is out of sync with package.json since the 0.2.0 commit [\#35](https://github.com/hoptical/grafana-kafka-datasource/issues/35)
@@ -101,7 +109,7 @@
 
 - Add developer-friendly environment [\#52](https://github.com/hoptical/grafana-kafka-datasource/issues/52)
 - Migrate from Grafana toolkit [\#50](https://github.com/hoptical/grafana-kafka-datasource/issues/50)
-- Can you make an arm64 compatible version of this plugin?  [\#49](https://github.com/hoptical/grafana-kafka-datasource/issues/49)
+- Can you make an arm64 compatible version of this plugin? [\#49](https://github.com/hoptical/grafana-kafka-datasource/issues/49)
 - Add Authentication & Authorization Configuration [\#20](https://github.com/hoptical/grafana-kafka-datasource/issues/20)
 
 - Migrate from toolkit [\#51](https://github.com/hoptical/grafana-kafka-datasource/pull/51) ([sizovilya](https://github.com/sizovilya))
@@ -128,7 +136,7 @@
 [Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/cff631297154c3d90f8f26d56b3f9ca77c3e3369...v0.1.0)
 
 - Use channel instead of time.after [\#14](https://github.com/hoptical/grafana-kafka-datasource/issues/14)
-- Code base cleaning  [\#12](https://github.com/hoptical/grafana-kafka-datasource/issues/12)
+- Code base cleaning [\#12](https://github.com/hoptical/grafana-kafka-datasource/issues/12)
 - Handle Messages with the specified format [\#5](https://github.com/hoptical/grafana-kafka-datasource/issues/5)
 - Specify query editor [\#4](https://github.com/hoptical/grafana-kafka-datasource/issues/4)
 - Specify Kafka Configuration in Config Editor [\#3](https://github.com/hoptical/grafana-kafka-datasource/issues/3)

@@ -22,10 +22,7 @@ export async function verifyPanelDataContains(
 }
 
 // Helper function to verify column headers are visible
-export async function verifyColumnHeadersVisible(
-  page: Page,
-  headers: string[] = COMMON_COLUMN_HEADERS
-): Promise<void> {
+export async function verifyColumnHeadersVisible(page: Page, headers: string[] = COMMON_COLUMN_HEADERS): Promise<void> {
   for (const header of headers) {
     await expect(page.getByRole('columnheader', { name: header })).toBeVisible();
   }

@@ -9,7 +9,15 @@ import {
 import { DataSourceWithBackend, getGrafanaLiveSrv, getTemplateSrv } from '@grafana/runtime';
 import { Observable, merge, throwError, of } from 'rxjs';
 import { catchError, startWith } from 'rxjs/operators';
-import { KafkaDataSourceOptions, KafkaQuery, AutoOffsetReset, defaultQuery, MessageFormat, AvroSchemaSource, TimestampMode } from './types';
+import {
+  KafkaDataSourceOptions,
+  KafkaQuery,
+  AutoOffsetReset,
+  defaultQuery,
+  MessageFormat,
+  AvroSchemaSource,
+  TimestampMode,
+} from './types';
 
 export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourceOptions> {
   constructor(instanceSettings: DataSourceInstanceSettings<KafkaDataSourceOptions>) {
@@ -57,16 +65,16 @@ export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourc
       const n = Number.isFinite(parsed) && parsed > 0 ? parsed : 100;
       lastN = n;
     }
-    const result = { 
-      ...query, 
-      topicName, 
-      partition, 
+    const result = {
+      ...query,
+      topicName,
+      partition,
       lastN,
       // Ensure these fields are preserved with defaults if undefined
       autoOffsetReset: query.autoOffsetReset || AutoOffsetReset.LATEST,
       messageFormat: query.messageFormat || MessageFormat.JSON,
       avroSchemaSource: query.avroSchemaSource || AvroSchemaSource.SCHEMA_REGISTRY,
-      timestampMode: query.timestampMode || TimestampMode.Message
+      timestampMode: query.timestampMode || TimestampMode.Message,
     };
     return result;
   }
@@ -85,10 +93,11 @@ export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourc
         segments.push(encodeURIComponent(String(interpolatedQuery.messageFormat || 'json')));
         segments.push(encodeURIComponent(String(interpolatedQuery.avroSchemaSource || 'schemaRegistry')));
         // Include a hash of the Avro schema to detect changes
-        const schemaHash = interpolatedQuery.avroSchema ? 
-          this.generateSchemaHash(interpolatedQuery.avroSchema) : 'none';
+        const schemaHash = interpolatedQuery.avroSchema
+          ? this.generateSchemaHash(interpolatedQuery.avroSchema)
+          : 'none';
         segments.push(encodeURIComponent(schemaHash));
-        
+
         if (
           interpolatedQuery.autoOffsetReset === AutoOffsetReset.LAST_N &&
           typeof interpolatedQuery.lastN !== 'undefined'
@@ -138,7 +147,7 @@ export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourc
 
   async validateSchemaRegistry(): Promise<{ status: string; message: string }> {
     try {
-      const response = await this.getResource('validate-schema-registry') as any;
+      const response = (await this.getResource('validate-schema-registry')) as any;
       return {
         status: response.status || 'ok',
         message: response.message || 'Schema registry is accessible',
@@ -153,7 +162,7 @@ export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourc
 
   async validateAvroSchema(schema: string): Promise<{ status: string; message: string }> {
     try {
-      const response = await this.postResource('validate-avro-schema', { schema }) as any;
+      const response = (await this.postResource('validate-avro-schema', { schema })) as any;
       return {
         status: response.status || 'ok',
         message: response.message || 'Schema is valid',
@@ -174,7 +183,7 @@ export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourc
     let hash = 0;
     for (let i = 0; i < schema.length; i++) {
       const char = schema.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
+      hash = (hash << 5) - hash + char;
       hash = hash & hash; // Convert to 32-bit integer
     }
     // Return absolute value as base36 string for shorter, URL-safe hash

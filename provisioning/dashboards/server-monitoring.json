@@ -173,10 +173,7 @@
           "id": "filterFieldsByName",
           "options": {
             "include": {
-              "names": [
-                "time",
-                "metrics.cpu.load"
-              ]
+              "names": ["time", "metrics.cpu.load"]
             }
           }
         }
@@ -286,11 +283,7 @@
           "id": "filterFieldsByName",
           "options": {
             "include": {
-              "names": [
-                "time",
-                "metrics.mem.free",
-                "metrics.mem.used"
-              ]
+              "names": ["time", "metrics.mem.free", "metrics.mem.used"]
             }
           }
         }
@@ -338,9 +331,7 @@
         "minVizWidth": 75,
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -369,9 +360,7 @@
           "id": "filterFieldsByName",
           "options": {
             "include": {
-              "names": [
-                "metrics.cpu.load"
-              ]
+              "names": ["metrics.cpu.load"]
             }
           }
         }
@@ -421,9 +410,7 @@
         "footer": {
           "countRows": false,
           "fields": "",
-          "reducer": [
-            "sum"
-          ],
+          "reducer": ["sum"],
           "show": false
         },
         "showHeader": true
@@ -449,9 +436,7 @@
           "id": "filterFieldsByName",
           "options": {
             "include": {
-              "names": [
-                "alerts"
-              ]
+              "names": ["alerts"]
             }
           }
         }
@@ -560,11 +545,7 @@
           "id": "filterFieldsByName",
           "options": {
             "include": {
-              "names": [
-                "time",
-                "value2",
-                "value1"
-              ]
+              "names": ["time", "value2", "value1"]
             }
           }
         }
@@ -612,9 +593,7 @@
         "orientation": "auto",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": [
-            "mean"
-          ],
+          "calcs": ["mean"],
           "fields": "",
           "values": false
         },
@@ -662,9 +641,7 @@
           "id": "filterFieldsByName",
           "options": {
             "include": {
-              "names": [
-                "Moving Window Value 1 (Mean)"
-              ]
+              "names": ["Moving Window Value 1 (Mean)"]
             }
           }
         }
@@ -714,9 +691,7 @@
         "footer": {
           "countRows": false,
           "fields": "",
-          "reducer": [
-            "sum"
-          ],
+          "reducer": ["sum"],
           "show": false
         },
         "showHeader": true
@@ -742,10 +717,7 @@
           "id": "filterFieldsByName",
           "options": {
             "include": {
-              "names": [
-                "host.ip",
-                "host.name"
-              ]
+              "names": ["host.ip", "host.name"]
             }
           }
         },
@@ -770,11 +742,7 @@
   ],
   "refresh": "5s",
   "schemaVersion": 40,
-  "tags": [
-    "kafka",
-    "monitoring",
-    "server"
-  ],
+  "tags": ["kafka", "monitoring", "server"],
   "templating": {
     "list": []
   },

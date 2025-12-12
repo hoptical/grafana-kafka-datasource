@@ -252,7 +252,12 @@ describe('DataSource', () => {
             expect(capturedPath).toBe('my%20topic-0-latest-json-schemaRegistry-none');
             // Now with LAST_N
             capturedPath = undefined;
-            const target2: KafkaQuery = { ...target, autoOffsetReset: AutoOffsetReset.LAST_N, lastN: 10, messageFormat: MessageFormat.JSON } as any;
+            const target2: KafkaQuery = {
+              ...target,
+              autoOffsetReset: AutoOffsetReset.LAST_N,
+              lastN: 10,
+              messageFormat: MessageFormat.JSON,
+            } as any;
             ds.query({ targets: [target2] } as any).subscribe({
               complete: () => {
                 try {

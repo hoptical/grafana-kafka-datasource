@@ -285,11 +285,11 @@ func TestFieldBuilder_IntegerTypes(t *testing.T) {
 
 func TestNewFieldBuilder(t *testing.T) {
 	fb := NewFieldBuilder()
+	if fb != nil && fb.typeRegistry == nil {
+		t.Error("NewFieldBuilder should initialize typeRegistry")
+	}
 	if fb == nil {
 		t.Error("NewFieldBuilder should return a non-nil FieldBuilder")
-	}
-	if fb.typeRegistry == nil {
-		t.Error("NewFieldBuilder should initialize typeRegistry")
 	}
 }
 

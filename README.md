@@ -67,28 +67,27 @@ You can automatically configure the Kafka datasource using Grafana's provisionin
 
 1. Add a new data source in Grafana and select "Kafka Datasource".
 2. Configure connection settings:
-
-    - **Broker address** (e.g. `localhost:9094` or `kafka:9092`)
-    - **Authentication** (SASL, SSL/TLS, optional)
-    - **Avro Schema Registry** (if using Avro format)
-    - **Timeout settings** (default: two seconds)
+   - **Broker address** (e.g. `localhost:9094` or `kafka:9092`)
+   - **Authentication** (SASL, SSL/TLS, optional)
+   - **Avro Schema Registry** (if using Avro format)
+   - **Timeout settings** (default: two seconds)
 
 ### Build the Query
 
 1. Create a new dashboard panel in Grafana.
 2. Select your Kafka data source.
 3. Configure the query:
-    - **Topic**: Enter or select your Kafka topic (autocomplete available).
-    - **Fetch Partitions**: Click to retrieve available partitions.
-    - **Partition**: Choose a specific partition or "all" for all partitions.
-    - **Message Format**:
-        - `JSON`: For JSON messages
-        - `Avro`: For Avro messages (requires schema)
-    - **Offset Reset**:
-        - `latest`: Only new messages
-        - `last N messages`: Start from the most recent N messages (set N in the UI)
-        - `earliest`: Start from the oldest message
-        - **Timestamp Mode**: Choose between Kafka event time or dashboard received time.
+   - **Topic**: Enter or select your Kafka topic (autocomplete available).
+   - **Fetch Partitions**: Click to retrieve available partitions.
+   - **Partition**: Choose a specific partition or "all" for all partitions.
+   - **Message Format**:
+     - `JSON`: For JSON messages
+     - `Avro`: For Avro messages (requires schema)
+   - **Offset Reset**:
+     - `latest`: Only new messages
+     - `last N messages`: Start from the most recent N messages (set N in the UI)
+     - `earliest`: Start from the oldest message
+     - **Timestamp Mode**: Choose between Kafka event time or dashboard received time.
 
 **Tip:** Numeric fields become time series, string fields are labels, arrays and nested objects are automatically flattened for visualization.
 
@@ -105,9 +104,9 @@ Simple flat object:
 
 ```json
 {
-    "temperature": 23.5,
-    "humidity": 65.2,
-    "status": "active"
+  "temperature": 23.5,
+  "humidity": 65.2,
+  "status": "active"
 }
 ```
 
@@ -115,13 +114,13 @@ Nested object (flattened as `user.name`, `user.age`, `settings.theme`):
 
 ```json
 {
-    "user": {
-         "name": "John Doe",
-         "age": 30
-    },
-    "settings": {
-         "theme": "dark"
-    }
+  "user": {
+    "name": "John Doe",
+    "age": 30
+  },
+  "settings": {
+    "theme": "dark"
+  }
 }
 ```
 
@@ -129,8 +128,8 @@ Top-level array (flattened as `item_0.id`, `item_0.value`, `item_1.id`, etc.):
 
 ```json
 [
-    {"id": 1, "value": 10.5},
-    {"id": 2, "value": 20.3}
+  { "id": 1, "value": 10.5 },
+  { "id": 2, "value": 20.3 }
 ]
 ```
 

@@ -36,12 +36,11 @@ test.describe('Kafka Config Editor', () => {
     await expect(page.getByRole('textbox', { name: 'Bootstrap Servers' })).toBeVisible();
 
     // Check the security protocol combobox
-    const securityProtocolSelector = page.getByRole('combobox', { name: /security.*protocol/i }).or(
-      page.locator('[data-testid="security-protocol-select"]')
-    ).or(
-      page.getByText('PLAINTEXT').locator('..').getByRole('button')
-    );
-    
+    const securityProtocolSelector = page
+      .getByRole('combobox', { name: /security.*protocol/i })
+      .or(page.locator('[data-testid="security-protocol-select"]'))
+      .or(page.getByText('PLAINTEXT').locator('..').getByRole('button'));
+
     if (await securityProtocolSelector.isVisible()) {
       await securityProtocolSelector.click();
       await page.getByText('SASL_SSL', { exact: true }).click();
@@ -62,20 +61,20 @@ test.describe('Kafka Config Editor', () => {
     await expect(page.getByText('Skip TLS Verification')).toBeVisible();
     await expect(page.getByText('Self-signed Certificate')).toBeVisible();
     await expect(page.getByText('TLS Client Authentication')).toBeVisible();
-    
+
     // Better selectors for checkboxes
-    const tlsSkipVerifyCheckbox = page.getByRole('checkbox', { name: /skip.*tls.*verification/i }).or(
-      page.locator('input[type="checkbox"]').nth(0)
-    );
-    const tlsAuthWithCACertCheckbox = page.getByRole('checkbox', { name: /self.*signed.*certificate/i }).or(
-      page.locator('input[type="checkbox"]').nth(1)  
-    );
-    const tlsAuthCheckbox = page.getByRole('checkbox', { name: /tls.*client.*authentication/i }).or(
-      page.locator('input[type="checkbox"]').nth(2)
-    );
-    
+    const tlsSkipVerifyCheckbox = page
+      .getByRole('checkbox', { name: /skip.*tls.*verification/i })
+      .or(page.locator('input[type="checkbox"]').nth(0));
+    const tlsAuthWithCACertCheckbox = page
+      .getByRole('checkbox', { name: /self.*signed.*certificate/i })
+      .or(page.locator('input[type="checkbox"]').nth(1));
+    const tlsAuthCheckbox = page
+      .getByRole('checkbox', { name: /tls.*client.*authentication/i })
+      .or(page.locator('input[type="checkbox"]').nth(2));
+
     await expect(tlsSkipVerifyCheckbox).toBeVisible();
-    await expect(tlsAuthWithCACertCheckbox).toBeVisible(); 
+    await expect(tlsAuthWithCACertCheckbox).toBeVisible();
     await expect(tlsAuthCheckbox).toBeVisible();
     await expect(page.getByRole('textbox', { name: 'SASL Username' })).toBeVisible();
     await expect(page.getByPlaceholder('SASL Password')).toBeVisible();
@@ -85,14 +84,17 @@ test.describe('Kafka Config Editor', () => {
     await page.getByRole('button', { name: 'Expand section Advanced' }).click();
     await expect(page.getByRole('textbox', { name: 'Log Level' })).toBeVisible();
     await expect(page.getByRole('spinbutton', { name: 'Healthcheck Timeout (ms)' })).toBeVisible();
-    
+
     // Check Avro/Schema Registry Configuration section (new)
     await expect(page.getByRole('heading', { name: 'Schema Registry' })).toBeVisible();
     await expect(page.getByRole('textbox', { name: 'Schema Registry URL' })).toBeVisible();
     // Be more specific about which username field to avoid ambiguity
-    await expect(page.locator('#config-editor-schema-registry-username')
-      .or(page.getByPlaceholder('Schema Registry username'))
-      .first()).toBeVisible();
+    await expect(
+      page
+        .locator('#config-editor-schema-registry-username')
+        .or(page.getByPlaceholder('Schema Registry username'))
+        .first()
+    ).toBeVisible();
     await expect(page.getByPlaceholder(/Schema Registry.*[Pp]assword/i)).toBeVisible();
 
     await expect(page.getByRole('spinbutton', { name: 'Request Timeout (ms)' })).toBeVisible();
@@ -410,22 +412,25 @@ test.describe('Kafka Config Editor', () => {
 
     // Configure Schema Registry with more robust selectors
     await page.waitForTimeout(1000);
-    
-    const schemaRegistryUrl = page.locator('[data-testid="schema-registry-url"]')
+
+    const schemaRegistryUrl = page
+      .locator('[data-testid="schema-registry-url"]')
       .or(page.getByRole('textbox', { name: 'Schema Registry URL' }))
       .or(page.getByPlaceholder(/schema.*registry.*url/i))
       .or(page.locator('input').filter({ hasText: /schema.*registry/i }));
-    
-    const schemaRegistryUsername = page.locator('[data-testid="schema-registry-username"]')
+
+    const schemaRegistryUsername = page
+      .locator('[data-testid="schema-registry-username"]')
       .or(page.locator('#config-editor-schema-registry-username'))
       .or(page.getByPlaceholder('Schema Registry username'))
       .or(page.getByPlaceholder(/username/i).last()); // Use last to avoid SASL username field
-    
-    const schemaRegistryPassword = page.locator('[data-testid="schema-registry-password"]')
+
+    const schemaRegistryPassword = page
+      .locator('[data-testid="schema-registry-password"]')
       .or(page.getByPlaceholder(/Schema Registry.*[Pp]assword/i))
       .or(page.getByPlaceholder(/password/i))
       .or(page.locator('input[type="password"]'));
-    
+
     await expect(schemaRegistryUrl.first()).toBeVisible({ timeout: 8000 });
     await expect(schemaRegistryUsername.first()).toBeVisible({ timeout: 8000 });
     await expect(schemaRegistryPassword.first()).toBeVisible({ timeout: 8000 });
@@ -439,10 +444,11 @@ test.describe('Kafka Config Editor', () => {
     await page.waitForTimeout(1000);
 
     // Test Schema Registry validation button if available with robust selectors
-    const validateButton = page.getByRole('button', { name: /validate.*registry|test.*registry/i })
+    const validateButton = page
+      .getByRole('button', { name: /validate.*registry|test.*registry/i })
       .or(page.locator('button').filter({ hasText: /validate|test/i }))
       .or(page.getByText('Test Schema Registry Connection').locator('..').locator('button'));
-    
+
     if (await validateButton.first().isVisible({ timeout: 3000 })) {
       await validateButton.first().click();
       // Should show some validation result (may pass or fail depending on setup)
@@ -472,10 +478,10 @@ test.describe('Kafka Config Editor', () => {
     await page.getByRole('textbox', { name: 'Bootstrap Servers' }).fill('kafka:9092');
 
     const schemaRegistryUrl = page.getByRole('textbox', { name: 'Schema Registry URL' });
-    
+
     // Test invalid URL format
     await schemaRegistryUrl.fill('invalid-url');
-    
+
     // Check if there's a specific validation button for Schema Registry
     const validateButton = page.getByRole('button', { name: /validate.*registry|test.*registry/i });
     if (await validateButton.isVisible({ timeout: 3000 })) {
@@ -495,7 +501,7 @@ test.describe('Kafka Config Editor', () => {
     const saveResult = await configPage.saveAndTest();
     // Don't enforce success as the registry may not exist, just that it's not a format error
     if (!saveResult.ok()) {
-      console.log('Save failed but that\'s expected if registry is not accessible');
+      console.log("Save failed but that's expected if registry is not accessible");
     }
   });
 });

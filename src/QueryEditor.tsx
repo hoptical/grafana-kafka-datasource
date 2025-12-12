@@ -3,7 +3,15 @@ import React, { ChangeEvent, PureComponent } from 'react';
 import { InlineField, InlineFieldRow, Input, Select, Button, Spinner, Alert, InlineLabel } from '@grafana/ui';
 import { QueryEditorProps } from '@grafana/data';
 import { DataSource } from './datasource';
-import { defaultQuery, KafkaDataSourceOptions, KafkaQuery, AutoOffsetReset, TimestampMode, AvroSchemaSource, MessageFormat } from './types';
+import {
+  defaultQuery,
+  KafkaDataSourceOptions,
+  KafkaQuery,
+  AutoOffsetReset,
+  TimestampMode,
+  AvroSchemaSource,
+  MessageFormat,
+} from './types';
 
 // Constants for Last N messages input
 const LAST_N_MIN = 1;
@@ -118,13 +126,13 @@ export class QueryEditor extends PureComponent<Props, State> {
         loadingPartitions: false,
         partitionSuccess: `Fetched ${partCount} partition${partCount === 1 ? '' : 's'}`,
       });
-      
+
       // Auto-apply "all partitions" if not already set and trigger query
       if (query.partition === undefined || query.partition === null) {
         onChange({ ...query, partition: 'all' });
         onRunQuery();
       }
-      
+
       // Clear success after 5s
       if (this.fetchPartitionsTimeoutId) {
         clearTimeout(this.fetchPartitionsTimeoutId);
@@ -532,12 +540,14 @@ export class QueryEditor extends PureComponent<Props, State> {
               )}
             </div>
           </InlineField>
-          <InlineField 
-            label="Timestamp Mode" 
-            labelWidth={20} 
-            tooltip={timestampMode === TimestampMode.Message 
-              ? 'Kafka Event Time: Timestamp from the Kafka message metadata.' 
-              : 'Dashboard received time: When the Grafana plugin received the message.'}
+          <InlineField
+            label="Timestamp Mode"
+            labelWidth={20}
+            tooltip={
+              timestampMode === TimestampMode.Message
+                ? 'Kafka Event Time: Timestamp from the Kafka message metadata.'
+                : 'Dashboard received time: When the Grafana plugin received the message.'
+            }
           >
             <Select
               width={25}
@@ -549,11 +559,7 @@ export class QueryEditor extends PureComponent<Props, State> {
         </InlineFieldRow>
 
         <InlineFieldRow>
-          <InlineField 
-            label="Message Format" 
-            labelWidth={25} 
-            tooltip="Format of the Kafka messages (JSON or Avro)"
-          >
+          <InlineField label="Message Format" labelWidth={25} tooltip="Format of the Kafka messages (JSON or Avro)">
             <Select
               width={25}
               value={messageFormat || MessageFormat.JSON}

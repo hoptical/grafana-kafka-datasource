@@ -9,14 +9,28 @@ interface AvroProducerOptions {
   schemaRegistry?: boolean;
 }
 
-function startAvroKafkaProducer({ topic, schemaRegistry }: AvroProducerOptions): { producer: ChildProcess; exitPromise: Promise<void> } {
+function startAvroKafkaProducer({ topic, schemaRegistry }: AvroProducerOptions): {
+  producer: ChildProcess;
+  exitPromise: Promise<void>;
+} {
   const producerPath = './dist/producer';
   try {
     accessSync(producerPath, constants.X_OK); // Check if file exists and is executable
   } catch (err) {
     throw new Error(`Kafka producer executable not found or not executable at path: ${producerPath}`);
   }
-  const args = ['-broker', 'localhost:9094', '-topic', topic, '-connect-timeout', '500', '-num-partitions', '3', '-format', 'avro'];
+  const args = [
+    '-broker',
+    'localhost:9094',
+    '-topic',
+    topic,
+    '-connect-timeout',
+    '500',
+    '-num-partitions',
+    '3',
+    '-format',
+    'avro',
+  ];
   if (schemaRegistry) {
     args.push('-schema-registry', 'http://localhost:8081');
   }
@@ -44,11 +58,14 @@ function startAvroKafkaProducer({ topic, schemaRegistry }: AvroProducerOptions):
 
 async function findMessageFormatSelector(page: Page): Promise<Locator | null> {
   const messageFormatApproaches = [
-    page.locator('div').filter({ hasText: /^JSON$/ }).nth(2), // The intercepting parent element
+    page
+      .locator('div')
+      .filter({ hasText: /^JSON$/ })
+      .nth(2), // The intercepting parent element
     page.getByText('JSON').locator('../..'), // Go up two levels to find clickable parent
     page.locator('.css-1eu65zc').filter({ hasText: /JSON/ }), // Direct selection of intercepting element
     page.getByText('JSON').filter({ hasText: /^JSON$/ }), // Original approach
-    page.locator('button').filter({ hasText: /^JSON$/ }),  // Button with exact JSON text
+    page.locator('button').filter({ hasText: /^JSON$/ }), // Button with exact JSON text
     page.getByText('Message Format').locator('..').locator('button').first(), // Button near Message Format label
     page.locator('[data-testid*="select"]'), // Any element with select in testid
   ];
@@ -80,7 +97,8 @@ async function selectAvroMessageFormat(page: Page): Promise<void> {
 }
 
 function getAvroSchemaSourceLocator(page: Page): Locator {
-  return page.getByText('Avro Schema Source')
+  return page
+    .getByText('Avro Schema Source')
     .or(page.getByText('Schema Source'))
     .or(page.locator('label').filter({ hasText: /schema.*source/i }));
 }
@@ -88,7 +106,10 @@ function getAvroSchemaSourceLocator(page: Page): Locator {
 async function findAvroSchemaSourceSelector(page: Page): Promise<Locator | null> {
   const schemaSourceApproaches = [
     page.locator('[data-testid="avro-schema-source"]'),
-    page.locator('div').filter({ hasText: /^Schema Registry$/ }).nth(2), // Use same pattern as Message Format
+    page
+      .locator('div')
+      .filter({ hasText: /^Schema Registry$/ })
+      .nth(2), // Use same pattern as Message Format
     page.getByText('Avro Schema Source').locator('..').locator('button'),
     page.getByRole('combobox').filter({ hasText: /Schema Registry|Inline Schema/ }),
     page.locator('button').filter({ hasText: /Schema Registry|Inline/ }),
@@ -106,8 +127,7 @@ async function findAvroSchemaSourceSelector(page: Page): Promise<Locator | null>
 }
 
 function getInlineSchemaOption(page: Page): Locator {
-  return page.getByRole('option', { name: 'Inline Schema' })
-    .or(page.getByText('Inline Schema', { exact: true }));
+  return page.getByRole('option', { name: 'Inline Schema' }).or(page.getByText('Inline Schema', { exact: true }));
 }
 
 async function selectInlineSchema(page: Page): Promise<void> {
@@ -141,7 +161,8 @@ test.describe.serial('Kafka Query Editor - Avro Tests', () => {
     await expect(getAvroSchemaSourceLocator(page).first()).toBeVisible({ timeout: 8000 });
 
     // Test Schema Registry validation with better selectors - use "Test Connection" button text
-    const schemaRegistryButton = page.getByRole('button', { name: /test.*connection|validate.*registry/i })
+    const schemaRegistryButton = page
+      .getByRole('button', { name: /test.*connection|validate.*registry/i })
       .or(page.locator('button').filter({ hasText: /test.*connection|validate/i }))
       .or(page.getByText('Test Connection'));
 
@@ -156,7 +177,8 @@ test.describe.serial('Kafka Query Editor - Avro Tests', () => {
     await selectInlineSchema(page);
 
     // Now the schema textarea should appear - wait by checking for it
-    const schemaTextarea = page.locator('textarea[placeholder*="schema"]')
+    const schemaTextarea = page
+      .locator('textarea[placeholder*="schema"]')
       .or(page.getByRole('textbox', { name: /schema/i }))
       .or(page.getByPlaceholder(/paste.*schema|avro.*schema/i))
       .or(page.locator('textarea').filter({ hasText: /schema/i }));
@@ -189,7 +211,9 @@ test.describe.serial('Kafka Query Editor - Avro Tests', () => {
     }
 
     // Test file upload if available
-    const fileUploadInput = page.locator('input[type="file"]').filter({ hasText: /avsc|json/ })
+    const fileUploadInput = page
+      .locator('input[type="file"]')
+      .filter({ hasText: /avsc|json/ })
       .or(page.locator('input[type="file"][accept*=".avsc"]'));
     if (await fileUploadInput.isVisible({ timeout: 2000 })) {
       // File upload functionality exists but we won't test actual file upload in e2e
@@ -231,7 +255,10 @@ test.describe.serial('Kafka Query Editor - Avro Tests', () => {
     await page.getByRole('button', { name: 'Fetch' }).click();
 
     // Wait for partition selector to be available after fetch
-    const partitionSelector = page.locator('div').filter({ hasText: /^All partitions$/ }).nth(2)
+    const partitionSelector = page
+      .locator('div')
+      .filter({ hasText: /^All partitions$/ })
+      .nth(2)
       .or(page.locator('#query-editor-partition'))
       .or(page.getByText('All partitions').locator('..').locator('.css-1eu65zc'));
 
@@ -240,7 +267,9 @@ test.describe.serial('Kafka Query Editor - Avro Tests', () => {
     await partitionSelector.first().click();
 
     // Select "All partitions" option
-    const allPartitionsOption = page.getByLabel('Select options menu').getByText('All partitions')
+    const allPartitionsOption = page
+      .getByLabel('Select options menu')
+      .getByText('All partitions')
       .or(page.getByRole('option', { name: /^All partitions$/ }));
     await allPartitionsOption.first().click();
 
@@ -283,7 +312,8 @@ test.describe.serial('Kafka Query Editor - Avro Tests', () => {
     await selectInlineSchema(page);
 
     // Wait for schema textarea and fill it with the correct schema
-    const schemaTextarea = page.locator('textarea[placeholder*="schema"]')
+    const schemaTextarea = page
+      .locator('textarea[placeholder*="schema"]')
       .or(page.getByRole('textbox', { name: /schema/i }));
 
     await expect(schemaTextarea.first()).toBeVisible({ timeout: 5000 });

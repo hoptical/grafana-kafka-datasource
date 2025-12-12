@@ -10,7 +10,7 @@ function startKafkaProducer(): { producer: ChildProcess; exitPromise: Promise<vo
   } catch (err) {
     throw new Error(`Kafka producer executable not found or not executable at path: ${producerPath}`);
   }
-  
+
   const args = ['-broker', 'localhost:9094', '-topic', 'test-topic', '-connect-timeout', '500', '-num-partitions', '3'];
   const producer = spawn(producerPath, args, { stdio: ['ignore', 'pipe', 'pipe'] });
 
@@ -31,7 +31,7 @@ function startKafkaProducer(): { producer: ChildProcess; exitPromise: Promise<vo
       }
     });
   });
-  
+
   return { producer, exitPromise };
 }
 
@@ -69,7 +69,9 @@ test.describe('Kafka Query Editor - JSON Tests', () => {
 
     // Test partition selection using the ID selector
     await page.locator('#query-editor-partition').click();
-    const allPartitionsFirstTest = page.getByLabel('Select options menu').getByText('All partitions')
+    const allPartitionsFirstTest = page
+      .getByLabel('Select options menu')
+      .getByText('All partitions')
       .or(page.getByRole('option', { name: /^All partitions$/ }));
     await allPartitionsFirstTest.first().click();
 
@@ -81,15 +83,36 @@ test.describe('Kafka Query Editor - JSON Tests', () => {
     await expect(page.getByText('Offset')).toBeVisible({ timeout: 5000 });
 
     // More robust selector approach for dropdowns with correct clickable elements
-    const offsetSelector = page.locator('div').filter({ hasText: /^Latest$/ }).nth(3)
+    const offsetSelector = page
+      .locator('div')
+      .filter({ hasText: /^Latest$/ })
+      .nth(3)
       .or(page.getByText('Latest', { exact: false }).locator('..').locator('.css-1eu65zc'))
-      .or(page.getByRole('combobox').filter({ hasText: /Latest/ }).first())
+      .or(
+        page
+          .getByRole('combobox')
+          .filter({ hasText: /Latest/ })
+          .first()
+      )
       .or(page.locator('select').filter({ hasText: /Latest/ }));
 
-    const timestampSelector = page.getByText('Kafka Event Time', { exact: false }).locator('..').locator('.css-1eu65zc')
-      .or(page.getByRole('combobox').filter({ hasText: /Kafka Event Time/ }).first())
+    const timestampSelector = page
+      .getByText('Kafka Event Time', { exact: false })
+      .locator('..')
+      .locator('.css-1eu65zc')
+      .or(
+        page
+          .getByRole('combobox')
+          .filter({ hasText: /Kafka Event Time/ })
+          .first()
+      )
       .or(page.locator('select').filter({ hasText: /Kafka Event Time/ }))
-      .or(page.locator('div').filter({ hasText: /^Kafka Event Time$/ }).nth(2));
+      .or(
+        page
+          .locator('div')
+          .filter({ hasText: /^Kafka Event Time$/ })
+          .nth(2)
+      );
 
     // Test Offset options with improved selector - MUST be found
     await expect(offsetSelector.first()).toBeVisible({ timeout: 5000 });
@@ -105,7 +128,9 @@ test.describe('Kafka Query Editor - JSON Tests', () => {
     await expect(page.getByText('Last N messages')).toBeVisible({ timeout: 5000 });
     await expect(page.getByText('Earliest')).toBeVisible();
 
-    const latestOption = page.getByLabel('Select options menu').getByText('Latest')
+    const latestOption = page
+      .getByLabel('Select options menu')
+      .getByText('Latest')
       .or(page.getByRole('option', { name: 'Latest' }));
     await latestOption.first().click();
 
@@ -122,7 +147,9 @@ test.describe('Kafka Query Editor - JSON Tests', () => {
     // Wait for dropdown menu to appear
     await expect(page.getByText('Dashboard received time')).toBeVisible({ timeout: 5000 });
 
-    const kafkaEventTimeOption = page.getByLabel('Select options menu').getByText('Kafka Event Time')
+    const kafkaEventTimeOption = page
+      .getByLabel('Select options menu')
+      .getByText('Kafka Event Time')
       .or(page.getByRole('option', { name: 'Kafka Event Time' }));
     await kafkaEventTimeOption.first().click();
 
@@ -138,12 +165,15 @@ test.describe('Kafka Query Editor - JSON Tests', () => {
     // Wait for dropdown options to be available
     await expect(page.getByText('Last N messages')).toBeVisible({ timeout: 5000 });
 
-    const lastNMessagesOption = page.getByLabel('Select options menu').getByText('Last N messages')
+    const lastNMessagesOption = page
+      .getByLabel('Select options menu')
+      .getByText('Last N messages')
       .or(page.getByRole('option', { name: 'Last N messages' }));
     await lastNMessagesOption.first().click();
 
     // Last N input field should appear with default value - be more specific
-    const lastNInput = page.locator('#query-editor-last-n')
+    const lastNInput = page
+      .locator('#query-editor-last-n')
       .or(page.getByRole('spinbutton', { name: /last n|number/i }).first())
       .or(page.locator('input[type="number"][min="1"][step="1"][value="100"]'));
 
@@ -173,7 +203,10 @@ test.describe('Kafka Query Editor - JSON Tests', () => {
     await page.getByText('test-topic').click(); // The topic name is clicked from the autocomplete list
 
     // Wait for partition selector to be available after fetch
-    const partitionSelector = page.locator('div').filter({ hasText: /^All partitions$/ }).nth(2)
+    const partitionSelector = page
+      .locator('div')
+      .filter({ hasText: /^All partitions$/ })
+      .nth(2)
       .or(page.locator('#query-editor-partition'))
       .or(page.getByText('All partitions').locator('..').locator('.css-1eu65zc'));
 
@@ -182,7 +215,9 @@ test.describe('Kafka Query Editor - JSON Tests', () => {
     await partitionSelector.first().click();
 
     // Select "All partitions" option - works for both v10 and v12+
-    const allPartitionsOption = page.getByLabel('Select options menu').getByText('All partitions')
+    const allPartitionsOption = page
+      .getByLabel('Select options menu')
+      .getByText('All partitions')
       .or(page.getByRole('option', { name: /^All partitions$/ }));
     await allPartitionsOption.first().click();
 
@@ -202,7 +237,6 @@ test.describe('Kafka Query Editor - JSON Tests', () => {
     await verifyPanelDataContains(panelEditPage);
   });
 
-
   test('should configure Last N messages with proper validation', async ({
     readProvisionedDataSource,
     page,
@@ -215,9 +249,17 @@ test.describe('Kafka Query Editor - JSON Tests', () => {
     await page.getByRole('textbox', { name: 'Enter topic name' }).fill('test-topic');
 
     // Select Last N messages offset mode with improved selector
-    const offsetSelector = page.locator('div').filter({ hasText: /^Latest$/ }).nth(3)
+    const offsetSelector = page
+      .locator('div')
+      .filter({ hasText: /^Latest$/ })
+      .nth(3)
       .or(page.getByText('Latest', { exact: false }).locator('..').locator('.css-1eu65zc'))
-      .or(page.getByRole('combobox').filter({ hasText: /Latest|Earliest|Last N/ }).first());
+      .or(
+        page
+          .getByRole('combobox')
+          .filter({ hasText: /Latest|Earliest|Last N/ })
+          .first()
+      );
 
     // Offset selector MUST be found - fail test if not
     await expect(offsetSelector.first()).toBeVisible({ timeout: 5000 });
@@ -230,14 +272,16 @@ test.describe('Kafka Query Editor - JSON Tests', () => {
     }
 
     // Wait for dropdown options to be visible
-    const lastNOption = page.getByRole('option', { name: 'Last N messages' })
+    const lastNOption = page
+      .getByRole('option', { name: 'Last N messages' })
       .or(page.getByText('Last N messages', { exact: true }));
 
     await expect(lastNOption.first()).toBeVisible({ timeout: 5000 });
     await lastNOption.first().click();
 
     // Last N input field should appear with default value
-    const lastNInput = page.locator('#query-editor-last-n')
+    const lastNInput = page
+      .locator('#query-editor-last-n')
       .or(page.getByRole('spinbutton').first())
       .or(page.locator('input[type="number"]').first());
 
@@ -310,58 +354,66 @@ test.describe('Kafka Query Editor - JSON Tests', () => {
     // Open partition select and ensure options present (All partitions + partition 0,1,2)
     // Use the same approach as Message Format selector - find the clickable parent
     // Wait for partition selector to be ready
-    const partitionSelector = page.locator('#query-editor-partition')
+    const partitionSelector = page
+      .locator('#query-editor-partition')
       .or(page.getByText('All partitions').locator('..').locator('.css-1eu65zc'))
       .or(page.getByText('test-topic').locator('..').locator('.css-1eu65zc'));
 
     await expect(partitionSelector.first()).toBeVisible({ timeout: 5000 });
     await partitionSelector.first().click();
 
-      // Check for All partitions option
-      const allPartitionsOption = page.getByRole('option', { name: /^All partitions$/ })
-        .or(page.getByText('All partitions', { exact: true }));
-      await expect(allPartitionsOption.first()).toBeVisible();
+    // Check for All partitions option
+    const allPartitionsOption = page
+      .getByRole('option', { name: /^All partitions$/ })
+      .or(page.getByText('All partitions', { exact: true }));
+    await expect(allPartitionsOption.first()).toBeVisible();
 
-      // Check for individual partition options (should have 3 partitions)
-      const partition0Option = page.getByRole('option', { name: /Partition 0/ })
-        .or(page.getByText(/Partition 0/, { exact: true }));
-      await expect(partition0Option.first()).toBeVisible();
+    // Check for individual partition options (should have 3 partitions)
+    const partition0Option = page
+      .getByRole('option', { name: /Partition 0/ })
+      .or(page.getByText(/Partition 0/, { exact: true }));
+    await expect(partition0Option.first()).toBeVisible();
 
-      const partition1Option = page.getByRole('option', { name: /Partition 1/ })
-        .or(page.getByText(/Partition 1/, { exact: true }));
-      await expect(partition1Option.first()).toBeVisible();
+    const partition1Option = page
+      .getByRole('option', { name: /Partition 1/ })
+      .or(page.getByText(/Partition 1/, { exact: true }));
+    await expect(partition1Option.first()).toBeVisible();
 
-      const partition2Option = page.getByRole('option', { name: /Partition 2/ })
-        .or(page.getByText(/Partition 2/, { exact: true }));
-      await expect(partition2Option.first()).toBeVisible();
+    const partition2Option = page
+      .getByRole('option', { name: /Partition 2/ })
+      .or(page.getByText(/Partition 2/, { exact: true }));
+    await expect(partition2Option.first()).toBeVisible();
 
-      // Pick single partition 1
-      await partition1Option.first().click();
+    // Pick single partition 1
+    await partition1Option.first().click();
 
-      // Set visualization
-      try {
-        await panelEditPage.setVisualization('Table');
-      } catch (error) {
-        console.log('Visualization setting failed, continuing...');
-      }
+    // Set visualization
+    try {
+      await panelEditPage.setVisualization('Table');
+    } catch (error) {
+      console.log('Visualization setting failed, continuing...');
+    }
 
-      // Wait for data columns by checking for table cells
-      // Check if any table data appears - be more flexible
-      const tableCells = panelEditPage.panel.data;
-      const hasTableData = await tableCells.first().isVisible({ timeout: 5000 }).catch(() => false);
+    // Wait for data columns by checking for table cells
+    // Check if any table data appears - be more flexible
+    const tableCells = panelEditPage.panel.data;
+    const hasTableData = await tableCells
+      .first()
+      .isVisible({ timeout: 5000 })
+      .catch(() => false);
 
-      if (hasTableData) {
-        // Verify we have data in the table
-        await expect(tableCells.first()).toBeVisible();
-        console.log('Data streaming from single partition confirmed');
+    if (hasTableData) {
+      // Verify we have data in the table
+      await expect(tableCells.first()).toBeVisible();
+      console.log('Data streaming from single partition confirmed');
+    } else {
+      // Check for time column header as alternative indicator
+      const timeColumn = page.getByRole('columnheader', { name: 'time' });
+      if (await timeColumn.isVisible({ timeout: 3000 })) {
+        console.log('Time column visible, data streaming confirmed');
       } else {
-        // Check for time column header as alternative indicator
-        const timeColumn = page.getByRole('columnheader', { name: 'time' });
-        if (await timeColumn.isVisible({ timeout: 3000 })) {
-          console.log('Time column visible, data streaming confirmed');
-        } else {
-          console.log('No table data or time column found - data may not be streaming');
-        }
+        console.log('No table data or time column found - data may not be streaming');
       }
+    }
   });
 });
