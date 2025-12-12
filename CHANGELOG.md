@@ -109,7 +109,7 @@
 
 - Add developer-friendly environment [\#52](https://github.com/hoptical/grafana-kafka-datasource/issues/52)
 - Migrate from Grafana toolkit [\#50](https://github.com/hoptical/grafana-kafka-datasource/issues/50)
-- Can you make an arm64 compatible version of this plugin? [\#49](https://github.com/hoptical/grafana-kafka-datasource/issues/49)
+- Can you make an arm64-compatible version of this plugin? [\#49](https://github.com/hoptical/grafana-kafka-datasource/issues/49)
 - Add Authentication & Authorization Configuration [\#20](https://github.com/hoptical/grafana-kafka-datasource/issues/20)
 
 - Migrate from toolkit [\#51](https://github.com/hoptical/grafana-kafka-datasource/pull/51) ([sizovilya](https://github.com/sizovilya))

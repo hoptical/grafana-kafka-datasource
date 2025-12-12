@@ -234,50 +234,60 @@ test.describe.serial('Kafka Query Editor - Avro Tests', () => {
     await panelEditPage.datasource.set(ds.name);
 
     // Start the Avro Kafka producer with schema registry and topic 'test-avro-schema-topic'
-    const { producer } = startAvroKafkaProducer({ topic: 'test-avro-schema-topic', schemaRegistry: true });
-    // Wait for some data to be produced
-    await new Promise((resolve) => setTimeout(resolve, 3000));
-    // Set visualization
+    const { producer, exitPromise } = startAvroKafkaProducer({ topic: 'test-avro-schema-topic', schemaRegistry: true });
     try {
-      await panelEditPage.setVisualization('Table');
-    } catch (error) {
-      console.log('Visualization picker blocked by overlay, continuing...');
+      // Wait for some data to be produced
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      // Set visualization
+      try {
+        await panelEditPage.setVisualization('Table');
+      } catch (error) {
+        console.log('Visualization picker blocked by overlay, continuing...');
+      }
+
+      // Fill in the query editor fields
+      await page.getByRole('textbox', { name: 'Enter topic name' }).fill('test-avro-schema-topic');
+      await page.getByText('test-avro-schema-topic').click(); // The topic name is clicked from the autocomplete list
+
+      // Select Avro message format
+      await selectAvroMessageFormat(page);
+
+      // Ensure Schema Registry is selected (should be default)
+      await page.getByRole('button', { name: 'Fetch' }).click();
+
+      // Wait for partition selector to be available after fetch
+      const partitionSelector = page
+        .locator('div')
+        .filter({ hasText: /^All partitions$/ })
+        .nth(2)
+        .or(page.locator('#query-editor-partition'))
+        .or(page.getByText('All partitions').locator('..').locator('.css-1eu65zc'));
+
+      // Partition selector MUST be found after fetch
+      await expect(partitionSelector.first()).toBeVisible({ timeout: 5000 });
+      await partitionSelector.first().click();
+
+      // Select "All partitions" option
+      const allPartitionsOption = page
+        .getByLabel('Select options menu')
+        .getByText('All partitions')
+        .or(page.getByRole('option', { name: /^All partitions$/ }));
+      await allPartitionsOption.first().click();
+
+      // Wait for the time column to appear first (this indicates data is flowing)
+      await verifyColumnHeadersVisible(page);
+
+      // Verify that Avro data is flowing correctly
+      await verifyPanelDataContains(panelEditPage);
+    } finally {
+      // Cleanup: terminate producer process
+      producer.kill();
+      // Wait for process to exit with a 2-second timeout
+      await Promise.race([
+        exitPromise.catch(() => {}), // Ignore exit errors during cleanup
+        new Promise((resolve) => setTimeout(resolve, 2000)),
+      ]);
     }
-
-    // Fill in the query editor fields
-    await page.getByRole('textbox', { name: 'Enter topic name' }).fill('test-avro-schema-topic');
-    await page.getByText('test-avro-schema-topic').click(); // The topic name is clicked from the autocomplete list
-
-    // Select Avro message format
-    await selectAvroMessageFormat(page);
-
-    // Ensure Schema Registry is selected (should be default)
-    await page.getByRole('button', { name: 'Fetch' }).click();
-
-    // Wait for partition selector to be available after fetch
-    const partitionSelector = page
-      .locator('div')
-      .filter({ hasText: /^All partitions$/ })
-      .nth(2)
-      .or(page.locator('#query-editor-partition'))
-      .or(page.getByText('All partitions').locator('..').locator('.css-1eu65zc'));
-
-    // Partition selector MUST be found after fetch
-    await expect(partitionSelector.first()).toBeVisible({ timeout: 5000 });
-    await partitionSelector.first().click();
-
-    // Select "All partitions" option
-    const allPartitionsOption = page
-      .getByLabel('Select options menu')
-      .getByText('All partitions')
-      .or(page.getByRole('option', { name: /^All partitions$/ }));
-    await allPartitionsOption.first().click();
-
-    // Wait for the time column to appear first (this indicates data is flowing)
-    await verifyColumnHeadersVisible(page);
-
-    // Verify that Avro data is flowing correctly
-    await verifyPanelDataContains(panelEditPage);
   });
 
   // Test streaming Avro data from Kafka topic with Inline Schema
@@ -292,34 +302,35 @@ test.describe.serial('Kafka Query Editor - Avro Tests', () => {
     await panelEditPage.datasource.set(ds.name);
 
     // Start the Avro Kafka producer WITHOUT schema registry and topic 'test-avro-inline-topic'
-    const { producer } = startAvroKafkaProducer({ topic: 'test-avro-inline-topic' });
-    // Wait for some data to be produced
-    await new Promise((resolve) => setTimeout(resolve, 3000));
-    // Set visualization
+    const { producer, exitPromise } = startAvroKafkaProducer({ topic: 'test-avro-inline-topic' });
     try {
-      await panelEditPage.setVisualization('Table');
-    } catch (error) {
-      console.log('Visualization picker blocked by overlay, continuing...');
-    }
+      // Wait for some data to be produced
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      // Set visualization
+      try {
+        await panelEditPage.setVisualization('Table');
+      } catch (error) {
+        console.log('Visualization picker blocked by overlay, continuing...');
+      }
 
-    // Select Avro message format
-    await selectAvroMessageFormat(page);
+      // Select Avro message format
+      await selectAvroMessageFormat(page);
 
-    // Wait for Avro configuration to appear
-    await expect(getAvroSchemaSourceLocator(page)).toBeVisible({ timeout: 5000 });
+      // Wait for Avro configuration to appear
+      await expect(getAvroSchemaSourceLocator(page)).toBeVisible({ timeout: 5000 });
 
-    // Switch to Inline Schema
-    await selectInlineSchema(page);
+      // Switch to Inline Schema
+      await selectInlineSchema(page);
 
-    // Wait for schema textarea and fill it with the correct schema
-    const schemaTextarea = page
-      .locator('textarea[placeholder*="schema"]')
-      .or(page.getByRole('textbox', { name: /schema/i }));
+      // Wait for schema textarea and fill it with the correct schema
+      const schemaTextarea = page
+        .locator('textarea[placeholder*="schema"]')
+        .or(page.getByRole('textbox', { name: /schema/i }));
 
-    await expect(schemaTextarea.first()).toBeVisible({ timeout: 5000 });
+      await expect(schemaTextarea.first()).toBeVisible({ timeout: 5000 });
 
-    // Use the same schema that the producer uses (nested shape)
-    const avroSchema = `{
+      // Use the same schema that the producer uses (nested shape)
+      const avroSchema = `{
       "type": "record",
       "name": "TestRecord",
       "fields": [
@@ -387,18 +398,27 @@ test.describe.serial('Kafka Query Editor - Avro Tests', () => {
       ]
     }`;
 
-    await schemaTextarea.first().fill(avroSchema);
-    // Fill in the query editor fields
-    await page.getByRole('textbox', { name: 'Enter topic name' }).fill('test-avro-inline-topic');
-    await page.getByText('test-avro-inline-topic').click(); // The topic name is clicked from the autocomplete list
-    // Fetch partitions
-    await page.getByRole('button', { name: 'Fetch' }).click();
-    await new Promise((resolve) => setTimeout(resolve, 1000)); // Wait for schema to be processed
+      await schemaTextarea.first().fill(avroSchema);
+      // Fill in the query editor fields
+      await page.getByRole('textbox', { name: 'Enter topic name' }).fill('test-avro-inline-topic');
+      await page.getByText('test-avro-inline-topic').click(); // The topic name is clicked from the autocomplete list
+      // Fetch partitions
+      await page.getByRole('button', { name: 'Fetch' }).click();
+      await new Promise((resolve) => setTimeout(resolve, 1000)); // Wait for schema to be processed
 
-    // Wait for the time column to appear first (this indicates data is flowing)
-    await verifyColumnHeadersVisible(page);
+      // Wait for the time column to appear first (this indicates data is flowing)
+      await verifyColumnHeadersVisible(page);
 
-    // Verify that Avro data is flowing correctly with inline schema
-    await verifyPanelDataContains(panelEditPage);
+      // Verify that Avro data is flowing correctly with inline schema
+      await verifyPanelDataContains(panelEditPage);
+    } finally {
+      // Cleanup: terminate producer process
+      producer.kill();
+      // Wait for process to exit with a 2-second timeout
+      await Promise.race([
+        exitPromise.catch(() => {}), // Ignore exit errors during cleanup
+        new Promise((resolve) => setTimeout(resolve, 2000)),
+      ]);
+    }
   });
 });
