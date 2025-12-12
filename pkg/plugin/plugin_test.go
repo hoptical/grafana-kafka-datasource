@@ -499,17 +499,12 @@ func TestNewKafkaInstance_CompleteSettings(t *testing.T) {
 			"saslMechanisms": "PLAIN",
 			"saslUsername": "test-user",
 			"tlsSkipVerify": true,
-			"tlsAuthWithCACert": true,
-			"tlsAuth": true,
 			"timeout": 5000,
 			"messageFormat": "json",
 			"schemaRegistryUrl": "http://localhost:8081"
 		}`),
 		DecryptedSecureJSONData: map[string]string{
 			"saslPassword":           "test-password",
-			"tlsCACert":              "test-ca-cert",
-			"tlsClientCert":          "test-client-cert",
-			"tlsClientKey":           "test-client-key",
 			"schemaRegistryUsername": "registry-user",
 			"schemaRegistryPassword": "registry-pass",
 		},
