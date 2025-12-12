@@ -368,10 +368,19 @@ func decodeAvroMessage(sm *StreamManager, client KafkaClientAPI, data []byte, co
 		} else {
 			// Fallback: create client per-message if StreamManager not available
 			log.DefaultLogger.Debug("StreamManager not available, creating Schema Registry client per-message")
+
+			// Get HTTP client from KafkaClient
+			httpClient := client.GetHTTPClient()
+			if httpClient == nil {
+				log.DefaultLogger.Error("HTTP client not available in KafkaClient")
+				return nil, fmt.Errorf("HTTP client not available for Schema Registry")
+			}
+
 			schemaClient := kafka_client.NewSchemaRegistryClient(
 				schemaRegistryUrl,
 				client.GetSchemaRegistryUsername(),
 				client.GetSchemaRegistryPassword(),
+				httpClient,
 			)
 			schema, err = schemaClient.GetLatestSchema(subject)
 			if err != nil {
@@ -440,7 +449,15 @@ func (sm *StreamManager) getSchemaFromRegistryWithCache(registryUrl, username, p
 		// Double-check after acquiring write lock
 		if sm.schemaRegistryClient == nil {
 			log.DefaultLogger.Debug("Creating Schema Registry client (first use)")
-			sm.schemaRegistryClient = kafka_client.NewSchemaRegistryClient(registryUrl, username, password)
+
+			// Get HTTP client from KafkaClient
+			httpClient := sm.client.GetHTTPClient()
+			if httpClient == nil {
+				sm.schemaClientMu.Unlock()
+				return "", fmt.Errorf("HTTP client not available in KafkaClient")
+			}
+
+			sm.schemaRegistryClient = kafka_client.NewSchemaRegistryClient(registryUrl, username, password, httpClient)
 		}
 		schemaClient = sm.schemaRegistryClient
 		sm.schemaClientMu.Unlock()

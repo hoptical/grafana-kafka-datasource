@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
+	"github.com/grafana/grafana-plugin-sdk-go/backend/httpclient"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/instancemgmt"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 	"github.com/grafana/grafana-plugin-sdk-go/data"
@@ -55,6 +57,7 @@ type KafkaClientAPI interface {
 	GetSchemaRegistryUsername() string
 	GetSchemaRegistryPassword() string
 	GetAvroSubjectNamingStrategy() string
+	GetHTTPClient() *http.Client
 }
 
 var (
@@ -65,14 +68,25 @@ var (
 	_ instancemgmt.InstanceDisposer = (*KafkaDatasource)(nil)
 )
 
-func NewKafkaInstance(_ context.Context, s backend.DataSourceInstanceSettings) (instancemgmt.Instance, error) {
+func NewKafkaInstance(ctx context.Context, s backend.DataSourceInstanceSettings) (instancemgmt.Instance, error) {
 	settings, err := getDatasourceSettings(s)
-
 	if err != nil {
 		return nil, err
 	}
 
-	kc := kafka_client.NewKafkaClient(*settings)
+	// Create HTTP client using Grafana Plugin SDK to support Private Data Source Connect (PDC)
+	// This enables automatic SOCKS proxy handling for secure connections to private networks
+	opts, err := s.HTTPClientOptions(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get HTTP client options: %w", err)
+	}
+
+	httpClient, err := httpclient.New(opts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create HTTP client: %w", err)
+	}
+
+	kc := kafka_client.NewKafkaClient(*settings, httpClient)
 
 	return &KafkaDatasource{client: &kc, settings: settings}, nil
 }
@@ -422,10 +436,21 @@ func (d *KafkaDatasource) ValidateSchemaRegistry(ctx context.Context) (*backend.
 
 	// Try to connect to schema registry by attempting to get a schema
 	// Use a dummy subject that likely doesn't exist to test connectivity
+
+	// Get HTTP client from KafkaClient
+	httpClient := d.client.GetHTTPClient()
+	if httpClient == nil {
+		return &backend.CheckHealthResult{
+			Status:  backend.HealthStatusError,
+			Message: "HTTP client not available for Schema Registry health check",
+		}, nil
+	}
+
 	schemaClient := kafka_client.NewSchemaRegistryClient(
 		schemaRegistryUrl,
 		d.client.GetSchemaRegistryUsername(),
 		d.client.GetSchemaRegistryPassword(),
+		httpClient,
 	)
 
 	testSubject := "_test_connectivity_subject_"

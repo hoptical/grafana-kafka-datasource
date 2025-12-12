@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"strings"
 	"time"
 
@@ -87,6 +88,12 @@ type KafkaClient struct {
 	SchemaRegistryUrl      string
 	SchemaRegistryUsername string
 	SchemaRegistryPassword string
+	HTTPClient             *http.Client // HTTP client for Schema Registry (from grafana-plugin-sdk-go)
+}
+
+// GetHTTPClient returns the HTTP client used for Schema Registry connections
+func (client *KafkaClient) GetHTTPClient() *http.Client {
+	return client.HTTPClient
 }
 
 type KafkaMessage struct {
@@ -173,7 +180,10 @@ func (client *KafkaClient) decodeMessageValue(data []byte, format string) (inter
 	}
 }
 
-func NewKafkaClient(options Options) KafkaClient {
+// NewKafkaClient creates a new KafkaClient instance.
+// The httpClient parameter should be created using grafana-plugin-sdk-go/backend/httpclient
+// to support Private Data Source Connect (PDC) with automatic SOCKS proxy handling.
+func NewKafkaClient(options Options, httpClient *http.Client) KafkaClient {
 	// Build broker slice once
 	raw := strings.Split(options.BootstrapServers, ",")
 	brokers := make([]string, 0, len(raw))
@@ -212,6 +222,7 @@ func NewKafkaClient(options Options) KafkaClient {
 		SchemaRegistryUrl:      options.SchemaRegistryUrl,
 		SchemaRegistryUsername: options.SchemaRegistryUsername,
 		SchemaRegistryPassword: options.SchemaRegistryPassword,
+		HTTPClient:             httpClient,
 	}
 }
 

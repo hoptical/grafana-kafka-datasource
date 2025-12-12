@@ -36,7 +36,10 @@ func TestStreamManager_SchemaCacheConcurrency(t *testing.T) {
 	}))
 	defer server.Close()
 
-	sm := NewStreamManager(nil, 5, 100)
+	// Create a mock client that properly implements KafkaClientAPI
+	mockClient := &mockStreamClient{}
+
+	sm := NewStreamManager(mockClient, 5, 100)
 	subject := "test-topic-value"
 
 	// Test concurrent access to schema cache
@@ -100,7 +103,10 @@ func TestStreamManager_SchemaClientConcurrency(t *testing.T) {
 	}))
 	defer server.Close()
 
-	sm := NewStreamManager(nil, 5, 100)
+	// Create a mock client that properly implements KafkaClientAPI
+	mockClient := &mockStreamClient{}
+
+	sm := NewStreamManager(mockClient, 5, 100)
 
 	// Multiple goroutines creating clients with different credentials
 	concurrency := 30
@@ -144,7 +150,10 @@ func TestStreamConfig_ConcurrentAccess(t *testing.T) {
 		LastN:            100,
 	}
 
-	sm := NewStreamManager(nil, 5, 100)
+	// Create a mock client that properly implements KafkaClientAPI
+	mockClient := &mockStreamClient{}
+
+	sm := NewStreamManager(mockClient, 5, 100)
 
 	concurrency := 50
 	iterations := 100
@@ -276,9 +285,8 @@ func TestStreamManager_MixedOperations(t *testing.T) {
 	}))
 	defer server.Close()
 
-	mockClient := &mockStreamClient{
-		partitions: []int32{0, 1, 2},
-	}
+	// Create a mock client that properly implements KafkaClientAPI
+	mockClient := &mockStreamClient{}
 
 	sm := NewStreamManager(mockClient, 5, 100)
 

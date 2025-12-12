@@ -8,7 +8,8 @@ import (
 )
 
 func TestNewSchemaRegistryClient(t *testing.T) {
-	client := NewSchemaRegistryClient("http://localhost:8081", "user", "pass")
+	httpClient := &http.Client{}
+	client := NewSchemaRegistryClient("http://localhost:8081", "user", "pass", httpClient)
 
 	if client.BaseURL != "http://localhost:8081" {
 		t.Errorf("Expected BaseURL to be 'http://localhost:8081', got %s", client.BaseURL)
@@ -43,7 +44,7 @@ func TestSchemaRegistryClient_GetSchemaByID(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewSchemaRegistryClient(server.URL, "user", "pass")
+	client := NewSchemaRegistryClient(server.URL, "user", "pass", &http.Client{})
 	schema, err := client.GetSchemaByID(123)
 
 	if err != nil {
@@ -68,7 +69,7 @@ func TestSchemaRegistryClient_GetSchemaByID_NoAuth(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewSchemaRegistryClient(server.URL, "", "")
+	client := NewSchemaRegistryClient(server.URL, "", "", &http.Client{})
 	schema, err := client.GetSchemaByID(456)
 
 	if err != nil {
@@ -87,7 +88,7 @@ func TestSchemaRegistryClient_GetSchemaByID_Error(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewSchemaRegistryClient(server.URL, "", "")
+	client := NewSchemaRegistryClient(server.URL, "", "", &http.Client{})
 	_, err := client.GetSchemaByID(123)
 
 	if err == nil {
@@ -111,7 +112,7 @@ func TestSchemaRegistryClient_GetLatestSchema(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewSchemaRegistryClient(server.URL, "", "")
+	client := NewSchemaRegistryClient(server.URL, "", "", &http.Client{})
 	schema, err := client.GetLatestSchema("test-topic")
 
 	if err != nil {
@@ -131,7 +132,8 @@ func TestSchemaRegistryClient_GetLatestSchema_Error(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewSchemaRegistryClient(server.URL, "", "")
+	httpClient := &http.Client{}
+	client := NewSchemaRegistryClient(server.URL, "", "", httpClient)
 	_, err := client.GetLatestSchema("nonexistent-topic")
 
 	if err == nil {

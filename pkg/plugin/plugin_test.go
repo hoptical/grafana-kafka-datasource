@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"testing"
 	"time"
 
@@ -87,6 +88,7 @@ func (m *mockKafkaClient) GetSchemaRegistryUrl() string         { return m.schem
 func (m *mockKafkaClient) GetSchemaRegistryUsername() string    { return m.schemaRegistryUsername }
 func (m *mockKafkaClient) GetSchemaRegistryPassword() string    { return m.schemaRegistryPassword }
 func (m *mockKafkaClient) GetAvroSubjectNamingStrategy() string { return m.avroSubjectNamingStrategy }
+func (m *mockKafkaClient) GetHTTPClient() *http.Client          { return &http.Client{} }
 
 func TestQueryData(t *testing.T) {
 	ds := plugin.NewWithClient(&mockKafkaClient{})
@@ -499,17 +501,12 @@ func TestNewKafkaInstance_CompleteSettings(t *testing.T) {
 			"saslMechanisms": "PLAIN",
 			"saslUsername": "test-user",
 			"tlsSkipVerify": true,
-			"tlsAuthWithCACert": true,
-			"tlsAuth": true,
 			"timeout": 5000,
 			"messageFormat": "json",
 			"schemaRegistryUrl": "http://localhost:8081"
 		}`),
 		DecryptedSecureJSONData: map[string]string{
 			"saslPassword":           "test-password",
-			"tlsCACert":              "test-ca-cert",
-			"tlsClientCert":          "test-client-cert",
-			"tlsClientKey":           "test-client-key",
 			"schemaRegistryUsername": "registry-user",
 			"schemaRegistryPassword": "registry-pass",
 		},
