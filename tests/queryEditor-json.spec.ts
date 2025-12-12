@@ -193,48 +193,58 @@ test.describe('Kafka Query Editor - JSON Tests', () => {
     await panelEditPage.datasource.set(ds.name);
 
     // Start the Kafka producer
-    const { producer } = startKafkaProducer();
-    // Wait for some data to be produced
-    await new Promise((resolve) => setTimeout(resolve, 3000));
-
-    // Fill in the query editor fields
-    await page.getByRole('textbox', { name: 'Enter topic name' }).fill('test-topic');
-    await page.getByRole('button', { name: 'Fetch' }).click();
-    await page.getByText('test-topic').click(); // The topic name is clicked from the autocomplete list
-
-    // Wait for partition selector to be available after fetch
-    const partitionSelector = page
-      .locator('div')
-      .filter({ hasText: /^All partitions$/ })
-      .nth(2)
-      .or(page.locator('#query-editor-partition'))
-      .or(page.getByText('All partitions').locator('..').locator('.css-1eu65zc'));
-
-    // Partition selector MUST be found after fetch
-    await expect(partitionSelector.first()).toBeVisible({ timeout: 5000 });
-    await partitionSelector.first().click();
-
-    // Select "All partitions" option - works for both v10 and v12+
-    const allPartitionsOption = page
-      .getByLabel('Select options menu')
-      .getByText('All partitions')
-      .or(page.getByRole('option', { name: /^All partitions$/ }));
-    await allPartitionsOption.first().click();
-
-    // Set visualization with minimal timeout to avoid page closure
+    const { producer, exitPromise } = startKafkaProducer();
     try {
-      await panelEditPage.setVisualization('Table');
-    } catch (error) {
-      console.log('Visualization picker blocked by overlay, trying force click');
-      // Skip visualization setting if it causes issues - focus on data streaming
-      console.log('Skipping visualization setting to avoid timeout');
+      // Wait for some data to be produced
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+
+      // Fill in the query editor fields
+      await page.getByRole('textbox', { name: 'Enter topic name' }).fill('test-topic');
+      await page.getByRole('button', { name: 'Fetch' }).click();
+      await page.getByText('test-topic').click(); // The topic name is clicked from the autocomplete list
+
+      // Wait for partition selector to be available after fetch
+      const partitionSelector = page
+        .locator('div')
+        .filter({ hasText: /^All partitions$/ })
+        .nth(2)
+        .or(page.locator('#query-editor-partition'))
+        .or(page.getByText('All partitions').locator('..').locator('.css-1eu65zc'));
+
+      // Partition selector MUST be found after fetch
+      await expect(partitionSelector.first()).toBeVisible({ timeout: 5000 });
+      await partitionSelector.first().click();
+
+      // Select "All partitions" option - works for both v10 and v12+
+      const allPartitionsOption = page
+        .getByLabel('Select options menu')
+        .getByText('All partitions')
+        .or(page.getByRole('option', { name: /^All partitions$/ }));
+      await allPartitionsOption.first().click();
+
+      // Set visualization with minimal timeout to avoid page closure
+      try {
+        await panelEditPage.setVisualization('Table');
+      } catch (error) {
+        console.log('Visualization picker blocked by overlay, trying force click');
+        // Skip visualization setting if it causes issues - focus on data streaming
+        console.log('Skipping visualization setting to avoid timeout');
+      }
+
+      // Wait for the time column to appear first (this indicates data is flowing)
+      await verifyColumnHeadersVisible(page);
+
+      // Verify that data is flowing correctly with proper formats
+      await verifyPanelDataContains(panelEditPage);
+    } finally {
+      // Cleanup: terminate producer process
+      producer.kill();
+      // Wait for process to exit with a 2-second timeout
+      await Promise.race([
+        exitPromise.catch(() => {}), // Ignore exit errors during cleanup
+        new Promise((resolve) => setTimeout(resolve, 2000)),
+      ]);
     }
-
-    // Wait for the time column to appear first (this indicates data is flowing)
-    await verifyColumnHeadersVisible(page);
-
-    // Verify that data is flowing correctly with proper formats
-    await verifyPanelDataContains(panelEditPage);
   });
 
   test('should configure Last N messages with proper validation', async ({
@@ -344,62 +354,72 @@ test.describe('Kafka Query Editor - JSON Tests', () => {
     await panelEditPage.datasource.set(ds.name);
 
     // Start producer
-    const { producer } = startKafkaProducer();
-    await new Promise((r) => setTimeout(r, 3000));
-
-    // Fetch partitions for existing topic
-    await page.getByRole('textbox', { name: 'Enter topic name' }).fill('test-topic');
-    await page.getByRole('button', { name: 'Fetch' }).click();
-
-    // Open partition select and ensure options present (All partitions + partition 0,1,2)
-    // Use the same approach as Message Format selector - find the clickable parent
-    // Wait for partition selector to be ready
-    const partitionSelector = page
-      .locator('#query-editor-partition')
-      .or(page.getByText('All partitions').locator('..').locator('.css-1eu65zc'))
-      .or(page.getByText('test-topic').locator('..').locator('.css-1eu65zc'));
-
-    await expect(partitionSelector.first()).toBeVisible({ timeout: 5000 });
-    await partitionSelector.first().click();
-
-    // Check for All partitions option
-    const allPartitionsOption = page
-      .getByRole('option', { name: /^All partitions$/ })
-      .or(page.getByText('All partitions', { exact: true }));
-    await expect(allPartitionsOption.first()).toBeVisible();
-
-    // Check for individual partition options (should have 3 partitions)
-    const partition0Option = page
-      .getByRole('option', { name: /Partition 0/ })
-      .or(page.getByText(/Partition 0/, { exact: true }));
-    await expect(partition0Option.first()).toBeVisible();
-
-    const partition1Option = page
-      .getByRole('option', { name: /Partition 1/ })
-      .or(page.getByText(/Partition 1/, { exact: true }));
-    await expect(partition1Option.first()).toBeVisible();
-
-    const partition2Option = page
-      .getByRole('option', { name: /Partition 2/ })
-      .or(page.getByText(/Partition 2/, { exact: true }));
-    await expect(partition2Option.first()).toBeVisible();
-
-    // Pick single partition 1
-    await partition1Option.first().click();
-
-    // Set visualization with minimal timeout to avoid page closure
+    const { producer, exitPromise } = startKafkaProducer();
     try {
-      await panelEditPage.setVisualization('Table');
-    } catch (error) {
-      console.log('Visualization picker blocked by overlay, trying force click');
-      // Skip visualization setting if it causes issues - focus on data streaming
-      console.log('Skipping visualization setting to avoid timeout');
+      await new Promise((r) => setTimeout(r, 3000));
+
+      // Fetch partitions for existing topic
+      await page.getByRole('textbox', { name: 'Enter topic name' }).fill('test-topic');
+      await page.getByRole('button', { name: 'Fetch' }).click();
+
+      // Open partition select and ensure options present (All partitions + partition 0,1,2)
+      // Use the same approach as Message Format selector - find the clickable parent
+      // Wait for partition selector to be ready
+      const partitionSelector = page
+        .locator('#query-editor-partition')
+        .or(page.getByText('All partitions').locator('..').locator('.css-1eu65zc'))
+        .or(page.getByText('test-topic').locator('..').locator('.css-1eu65zc'));
+
+      await expect(partitionSelector.first()).toBeVisible({ timeout: 5000 });
+      await partitionSelector.first().click();
+
+      // Check for All partitions option
+      const allPartitionsOption = page
+        .getByRole('option', { name: /^All partitions$/ })
+        .or(page.getByText('All partitions', { exact: true }));
+      await expect(allPartitionsOption.first()).toBeVisible();
+
+      // Check for individual partition options (should have 3 partitions)
+      const partition0Option = page
+        .getByRole('option', { name: /Partition 0/ })
+        .or(page.getByText(/Partition 0/, { exact: true }));
+      await expect(partition0Option.first()).toBeVisible();
+
+      const partition1Option = page
+        .getByRole('option', { name: /Partition 1/ })
+        .or(page.getByText(/Partition 1/, { exact: true }));
+      await expect(partition1Option.first()).toBeVisible();
+
+      const partition2Option = page
+        .getByRole('option', { name: /Partition 2/ })
+        .or(page.getByText(/Partition 2/, { exact: true }));
+      await expect(partition2Option.first()).toBeVisible();
+
+      // Pick single partition 1
+      await partition1Option.first().click();
+
+      // Set visualization with minimal timeout to avoid page closure
+      try {
+        await panelEditPage.setVisualization('Table');
+      } catch (error) {
+        console.log('Visualization picker blocked by overlay, trying force click');
+        // Skip visualization setting if it causes issues - focus on data streaming
+        console.log('Skipping visualization setting to avoid timeout');
+      }
+
+      // Wait for the time column to appear first (this indicates data is flowing)
+      await verifyColumnHeadersVisible(page, SINGLE_PARTITION_COLUMN_HEADERS);
+
+      // Verify that data is flowing correctly with proper formats
+      await verifyPanelDataContains(panelEditPage);
+    } finally {
+      // Cleanup: terminate producer process
+      producer.kill();
+      // Wait for process to exit with a 2-second timeout
+      await Promise.race([
+        exitPromise.catch(() => {}), // Ignore exit errors during cleanup
+        new Promise((resolve) => setTimeout(resolve, 2000)),
+      ]);
     }
-
-    // Wait for the time column to appear first (this indicates data is flowing)
-    await verifyColumnHeadersVisible(page, SINGLE_PARTITION_COLUMN_HEADERS);
-
-    // Verify that data is flowing correctly with proper formats
-    await verifyPanelDataContains(panelEditPage);
   });
 });
