@@ -10,6 +10,7 @@ export const ALERTS_PATTERN = 'severity';
 
 // Common column headers to check
 export const COMMON_COLUMN_HEADERS = ['time', 'offset', 'partition', 'host.ip'];
+export const SINGLE_PARTITION_COLUMN_HEADERS = [...COMMON_COLUMN_HEADERS.filter((h) => h !== 'partition')];
 
 // Helper function to verify panel data contains expected patterns
 export async function verifyPanelDataContains(
@@ -22,10 +23,7 @@ export async function verifyPanelDataContains(
 }
 
 // Helper function to verify column headers are visible
-export async function verifyColumnHeadersVisible(
-  page: Page,
-  headers: string[] = COMMON_COLUMN_HEADERS
-): Promise<void> {
+export async function verifyColumnHeadersVisible(page: Page, headers: string[] = COMMON_COLUMN_HEADERS): Promise<void> {
   for (const header of headers) {
     await expect(page.getByRole('columnheader', { name: header })).toBeVisible();
   }

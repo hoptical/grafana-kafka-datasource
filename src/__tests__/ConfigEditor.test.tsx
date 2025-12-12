@@ -587,11 +587,7 @@ describe('ConfigEditor', () => {
   });
 
   it('handles schema registry password reset', () => {
-    renderConfigEditor(
-      {},
-      { schemaRegistryPassword: 'existing-password' },
-      { schemaRegistryPassword: true }
-    );
+    renderConfigEditor({}, { schemaRegistryPassword: 'existing-password' }, { schemaRegistryPassword: true });
 
     const resetButton = screen.getByTestId('reset-button');
     fireEvent.click(resetButton);

@@ -115,18 +115,18 @@ export const ConfigEditor = (props: Props) => {
   };
 
   const makeNumberChangeHandler = (key: string) => (event: ChangeEvent<HTMLInputElement>) => {
-      const n = Number(event.target.value);
-      const validated = Number.isFinite(n) && n >= 0 ? n : 0;
-      onOptionsChange({
-          ...options,
-          jsonData: { ...options.jsonData, [key]: validated },
-      });
+    const n = Number(event.target.value);
+    const validated = Number.isFinite(n) && n >= 0 ? n : 0;
+    onOptionsChange({
+      ...options,
+      jsonData: { ...options.jsonData, [key]: validated },
+    });
   };
 
-  const onHealthcheckTimeoutChange = makeNumberChangeHandler("healthcheckTimeout");
-  const onRequestTimeoutChange = makeNumberChangeHandler("timeout");
-  const onRequestFlattenMaxDepthChange = makeNumberChangeHandler("flattenMaxDepth");
-  const onRequestFlattenFieldCapChange = makeNumberChangeHandler("flattenFieldCap");
+  const onHealthcheckTimeoutChange = makeNumberChangeHandler('healthcheckTimeout');
+  const onRequestTimeoutChange = makeNumberChangeHandler('timeout');
+  const onRequestFlattenMaxDepthChange = makeNumberChangeHandler('flattenMaxDepth');
+  const onRequestFlattenFieldCapChange = makeNumberChangeHandler('flattenFieldCap');
 
   const onSchemaRegistryUrlChange = (event: ChangeEvent<HTMLInputElement>) => {
     onOptionsChange({ ...options, jsonData: { ...options.jsonData, schemaRegistryUrl: event.target.value } });
@@ -137,7 +137,10 @@ export const ConfigEditor = (props: Props) => {
   };
 
   const onSchemaRegistryPasswordChange = (event: ChangeEvent<HTMLInputElement>) => {
-    onOptionsChange({ ...options, secureJsonData: { ...options.secureJsonData, schemaRegistryPassword: event.target.value } });
+    onOptionsChange({
+      ...options,
+      secureJsonData: { ...options.secureJsonData, schemaRegistryPassword: event.target.value },
+    });
   };
 
   const onResetSchemaRegistryPassword = () => {
@@ -384,7 +387,10 @@ export const ConfigEditor = (props: Props) => {
       <Divider spacing={4} />
 
       {/* Schema Registry Configuration */}
-      <ConfigSection title="Schema Registry" description="Configure Confluent Schema Registry for Avro message decoding">
+      <ConfigSection
+        title="Schema Registry"
+        description="Configure Confluent Schema Registry for Avro message decoding"
+      >
         <InlineField
           label="Schema Registry URL"
           labelWidth={25}
@@ -400,12 +406,7 @@ export const ConfigEditor = (props: Props) => {
           />
         </InlineField>
 
-        <InlineField
-          label="Username"
-          labelWidth={25}
-          tooltip="Schema Registry authentication username (optional)"
-          grow
-        >
+        <InlineField label="Username" labelWidth={25} tooltip="Schema Registry authentication username (optional)" grow>
           <Input
             id="config-editor-schema-registry-username"
             data-testid="schema-registry-username"
@@ -416,12 +417,7 @@ export const ConfigEditor = (props: Props) => {
           />
         </InlineField>
 
-        <InlineField
-          label="Password"
-          labelWidth={25}
-          tooltip="Schema Registry authentication password (optional)"
-          grow
-        >
+        <InlineField label="Password" labelWidth={25} tooltip="Schema Registry authentication password (optional)" grow>
           <SecretInput
             id="config-editor-schema-registry-password"
             isConfigured={(secureJsonFields && secureJsonFields.schemaRegistryPassword) as boolean}
@@ -487,36 +483,36 @@ export const ConfigEditor = (props: Props) => {
         </InlineField>
 
         <InlineField
-            label="JSON Flatten Depth"
-            labelWidth={30}
-            tooltip="Depth to flatten nested JSON objects. No hard upper bound; higher values may impact performance. (Default: 5)"
-            grow
+          label="JSON Flatten Depth"
+          labelWidth={30}
+          tooltip="Depth to flatten nested JSON objects. No hard upper bound; higher values may impact performance. (Default: 5)"
+          grow
         >
-            <Input
-                id="config-editor-flattenmaxdepth"
-                onChange={onRequestFlattenMaxDepthChange}
-                value={jsonData.flattenMaxDepth}
-                type="number"
-                step={1}
-                min={1}
-                width={15}
-            />
+          <Input
+            id="config-editor-flattenmaxdepth"
+            onChange={onRequestFlattenMaxDepthChange}
+            value={jsonData.flattenMaxDepth}
+            type="number"
+            step={1}
+            min={1}
+            width={15}
+          />
         </InlineField>
         <InlineField
-            label="JSON Field Limit"
-            labelWidth={30}
-            tooltip="Number of flattened fields to process per message. No hard upper bound; very large values can impact memory/CPU. (Default: 1000)"
-            grow
+          label="JSON Field Limit"
+          labelWidth={30}
+          tooltip="Number of flattened fields to process per message. No hard upper bound; very large values can impact memory/CPU. (Default: 1000)"
+          grow
         >
-            <Input
-                id="config-editor-flattenfieldcap"
-                onChange={onRequestFlattenFieldCapChange}
-                value={jsonData.flattenFieldCap}
-                type="number"
-                step={1}
-                min={1}
-                width={15}
-            />
+          <Input
+            id="config-editor-flattenfieldcap"
+            onChange={onRequestFlattenFieldCapChange}
+            value={jsonData.flattenFieldCap}
+            type="number"
+            step={1}
+            min={1}
+            width={15}
+          />
         </InlineField>
       </ConfigSection>
     </>

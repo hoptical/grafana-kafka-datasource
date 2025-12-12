@@ -32,7 +32,7 @@ func TestStreamManager_SchemaCacheConcurrency(t *testing.T) {
 		mu.Unlock()
 
 		w.Header().Set("Content-Type", "application/vnd.schemaregistry.v1+json")
-		json.NewEncoder(w).Encode(schemaPayload)
+		_ = json.NewEncoder(w).Encode(schemaPayload)
 	}))
 	defer server.Close()
 
@@ -99,7 +99,7 @@ func TestStreamManager_SchemaClientConcurrency(t *testing.T) {
 			"schema":  `{"type":"record","name":"Test","fields":[]}`,
 		}
 		w.Header().Set("Content-Type", "application/vnd.schemaregistry.v1+json")
-		json.NewEncoder(w).Encode(schemaPayload)
+		_ = json.NewEncoder(w).Encode(schemaPayload)
 	}))
 	defer server.Close()
 
@@ -281,7 +281,7 @@ func TestStreamManager_MixedOperations(t *testing.T) {
 			"schema":  `{"type":"record","name":"Mixed","fields":[{"name":"data","type":"string"}]}`,
 		}
 		w.Header().Set("Content-Type", "application/vnd.schemaregistry.v1+json")
-		json.NewEncoder(w).Encode(schemaPayload)
+		_ = json.NewEncoder(w).Encode(schemaPayload)
 	}))
 	defer server.Close()
 

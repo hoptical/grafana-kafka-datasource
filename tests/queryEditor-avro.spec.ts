@@ -9,14 +9,28 @@ interface AvroProducerOptions {
   schemaRegistry?: boolean;
 }
 
-function startAvroKafkaProducer({ topic, schemaRegistry }: AvroProducerOptions): { producer: ChildProcess; exitPromise: Promise<void> } {
+function startAvroKafkaProducer({ topic, schemaRegistry }: AvroProducerOptions): {
+  producer: ChildProcess;
+  exitPromise: Promise<void>;
+} {
   const producerPath = './dist/producer';
   try {
     accessSync(producerPath, constants.X_OK); // Check if file exists and is executable
   } catch (err) {
     throw new Error(`Kafka producer executable not found or not executable at path: ${producerPath}`);
   }
-  const args = ['-broker', 'localhost:9094', '-topic', topic, '-connect-timeout', '500', '-num-partitions', '3', '-format', 'avro'];
+  const args = [
+    '-broker',
+    'localhost:9094',
+    '-topic',
+    topic,
+    '-connect-timeout',
+    '500',
+    '-num-partitions',
+    '3',
+    '-format',
+    'avro',
+  ];
   if (schemaRegistry) {
     args.push('-schema-registry', 'http://localhost:8081');
   }
@@ -44,11 +58,14 @@ function startAvroKafkaProducer({ topic, schemaRegistry }: AvroProducerOptions):
 
 async function findMessageFormatSelector(page: Page): Promise<Locator | null> {
   const messageFormatApproaches = [
-    page.locator('div').filter({ hasText: /^JSON$/ }).nth(2), // The intercepting parent element
+    page
+      .locator('div')
+      .filter({ hasText: /^JSON$/ })
+      .nth(2), // The intercepting parent element
     page.getByText('JSON').locator('../..'), // Go up two levels to find clickable parent
     page.locator('.css-1eu65zc').filter({ hasText: /JSON/ }), // Direct selection of intercepting element
     page.getByText('JSON').filter({ hasText: /^JSON$/ }), // Original approach
-    page.locator('button').filter({ hasText: /^JSON$/ }),  // Button with exact JSON text
+    page.locator('button').filter({ hasText: /^JSON$/ }), // Button with exact JSON text
     page.getByText('Message Format').locator('..').locator('button').first(), // Button near Message Format label
     page.locator('[data-testid*="select"]'), // Any element with select in testid
   ];
@@ -80,7 +97,8 @@ async function selectAvroMessageFormat(page: Page): Promise<void> {
 }
 
 function getAvroSchemaSourceLocator(page: Page): Locator {
-  return page.getByText('Avro Schema Source')
+  return page
+    .getByText('Avro Schema Source')
     .or(page.getByText('Schema Source'))
     .or(page.locator('label').filter({ hasText: /schema.*source/i }));
 }
@@ -88,7 +106,10 @@ function getAvroSchemaSourceLocator(page: Page): Locator {
 async function findAvroSchemaSourceSelector(page: Page): Promise<Locator | null> {
   const schemaSourceApproaches = [
     page.locator('[data-testid="avro-schema-source"]'),
-    page.locator('div').filter({ hasText: /^Schema Registry$/ }).nth(2), // Use same pattern as Message Format
+    page
+      .locator('div')
+      .filter({ hasText: /^Schema Registry$/ })
+      .nth(2), // Use same pattern as Message Format
     page.getByText('Avro Schema Source').locator('..').locator('button'),
     page.getByRole('combobox').filter({ hasText: /Schema Registry|Inline Schema/ }),
     page.locator('button').filter({ hasText: /Schema Registry|Inline/ }),
@@ -106,8 +127,7 @@ async function findAvroSchemaSourceSelector(page: Page): Promise<Locator | null>
 }
 
 function getInlineSchemaOption(page: Page): Locator {
-  return page.getByRole('option', { name: 'Inline Schema' })
-    .or(page.getByText('Inline Schema', { exact: true }));
+  return page.getByRole('option', { name: 'Inline Schema' }).or(page.getByText('Inline Schema', { exact: true }));
 }
 
 async function selectInlineSchema(page: Page): Promise<void> {
@@ -141,7 +161,8 @@ test.describe.serial('Kafka Query Editor - Avro Tests', () => {
     await expect(getAvroSchemaSourceLocator(page).first()).toBeVisible({ timeout: 8000 });
 
     // Test Schema Registry validation with better selectors - use "Test Connection" button text
-    const schemaRegistryButton = page.getByRole('button', { name: /test.*connection|validate.*registry/i })
+    const schemaRegistryButton = page
+      .getByRole('button', { name: /test.*connection|validate.*registry/i })
       .or(page.locator('button').filter({ hasText: /test.*connection|validate/i }))
       .or(page.getByText('Test Connection'));
 
@@ -156,7 +177,8 @@ test.describe.serial('Kafka Query Editor - Avro Tests', () => {
     await selectInlineSchema(page);
 
     // Now the schema textarea should appear - wait by checking for it
-    const schemaTextarea = page.locator('textarea[placeholder*="schema"]')
+    const schemaTextarea = page
+      .locator('textarea[placeholder*="schema"]')
       .or(page.getByRole('textbox', { name: /schema/i }))
       .or(page.getByPlaceholder(/paste.*schema|avro.*schema/i))
       .or(page.locator('textarea').filter({ hasText: /schema/i }));
@@ -189,7 +211,9 @@ test.describe.serial('Kafka Query Editor - Avro Tests', () => {
     }
 
     // Test file upload if available
-    const fileUploadInput = page.locator('input[type="file"]').filter({ hasText: /avsc|json/ })
+    const fileUploadInput = page
+      .locator('input[type="file"]')
+      .filter({ hasText: /avsc|json/ })
       .or(page.locator('input[type="file"][accept*=".avsc"]'));
     if (await fileUploadInput.isVisible({ timeout: 2000 })) {
       // File upload functionality exists but we won't test actual file upload in e2e
@@ -210,45 +234,60 @@ test.describe.serial('Kafka Query Editor - Avro Tests', () => {
     await panelEditPage.datasource.set(ds.name);
 
     // Start the Avro Kafka producer with schema registry and topic 'test-avro-schema-topic'
-    const { producer } = startAvroKafkaProducer({ topic: 'test-avro-schema-topic', schemaRegistry: true });
-    // Wait for some data to be produced
-    await new Promise((resolve) => setTimeout(resolve, 3000));
-    // Set visualization
+    const { producer, exitPromise } = startAvroKafkaProducer({ topic: 'test-avro-schema-topic', schemaRegistry: true });
     try {
-      await panelEditPage.setVisualization('Table');
-    } catch (error) {
-      console.log('Visualization picker blocked by overlay, continuing...');
+      // Wait for some data to be produced
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      // Set visualization
+      try {
+        await panelEditPage.setVisualization('Table');
+      } catch (error) {
+        console.log('Visualization picker blocked by overlay, continuing...');
+      }
+
+      // Fill in the query editor fields
+      await page.getByRole('textbox', { name: 'Enter topic name' }).fill('test-avro-schema-topic');
+      await page.getByText('test-avro-schema-topic').click(); // The topic name is clicked from the autocomplete list
+
+      // Select Avro message format
+      await selectAvroMessageFormat(page);
+
+      // Ensure Schema Registry is selected (should be default)
+      await page.getByRole('button', { name: 'Fetch' }).click();
+
+      // Wait for partition selector to be available after fetch
+      const partitionSelector = page
+        .locator('div')
+        .filter({ hasText: /^All partitions$/ })
+        .nth(2)
+        .or(page.locator('#query-editor-partition'))
+        .or(page.getByText('All partitions').locator('..').locator('.css-1eu65zc'));
+
+      // Partition selector MUST be found after fetch
+      await expect(partitionSelector.first()).toBeVisible({ timeout: 5000 });
+      await partitionSelector.first().click();
+
+      // Select "All partitions" option
+      const allPartitionsOption = page
+        .getByLabel('Select options menu')
+        .getByText('All partitions')
+        .or(page.getByRole('option', { name: /^All partitions$/ }));
+      await allPartitionsOption.first().click();
+
+      // Wait for the time column to appear first (this indicates data is flowing)
+      await verifyColumnHeadersVisible(page);
+
+      // Verify that Avro data is flowing correctly
+      await verifyPanelDataContains(panelEditPage);
+    } finally {
+      // Cleanup: terminate producer process
+      producer.kill();
+      // Wait for process to exit with a 2-second timeout
+      await Promise.race([
+        exitPromise.catch(() => {}), // Ignore exit errors during cleanup
+        new Promise((resolve) => setTimeout(resolve, 2000)),
+      ]);
     }
-
-    // Fill in the query editor fields
-    await page.getByRole('textbox', { name: 'Enter topic name' }).fill('test-avro-schema-topic');
-    await page.getByText('test-avro-schema-topic').click(); // The topic name is clicked from the autocomplete list
-
-    // Select Avro message format
-    await selectAvroMessageFormat(page);
-
-    // Ensure Schema Registry is selected (should be default)
-    await page.getByRole('button', { name: 'Fetch' }).click();
-
-    // Wait for partition selector to be available after fetch
-    const partitionSelector = page.locator('div').filter({ hasText: /^All partitions$/ }).nth(2)
-      .or(page.locator('#query-editor-partition'))
-      .or(page.getByText('All partitions').locator('..').locator('.css-1eu65zc'));
-
-    // Partition selector MUST be found after fetch
-    await expect(partitionSelector.first()).toBeVisible({ timeout: 5000 });
-    await partitionSelector.first().click();
-
-    // Select "All partitions" option
-    const allPartitionsOption = page.getByLabel('Select options menu').getByText('All partitions')
-      .or(page.getByRole('option', { name: /^All partitions$/ }));
-    await allPartitionsOption.first().click();
-
-    // Wait for the time column to appear first (this indicates data is flowing)
-    await verifyColumnHeadersVisible(page);
-
-    // Verify that Avro data is flowing correctly
-    await verifyPanelDataContains(panelEditPage);
   });
 
   // Test streaming Avro data from Kafka topic with Inline Schema
@@ -263,33 +302,35 @@ test.describe.serial('Kafka Query Editor - Avro Tests', () => {
     await panelEditPage.datasource.set(ds.name);
 
     // Start the Avro Kafka producer WITHOUT schema registry and topic 'test-avro-inline-topic'
-    const { producer } = startAvroKafkaProducer({ topic: 'test-avro-inline-topic' });
-    // Wait for some data to be produced
-    await new Promise((resolve) => setTimeout(resolve, 3000));
-    // Set visualization
+    const { producer, exitPromise } = startAvroKafkaProducer({ topic: 'test-avro-inline-topic' });
     try {
-      await panelEditPage.setVisualization('Table');
-    } catch (error) {
-      console.log('Visualization picker blocked by overlay, continuing...');
-    }
+      // Wait for some data to be produced
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      // Set visualization
+      try {
+        await panelEditPage.setVisualization('Table');
+      } catch (error) {
+        console.log('Visualization picker blocked by overlay, continuing...');
+      }
 
-    // Select Avro message format
-    await selectAvroMessageFormat(page);
+      // Select Avro message format
+      await selectAvroMessageFormat(page);
 
-    // Wait for Avro configuration to appear
-    await expect(getAvroSchemaSourceLocator(page)).toBeVisible({ timeout: 5000 });
+      // Wait for Avro configuration to appear
+      await expect(getAvroSchemaSourceLocator(page)).toBeVisible({ timeout: 5000 });
 
-    // Switch to Inline Schema
-    await selectInlineSchema(page);
+      // Switch to Inline Schema
+      await selectInlineSchema(page);
 
-    // Wait for schema textarea and fill it with the correct schema
-    const schemaTextarea = page.locator('textarea[placeholder*="schema"]')
-      .or(page.getByRole('textbox', { name: /schema/i }));
+      // Wait for schema textarea and fill it with the correct schema
+      const schemaTextarea = page
+        .locator('textarea[placeholder*="schema"]')
+        .or(page.getByRole('textbox', { name: /schema/i }));
 
-    await expect(schemaTextarea.first()).toBeVisible({ timeout: 5000 });
+      await expect(schemaTextarea.first()).toBeVisible({ timeout: 5000 });
 
-    // Use the same schema that the producer uses (nested shape)
-    const avroSchema = `{
+      // Use the same schema that the producer uses (nested shape)
+      const avroSchema = `{
       "type": "record",
       "name": "TestRecord",
       "fields": [
@@ -357,18 +398,27 @@ test.describe.serial('Kafka Query Editor - Avro Tests', () => {
       ]
     }`;
 
-    await schemaTextarea.first().fill(avroSchema);
-    // Fill in the query editor fields
-    await page.getByRole('textbox', { name: 'Enter topic name' }).fill('test-avro-inline-topic');
-    await page.getByText('test-avro-inline-topic').click(); // The topic name is clicked from the autocomplete list
-    // Fetch partitions
-    await page.getByRole('button', { name: 'Fetch' }).click();
-    await new Promise((resolve) => setTimeout(resolve, 1000)); // Wait for schema to be processed
+      await schemaTextarea.first().fill(avroSchema);
+      // Fill in the query editor fields
+      await page.getByRole('textbox', { name: 'Enter topic name' }).fill('test-avro-inline-topic');
+      await page.getByText('test-avro-inline-topic').click(); // The topic name is clicked from the autocomplete list
+      // Fetch partitions
+      await page.getByRole('button', { name: 'Fetch' }).click();
+      await new Promise((resolve) => setTimeout(resolve, 1000)); // Wait for schema to be processed
 
-    // Wait for the time column to appear first (this indicates data is flowing)
-    await verifyColumnHeadersVisible(page);
+      // Wait for the time column to appear first (this indicates data is flowing)
+      await verifyColumnHeadersVisible(page);
 
-    // Verify that Avro data is flowing correctly with inline schema
-    await verifyPanelDataContains(panelEditPage);
+      // Verify that Avro data is flowing correctly with inline schema
+      await verifyPanelDataContains(panelEditPage);
+    } finally {
+      // Cleanup: terminate producer process
+      producer.kill();
+      // Wait for process to exit with a 2-second timeout
+      await Promise.race([
+        exitPromise.catch(() => {}), // Ignore exit errors during cleanup
+        new Promise((resolve) => setTimeout(resolve, 2000)),
+      ]);
+    }
   });
 });

@@ -1,7 +1,14 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryEditor } from '../QueryEditor';
-import { AutoOffsetReset, TimestampMode, defaultQuery, MessageFormat, AvroSchemaSource, type KafkaQuery } from '../types';
+import {
+  AutoOffsetReset,
+  TimestampMode,
+  defaultQuery,
+  MessageFormat,
+  AvroSchemaSource,
+  type KafkaQuery,
+} from '../types';
 import { deepFreeze } from '../test-utils/test-helpers';
 
 // Mock @grafana/ui components

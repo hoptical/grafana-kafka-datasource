@@ -112,12 +112,13 @@ var ErrTopicNotFound = errors.New("topic not found")
 // For "json", it attempts JSON decoding and returns an error if it fails.
 // For other formats, it attempts JSON decoding but doesn't return an error on failure.
 func (client *KafkaClient) decodeMessageValue(data []byte, format string) (interface{}, error) {
-	if format == "avro" {
+	switch format {
+	case "avro":
 		grafanalog.DefaultLogger.Debug("Skipping JSON decoding for Avro format message",
 			"valueLength", len(data))
 		// For Avro format, don't attempt JSON parsing
 		return nil, nil
-	} else if format == "json" {
+	case "json":
 		// For JSON format, require successful JSON decoding
 		var doc interface{}
 		dec := json.NewDecoder(bytes.NewReader(data))
@@ -146,7 +147,7 @@ func (client *KafkaClient) decodeMessageValue(data []byte, format string) (inter
 				return nil, fmt.Errorf("decoded JSON is not a valid object or array: %T", v)
 			}
 		}
-	} else {
+	default:
 		// For other formats or unspecified, try JSON for backward compatibility but don't fail
 		var doc interface{}
 		dec := json.NewDecoder(bytes.NewReader(data))
@@ -327,7 +328,7 @@ func (client *KafkaClient) NewStreamReader(ctx context.Context, topic string, pa
 	switch autoOffsetReset {
 	case "earliest":
 		if err := reader.SetOffset(kafka.FirstOffset); err != nil {
-			reader.Close()
+			_ = reader.Close()
 			return nil, fmt.Errorf("unable to set earliest offset: %w", err)
 		}
 	case "lastN":
@@ -342,7 +343,7 @@ func (client *KafkaClient) NewStreamReader(ctx context.Context, topic string, pa
 			"requestedLastN", lastN,
 			"effectiveLastN", n)
 		if len(client.Brokers) == 0 {
-			reader.Close()
+			_ = reader.Close()
 			return nil, fmt.Errorf("no brokers configured to read offsets")
 		}
 		// Bound leader dial by client.Timeout to avoid hanging indefinitely
@@ -355,18 +356,22 @@ func (client *KafkaClient) NewStreamReader(ctx context.Context, topic string, pa
 		}
 		leaderConn, err := client.Dialer.DialLeader(offCtx, "tcp", client.Brokers[0], topic, int(partition))
 		if err != nil {
-			reader.Close()
+			_ = reader.Close()
 			return nil, fmt.Errorf("unable to dial leader: %w", err)
 		}
-		defer leaderConn.Close()
+		defer func() {
+			if err := leaderConn.Close(); err != nil {
+				grafanalog.DefaultLogger.Error("failed to close leader connection", "error", err)
+			}
+		}()
 		earliest, err := leaderConn.ReadFirstOffset()
 		if err != nil {
-			reader.Close()
+			_ = reader.Close()
 			return nil, fmt.Errorf("unable to read first offset: %w", err)
 		}
 		latest, err := leaderConn.ReadLastOffset()
 		if err != nil {
-			reader.Close()
+			_ = reader.Close()
 			return nil, fmt.Errorf("unable to read last offset: %w", err)
 		}
 		start := latest - n
@@ -381,12 +386,12 @@ func (client *KafkaClient) NewStreamReader(ctx context.Context, topic string, pa
 			"requestedLastN", n,
 			"calculatedStart", start)
 		if err := reader.SetOffset(start); err != nil {
-			reader.Close()
+			_ = reader.Close()
 			return nil, fmt.Errorf("unable to set lastN start offset: %w", err)
 		}
 	default: // latest
 		if err := reader.SetOffset(kafka.LastOffset); err != nil {
-			reader.Close()
+			_ = reader.Close()
 			return nil, fmt.Errorf("unable to set latest offset: %w", err)
 		}
 	}
@@ -470,7 +475,9 @@ func (client *KafkaClient) HealthCheck() error {
 
 func (client *KafkaClient) Dispose() {
 	if client.Reader != nil {
-		client.Reader.Close()
+		if err := client.Reader.Close(); err != nil {
+			grafanalog.DefaultLogger.Error("failed to close reader", "error", err)
+		}
 	}
 }
 

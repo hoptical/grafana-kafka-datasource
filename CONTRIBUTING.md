@@ -1,130 +1,111 @@
-
 # Contributing to Kafka Datasource for Grafana
 
 Thank you for considering contributing! We welcome issues, feature requests, and pull requests.
 
 ## How to Contribute
 
-1. **Fork the repository** and create your branch from `main` or the relevant feature branch.
-2. **Open an issue** to discuss bugs, features, or questions before starting major work.
-3. **Submit a pull request** with a clear description of your changes.
+1. Fork the repository and create a branch from `main`.
+2. Open an issue to discuss larger changes before starting work.
+3. Submit a pull request with a clear description and tests where appropriate.
 
 ## Developer Setup
 
 ### Dev Container (Recommended)
 
-This project includes a pre-configured [Dev Container](https://containers.dev/) for a consistent development environment. It installs Node.js, Go, Mage, Playwright, and other dependencies automatically.
+This repository includes a configured Dev Container for a consistent development environment (Node.js, Go, Mage, Playwright, etc.). The devcontainer provides a pre-configured workspace for most development work, but a few host-specific notes are important below.
 
-**How to use:**
+How to use:
 
-1. Open the project in [VS Code](https://code.visualstudio.com/) with the [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers).
-2. When prompted, "Reopen in Container" to start the dev container.
-3. All tools and dependencies will be installed automatically.
-4. You can run all `npm`, `go`, and `mage` commands inside the container terminal.
+1. Open the project in VS Code with the Remote - Containers / Dev Containers extension.
+2. Choose "Reopen in Container" when prompted; the container will build and install tools.
+3. Use the integrated terminal to run `npm`, `go`, and `mage` commands inside the container.
 
-**Important Docker Access Note:**  
-The dev container does not have Docker CLI/daemon access. This means `npm run server` (which starts Grafana/Kafka via Docker Compose) must be run on the host system, not inside the container.
+Important notes:
 
-**Recommended Workflow:**
+- Docker access: the Dev Container typically does not include Docker daemon access. If you need to run Docker Compose (for example to start Grafana/Kafka during E2E), run `npm run server` on your host machine rather than inside the container.
+- Networking: On Linux the container can often use `--network=host` to allow services to bind to the host network. On macOS and Windows Docker Desktop ignores `--network=host`; when running E2E tests from inside the container set `GRAFANA_URL=http://host.docker.internal:3000` so the container can reach Grafana running on the host.
+- Playwright: Playwright browsers are pre-installed for the non-root user in the Dev Container so E2E tests should work out-of-the-box; if you run tests locally you may need to run `npx playwright install` or `npm exec playwright install chromium --with-deps` depending on your environment.
+- Rebuild: If you change devcontainer toolchain or dependencies in the `Dockerfile` or devcontainer configuration, rebuild the container from VS Code: `Dev Containers: Rebuild Container`.
 
-1. **On Host**: Run `npm run server` to start the development environment (Grafana, Kafka)
-2. **Inside Container**: Run all other commands (`npm`, `go`, `mage` commands)
+Recommended workflow:
 
-**Platform-Specific Notes:**
-
-- **Linux**: The `--network=host` configuration should work for connecting to services
-- **macOS/Windows**: Docker Desktop ignores `--network=host`. Use `GRAFANA_URL=http://host.docker.internal:3000` when running E2E tests from inside the container
-
-**General Notes:**
-
-- Playwright browsers are pre-installed for the non-root user; E2E tests work out of the box.
-- If you update dependencies in `Dockerfile`, rebuild the container from the command palette: `Dev Containers: Rebuild Container`.
-
----
+1. On host: `npm run server` (if you need Grafana/Kafka via Docker Compose).
+2. Inside container: run development, build, tests, and linting commands (`npm run dev`, `npm run build`, `npm run test`, `mage`, etc.).
 
 ### Prerequisites
 
-- Grafana v10.2+
-- Node.js v22.15+
-- Go 1.24.6+
-- Mage v1.15.0+
-- Docker
+- Node.js >= 22
+- Go >= 1.24.6
+- Mage >= 1.15.0 (for backend builds)
+- Docker (for running Grafana/Kafka locally)
+- Python 3 (for `pre-commit` hooks)
 
-### Frontend (React)
+### Local Setup
 
-1. Install dependencies:
+1. Clone the repository:
 
- ```bash
- npm install
- ```
+```bash
+git clone https://github.com/hoptical/grafana-kafka-datasource.git
+cd grafana-kafka-datasource
+```
 
-2. Build and run in development mode:
+2. Install frontend dependencies:
 
- ```bash
- npm run dev
- ```
+```bash
+npm install
+```
 
-3. Build for production:
+3. Install pre-commit and enable hooks:
 
- ```bash
- npm run build
- ```
+```bash
+pip install pre-commit
+pre-commit install
+```
 
-4. Run unit tests:
+## Frontend (React)
 
- ```bash
- npm run test
- npm run test:ci
- ```
+- Install dependencies: `npm install`
+- Run in development mode: `npm run dev`
+- Build for production: `npm run build`
+- Unit tests: `npm run test` or `npm run test:ci`
+- E2E tests (Playwright):
+  - On host (starts Grafana/Kafka): `npm run server`
+  - Inside container or locally: `npm run e2e`
 
-5. Run E2E tests (Playwright):
-   - **On Host**: `npm run server` (starts Grafana/Kafka/ZooKeeper)
-   - **Inside Container**: `npm run e2e`
-   - **macOS/Windows**: Use `GRAFANA_URL=http://host.docker.internal:3000 npm run e2e` inside container
-6. Lint code:
+## Backend (Golang)
 
- ```bash
- npm run lint
- npm run lint:fix
- ```
+- Update plugin SDK and tidy modules:
 
-### Backend (Golang)
+```bash
+go get -u github.com/grafana/grafana-plugin-sdk-go
+go mod tidy
+```
 
-1. Update plugin SDK:
+- Build backend plugin: `npm run build:backend`
+- Run backend tests: `mage test` (see mage targets for more options)
 
- ```bash
- go get -u github.com/grafana/grafana-plugin-sdk-go
- go mod tidy
- ```
+## Building & Testing (summary)
 
-2. Build backend plugin:
+- Build frontend: `npm run build`
+- Build backend: `mage buildAll`
+- Frontend tests: `npm run test:ci`
+- Backend tests: `mage testRace`
+- E2E tests: `npm run e2e`
 
- ```bash
- npm run build:backend
- ```
+## Linting
 
-3. Test backend plugin:
-
- ```bash
- mage test
- ```
-
-## Building & Testing
-
-- Use `mage` for backend builds and platform targets.
-- Use `npm` scripts for frontend builds, tests, and linting.
-- See [README.md](README.md) for usage/configuration.
+- Frontend: `npm run lint` (ESLint)
+- Frontend formatting: `npm run lint:fix` (calls Prettier)
+- Backend: `golangci-lint`
+- We provide pre-commit hooks that run ESLint, Prettier and `golangci-lint` on commits — ensure `pre-commit install` is run once after cloning.
 
 ## Code Style
 
-- Follow existing code conventions.
-- Write clear commit messages.
-- Add/maintain tests for new features and bug fixes.
+- Follow existing project conventions and ESLint rules.
+- Keep commits focused and add tests for new behaviours.
 
 ## Reporting Issues
 
 - Use GitHub Issues for bugs, feature requests, and questions.
-
----
 
 See [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for community guidelines.

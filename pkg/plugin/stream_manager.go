@@ -668,7 +668,9 @@ func (sm *StreamManager) readFromPartition(
 	}
 	defer func() {
 		if reader != nil {
-			reader.Close()
+			if err := reader.Close(); err != nil {
+				log.DefaultLogger.Error("failed to close reader", "error", err)
+			}
 		}
 	}()
 

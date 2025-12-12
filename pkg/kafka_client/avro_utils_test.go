@@ -40,7 +40,7 @@ func TestSchemaRegistryClient_GetSchemaByID(t *testing.T) {
 
 		response := map[string]string{"schema": `{"type": "record", "name": "Test", "fields": []}`}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
@@ -65,7 +65,7 @@ func TestSchemaRegistryClient_GetSchemaByID_NoAuth(t *testing.T) {
 
 		response := map[string]string{"schema": `{"type": "string"}`}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
@@ -84,7 +84,7 @@ func TestSchemaRegistryClient_GetSchemaByID_Error(t *testing.T) {
 	// Mock server that returns error
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Internal server error"))
+		_, _ = w.Write([]byte("Internal server error"))
 	}))
 	defer server.Close()
 
@@ -108,7 +108,7 @@ func TestSchemaRegistryClient_GetLatestSchema(t *testing.T) {
 
 		response := map[string]string{"schema": `{"type": "record", "name": "TestRecord", "fields": [{"name": "id", "type": "string"}]}`}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
@@ -128,7 +128,7 @@ func TestSchemaRegistryClient_GetLatestSchema_Error(t *testing.T) {
 	// Mock server that returns 404
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte("Subject not found"))
+		_, _ = w.Write([]byte("Subject not found"))
 	}))
 	defer server.Close()
 
