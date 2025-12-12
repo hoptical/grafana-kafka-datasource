@@ -405,6 +405,23 @@ func TestKafkaClient_GetAvroSubjectNamingStrategy(t *testing.T) {
 	}
 }
 
+func TestKafkaClient_GetHTTPClient(t *testing.T) {
+	httpClient := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+	client := NewKafkaClient(Options{
+		BootstrapServers: "localhost:9092",
+	}, httpClient)
+
+	result := client.GetHTTPClient()
+	if result != httpClient {
+		t.Errorf("Expected GetHTTPClient to return the same HTTP client instance")
+	}
+	if result.Timeout != 30*time.Second {
+		t.Errorf("Expected HTTP client timeout to be 30s, got %v", result.Timeout)
+	}
+}
+
 func TestKafkaClient_ConsumerPull_AvroMessage(t *testing.T) {
 	// This test verifies that ConsumerPull stores raw bytes for potential Avro decoding
 	// Mock a Kafka message with binary data that would be Avro-encoded
