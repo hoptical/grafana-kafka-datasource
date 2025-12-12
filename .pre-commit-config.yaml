@@ -1,19 +1,18 @@
 repos:
-  - repo: local
-    hooks:
-      - id: npm-lint
-        name: npm run lint
-        entry: npm run --silent lint
-        language: system
-        pass_filenames: false
-        files: \.(js|ts|tsx)$
-      - id: prettier
-        name: prettier (format)
-        entry: npm run --silent lint:fix
-        language: system
-        pass_filenames: false
-        files: \.(js|ts|tsx|json|md)$
-  - repo: https://github.com/golangci/golangci-lint
-    rev: v2.7.2
-    hooks:
-      - id: golangci-lint
+- repo: local
+  hooks:
+  - id: npm-lint-fix
+    name: npm-lint-fix
+    decription: Runs ESLint and Prettier auto-fix on JS/TS/JSON/MD files.
+    entry: npm run --silent lint:fix
+    language: system
+    pass_filenames: false
+    files: \.(js|ts|tsx|json|md)$
+
+  - id: golangci-lint-full
+    name: golangci-lint-full
+    description: Fast linters runner for Go. Runs on all files in the module.
+    entry: golangci-lint run --fix
+    language: golang
+    require_serial: true
+    pass_filenames: false

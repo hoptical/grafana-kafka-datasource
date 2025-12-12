@@ -52,7 +52,11 @@ func (s *SchemaRegistryClient) GetSchemaByID(schemaID int) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to get schema: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.DefaultLogger.Error("failed to close response body", "error", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -95,7 +99,11 @@ func (s *SchemaRegistryClient) GetLatestSchema(subject string) (string, error) {
 		log.DefaultLogger.Error("HTTP request to schema registry failed", "error", err)
 		return "", fmt.Errorf("failed to get latest schema: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.DefaultLogger.Error("failed to close response body", "error", err)
+		}
+	}()
 
 	log.DefaultLogger.Debug("Schema registry response received",
 		"statusCode", resp.StatusCode,

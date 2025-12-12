@@ -27,7 +27,11 @@ func createTopicIfNotExists(brokerURL, topic string, partitions int, timeout tim
 	if err != nil {
 		return fmt.Errorf("failed to dial leader: %w", err)
 	}
-	defer conn.Close()
+	defer func() {
+		if err := conn.Close(); err != nil {
+			fmt.Printf("failed to close connection: %v\n", err)
+		}
+	}()
 
 	controller, err := conn.Controller()
 	if err != nil {
@@ -41,7 +45,11 @@ func createTopicIfNotExists(brokerURL, topic string, partitions int, timeout tim
 	if err != nil {
 		return fmt.Errorf("failed to dial controller: %w", err)
 	}
-	defer controllerConn.Close()
+	defer func() {
+		if err := controllerConn.Close(); err != nil {
+			fmt.Printf("failed to close controller connection: %v\n", err)
+		}
+	}()
 
 	topicConfigs := []kafka.TopicConfig{
 		{
@@ -99,7 +107,11 @@ func main() {
 		Topic: *topic,
 	}
 
-	defer w.Close()
+	defer func() {
+		if err := w.Close(); err != nil {
+			fmt.Printf("failed to close writer: %v\n", err)
+		}
+	}()
 
 	counter := 1
 	hostName := "srv-01"
@@ -228,9 +240,10 @@ func main() {
 		}
 
 		// Encode based on format
-		if *format == "json" {
+		switch *format {
+		case "json":
 			messageData, err = json.Marshal(payload)
-		} else if *format == "avro" {
+		case "avro":
 			if *verbose {
 				fmt.Printf("[PRODUCER DEBUG] Using Avro format for message #%d\n", counter)
 			}
