@@ -3,7 +3,7 @@ repos:
   hooks:
   - id: npm-lint-fix
     name: npm-lint-fix
-    decription: Runs ESLint and Prettier auto-fix on JS/TS/JSON/MD files.
+    description: Runs ESLint and Prettier auto-fix on JS/TS/JSON/MD files.
     entry: npm run --silent lint:fix
     language: system
     pass_filenames: false
