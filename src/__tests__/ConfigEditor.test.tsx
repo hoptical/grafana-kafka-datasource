@@ -63,6 +63,25 @@ jest.mock('@grafana/ui', () => ({
       ))}
     </select>
   ),
+  useStyles2: jest.fn((getStyles: any) => {
+    const mockTheme: any = {
+      spacing: (value: number) => `${value * 8}px`,
+      colors: {
+        background: { primary: '#fff', secondary: '#f5f5f5' },
+        border: { medium: '#ccc', weak: '#e0e0e0' },
+        text: { primary: '#000', secondary: '#666' },
+        success: { text: '#28a745' },
+      },
+      typography: {
+        bodySmall: { fontSize: '12px' },
+        fontFamilyMonospace: 'monospace',
+      },
+      shape: { radius: { default: '4px' } },
+      shadows: { z2: '0 2px 8px rgba(0,0,0,0.2)' },
+      zIndex: { dropdown: 1000 },
+    };
+    return getStyles(mockTheme);
+  }),
 }));
 
 // Mock @grafana/plugin-ui components
