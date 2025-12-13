@@ -112,6 +112,20 @@ const getStyles = (theme: GrafanaTheme2) => {
     fileInput: css({
       marginBottom: theme.spacing(1),
     }),
+    fileRow: css({
+      display: 'flex',
+      alignItems: 'center',
+      gap: theme.spacing(1),
+      marginBottom: theme.spacing(1),
+    }),
+    hiddenFileInput: css({
+      display: 'none',
+    }),
+    filenameText: css({
+      fontSize: theme.typography.bodySmall.fontSize,
+      color: theme.colors.text.secondary,
+    }),
+    chooseButton: css({}),
     textArea: css({
       width: '100%',
       fontFamily: theme.typography.fontFamilyMonospace,
@@ -160,6 +174,7 @@ interface State {
     status: 'valid' | 'invalid' | 'loading';
     message?: string;
   };
+  selectedFileName?: string;
 }
 
 // Wrapper component to use hooks
@@ -179,6 +194,7 @@ class QueryEditorInner extends PureComponent<QueryEditorInnerProps, State> {
   private fetchPartitionsTimeoutId?: ReturnType<typeof setTimeout>;
   private topicBlurTimeout?: ReturnType<typeof setTimeout>;
   private schemaValidationTimeout?: ReturnType<typeof setTimeout>;
+  private fileInputRef?: React.RefObject<HTMLInputElement>;
 
   constructor(props: QueryEditorInnerProps) {
     super(props);
@@ -195,6 +211,8 @@ class QueryEditorInner extends PureComponent<QueryEditorInnerProps, State> {
     this.debouncedRunQuery = debounce(() => {
       this.props.onRunQuery();
     }, 500);
+    // Ref for hidden file input
+    this.fileInputRef = React.createRef<HTMLInputElement>();
   }
 
   componentDidMount() {
@@ -387,9 +405,12 @@ class QueryEditorInner extends PureComponent<QueryEditorInnerProps, State> {
     const { onChange, query, onRunQuery } = this.props;
     const file = event.target.files?.[0];
     if (file) {
+      // store filename for UI feedback
+      this.setState({ selectedFileName: file.name });
       // Validate file type
       if (!file.name.match(/\.(avsc|json)$/i)) {
         this.setState({
+          selectedFileName: undefined,
           schemaValidation: { status: 'invalid', message: 'Please upload a .avsc or .json file' },
         });
         return;
@@ -397,6 +418,7 @@ class QueryEditorInner extends PureComponent<QueryEditorInnerProps, State> {
       // Validate file size (5MB limit)
       if (file.size > 5 * 1024 * 1024) {
         this.setState({
+          selectedFileName: undefined,
           schemaValidation: { status: 'invalid', message: 'File size must be less than 5MB' },
         });
         return;
@@ -411,6 +433,7 @@ class QueryEditorInner extends PureComponent<QueryEditorInnerProps, State> {
       };
       reader.onerror = () => {
         this.setState({
+          selectedFileName: undefined,
           schemaValidation: { status: 'invalid', message: 'Failed to read file' },
         });
       };
@@ -706,12 +729,26 @@ class QueryEditorInner extends PureComponent<QueryEditorInnerProps, State> {
                   style={{ minWidth: 400 }}
                 >
                   <div className={this.props.styles.schemaValidationWrapper}>
-                    <input
-                      type="file"
-                      accept=".avsc,.json"
-                      onChange={this.onAvroSchemaFileUpload}
-                      className={this.props.styles.fileInput}
-                    />
+                    <div className={this.props.styles.fileRow}>
+                      <Button
+                        className={this.props.styles.chooseButton}
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => this.fileInputRef?.current?.click()}
+                      >
+                        Choose file
+                      </Button>
+                      <div className={this.props.styles.filenameText}>
+                        {this.state.selectedFileName || 'No file selected'}
+                      </div>
+                      <input
+                        ref={this.fileInputRef}
+                        type="file"
+                        accept=".avsc,.json"
+                        onChange={this.onAvroSchemaFileUpload}
+                        className={`${this.props.styles.fileInput} ${this.props.styles.hiddenFileInput}`}
+                      />
+                    </div>
                     <textarea
                       value={query.avroSchema || ''}
                       onChange={this.onAvroSchemaChanged}
