@@ -109,9 +109,6 @@ const getStyles = (theme: GrafanaTheme2) => {
       gap: theme.spacing(1),
       minWidth: 400,
     }),
-    fileInput: css({
-      marginBottom: theme.spacing(1),
-    }),
     fileRow: css({
       display: 'flex',
       alignItems: 'center',
@@ -740,7 +737,7 @@ class QueryEditorInner extends PureComponent<QueryEditorInnerProps, State> {
                         type="file"
                         accept=".avsc,.json"
                         onChange={this.onAvroSchemaFileUpload}
-                        className={`${this.props.styles.fileInput} ${this.props.styles.hiddenFileInput}`}
+                        className={this.props.styles.hiddenFileInput}
                       />
                     </div>
                     <textarea
