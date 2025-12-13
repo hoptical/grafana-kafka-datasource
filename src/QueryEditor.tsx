@@ -125,7 +125,6 @@ const getStyles = (theme: GrafanaTheme2) => {
       fontSize: theme.typography.bodySmall.fontSize,
       color: theme.colors.text.secondary,
     }),
-    chooseButton: css({}),
     textArea: css({
       width: '100%',
       fontFamily: theme.typography.fontFamilyMonospace,
@@ -730,12 +729,7 @@ class QueryEditorInner extends PureComponent<QueryEditorInnerProps, State> {
                 >
                   <div className={this.props.styles.schemaValidationWrapper}>
                     <div className={this.props.styles.fileRow}>
-                      <Button
-                        className={this.props.styles.chooseButton}
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => this.fileInputRef?.current?.click()}
-                      >
+                      <Button variant="secondary" size="sm" onClick={() => this.fileInputRef?.current?.click()}>
                         Choose file
                       </Button>
                       <div className={this.props.styles.filenameText}>
