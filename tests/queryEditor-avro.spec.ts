@@ -1,7 +1,8 @@
 import { test, expect } from '@grafana/plugin-e2e';
 import { Page, Locator } from '@playwright/test';
 import { ChildProcess, spawn } from 'child_process';
-import { accessSync, constants } from 'fs';
+import { accessSync, constants, readFileSync } from 'fs';
+import path from 'path';
 import { verifyPanelDataContains, verifyColumnHeadersVisible } from './test-utils';
 
 interface AvroProducerOptions {
@@ -142,6 +143,21 @@ async function selectInlineSchema(page: Page): Promise<void> {
   await inlineSchemaOption.first().click();
 }
 
+async function validateSchemaRegistryConnection(page: Page, validationPattern?: RegExp): Promise<void> {
+  const schemaRegistryButton = page
+    .getByRole('button', { name: /test.*connection|validate.*registry/i })
+    .or(page.locator('button').filter({ hasText: /test.*connection|validate/i }))
+    .or(page.getByText('Test Connection'));
+
+  if (await schemaRegistryButton.first().isVisible({ timeout: 3000 })) {
+    await schemaRegistryButton.first().click();
+    // Should show validation result (may pass or fail depending on setup)
+    const pattern = validationPattern || /accessible/i;
+    const validationResult = page.getByText(pattern);
+    await expect(validationResult.first()).toBeVisible({ timeout: 8000 });
+  }
+}
+
 test.describe.serial('Kafka Query Editor - Avro Tests', () => {
   test('should configure Avro message format and validate schema', async ({
     readProvisionedDataSource,
@@ -160,18 +176,8 @@ test.describe.serial('Kafka Query Editor - Avro Tests', () => {
     // Wait for Avro configuration to appear after format change
     await expect(getAvroSchemaSourceLocator(page).first()).toBeVisible({ timeout: 8000 });
 
-    // Test Schema Registry validation with better selectors - use "Test Connection" button text
-    const schemaRegistryButton = page
-      .getByRole('button', { name: /test.*connection|validate.*registry/i })
-      .or(page.locator('button').filter({ hasText: /test.*connection|validate/i }))
-      .or(page.getByText('Test Connection'));
-
-    if (await schemaRegistryButton.first().isVisible({ timeout: 3000 })) {
-      await schemaRegistryButton.first().click();
-      // Should show validation result (may pass or fail depending on setup)
-      const validationResult = page.getByText(/registry|connection|accessible|error|success|failed/i);
-      await expect(validationResult.first()).toBeVisible({ timeout: 8000 });
-    }
+    // Test Schema Registry validation
+    await validateSchemaRegistryConnection(page);
 
     // Test Inline Schema option - need to click the Avro Schema Source dropdown
     await selectInlineSchema(page);
@@ -210,16 +216,19 @@ test.describe.serial('Kafka Query Editor - Avro Tests', () => {
       console.log('Invalid schema validation worked');
     }
 
-    // Test file upload if available
-    const fileUploadInput = page
-      .locator('input[type="file"]')
-      .filter({ hasText: /avsc|json/ })
-      .or(page.locator('input[type="file"][accept*=".avsc"]'));
-    if (await fileUploadInput.isVisible({ timeout: 2000 })) {
-      // File upload functionality exists but we won't test actual file upload in e2e
-      await expect(fileUploadInput.first()).toBeVisible();
-      console.log('File upload input found');
-    }
+    // Check if the file upload button is present
+    expect(await page.getByRole('button', { name: 'Choose file' }).first().isVisible()).toBe(true);
+
+    // Test file upload: locate the actual hidden input[type=file] and set files
+    const fileInputLocator = page.locator('input[type="file"]');
+    const fixturePath = path.resolve(__dirname, 'fixtures', 'test-avro-schema.avsc');
+    const fixtureContents = readFileSync(fixturePath, 'utf8');
+    await fileInputLocator.first().setInputFiles(fixturePath);
+
+    // Compare trimmed textarea value to fixture to avoid newline differences
+    const textareaValue = await schemaTextarea.first().inputValue();
+    expect(textareaValue.trim()).toBe(fixtureContents.trim());
+    console.log('File upload input found and textarea populated from file');
   });
 
   // Test streaming Avro data from Kafka topic with Schema Registry
@@ -273,6 +282,9 @@ test.describe.serial('Kafka Query Editor - Avro Tests', () => {
         .getByText('All partitions')
         .or(page.getByRole('option', { name: /^All partitions$/ }));
       await allPartitionsOption.first().click();
+
+      // Test Schema Registry validation
+      await validateSchemaRegistryConnection(page, /accessible/i);
 
       // Wait for the time column to appear first (this indicates data is flowing)
       await verifyColumnHeadersVisible(page);
@@ -329,75 +341,9 @@ test.describe.serial('Kafka Query Editor - Avro Tests', () => {
 
       await expect(schemaTextarea.first()).toBeVisible({ timeout: 5000 });
 
-      // Use the same schema that the producer uses (nested shape)
-      const avroSchema = `{
-      "type": "record",
-      "name": "TestRecord",
-      "fields": [
-        {
-          "name": "host",
-          "type": {
-            "type": "record",
-            "name": "Host",
-            "fields": [
-              {"name": "name", "type": "string"},
-              {"name": "ip", "type": "string"}
-            ]
-          }
-        },
-        {
-          "name": "metrics",
-          "type": {
-            "type": "record",
-            "name": "Metrics",
-            "fields": [
-              {
-                "name": "cpu",
-                "type": {
-                  "type": "record",
-                  "name": "CPU",
-                  "fields": [
-                    {"name": "load", "type": ["null", "double"], "default": null},
-                    {"name": "temp", "type": "double"}
-                  ]
-                }
-              },
-              {
-                "name": "mem",
-                "type": {
-                  "type": "record",
-                  "name": "Memory",
-                  "fields": [
-                    {"name": "used", "type": "int"},
-                    {"name": "free", "type": "int"}
-                  ]
-                }
-              }
-            ]
-          }
-        },
-        {"name": "value1", "type": ["null", "double"], "default": null},
-        {"name": "value2", "type": ["null", "double"], "default": null},
-        {"name": "tags", "type": {"type": "array", "items": "string"}},
-        {
-          "name": "alerts",
-          "type": {
-            "type": "array",
-            "items": {
-              "type": "record",
-              "name": "Alert",
-              "fields": [
-                {"name": "type", "type": "string"},
-                {"name": "severity", "type": "string"},
-                {"name": "value", "type": "double"}
-              ]
-            }
-          }
-        },
-        {"name": "processes", "type": {"type": "array", "items": "string"}}
-      ]
-    }`;
-
+      // Load schema from fixture to keep tests DRY
+      const fixturePath = path.resolve(__dirname, 'fixtures', 'test-avro-schema.avsc');
+      const avroSchema = readFileSync(fixturePath, 'utf8');
       await schemaTextarea.first().fill(avroSchema);
       // Fill in the query editor fields
       await page.getByRole('textbox', { name: 'Enter topic name' }).fill('test-avro-inline-topic');

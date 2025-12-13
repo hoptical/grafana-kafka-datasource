@@ -1,7 +1,18 @@
 import { debounce, type DebouncedFunc } from 'lodash';
 import React, { ChangeEvent, PureComponent } from 'react';
-import { InlineField, InlineFieldRow, Input, Select, Button, Spinner, Alert, InlineLabel } from '@grafana/ui';
-import { QueryEditorProps } from '@grafana/data';
+import {
+  InlineField,
+  InlineFieldRow,
+  Input,
+  Select,
+  Button,
+  Spinner,
+  Alert,
+  InlineLabel,
+  useStyles2,
+} from '@grafana/ui';
+import { QueryEditorProps, GrafanaTheme2 } from '@grafana/data';
+import { css } from '@emotion/css';
 import { DataSource } from './datasource';
 import {
   defaultQuery,
@@ -41,6 +52,111 @@ const messageFormats: Array<{ label: string; value: MessageFormat }> = [
 
 const partitionOptions: Array<{ label: string; value: number | 'all' }> = [{ label: 'All partitions', value: 'all' }];
 
+const getStyles = (theme: GrafanaTheme2) => {
+  return {
+    topicContainer: css({
+      display: 'flex',
+      alignItems: 'center',
+      gap: theme.spacing(1.25),
+      position: 'relative',
+      minWidth: 260,
+    }),
+    topicInputWrapper: css({
+      position: 'relative',
+      minWidth: 180,
+    }),
+    suggestionDropdown: css({
+      position: 'absolute',
+      top: '100%',
+      left: 0,
+      right: 0,
+      backgroundColor: theme.colors.background.primary,
+      border: `1px solid ${theme.colors.border.medium}`,
+      borderRadius: theme.shape.radius.default,
+      boxShadow: theme.shadows.z2,
+      zIndex: theme.zIndex.dropdown,
+      maxHeight: '200px',
+      overflowY: 'auto',
+    }),
+    suggestionItem: css({
+      padding: theme.spacing(1, 1.5),
+      cursor: 'pointer',
+      fontSize: theme.typography.bodySmall.fontSize,
+      color: theme.colors.text.primary,
+      backgroundColor: 'transparent',
+      '&:not(:last-child)': {
+        borderBottom: `1px solid ${theme.colors.border.weak}`,
+      },
+      '&:hover': {
+        backgroundColor: theme.colors.background.secondary,
+      },
+    }),
+    fetchButton: css({
+      minWidth: 60,
+    }),
+    successMessage: css({
+      color: theme.colors.success.text,
+      fontSize: theme.typography.bodySmall.fontSize,
+    }),
+    offsetContainer: css({
+      display: 'flex',
+      alignItems: 'center',
+      gap: theme.spacing(1),
+    }),
+    schemaValidationWrapper: css({
+      display: 'flex',
+      flexDirection: 'column',
+      gap: theme.spacing(1),
+      minWidth: 400,
+    }),
+    fileInput: css({
+      marginBottom: theme.spacing(1),
+    }),
+    fileRow: css({
+      display: 'flex',
+      alignItems: 'center',
+      gap: theme.spacing(1),
+      marginBottom: theme.spacing(1),
+    }),
+    hiddenFileInput: css({
+      display: 'none',
+    }),
+    filenameText: css({
+      fontSize: theme.typography.bodySmall.fontSize,
+      color: theme.colors.text.secondary,
+    }),
+    textArea: css({
+      width: '100%',
+      fontFamily: theme.typography.fontFamilyMonospace,
+      fontSize: theme.typography.bodySmall.fontSize,
+      resize: 'vertical',
+    }),
+    validationMessage: css({
+      marginTop: theme.spacing(0.5),
+    }),
+    validationLoading: css({
+      display: 'flex',
+      alignItems: 'center',
+      gap: theme.spacing(0.5),
+    }),
+    validationText: css({
+      fontSize: theme.typography.bodySmall.fontSize,
+      color: theme.colors.text.secondary,
+    }),
+    validationLabel: css({
+      fontSize: theme.typography.bodySmall.fontSize,
+    }),
+    warningAlert: css({
+      marginTop: theme.spacing(1),
+    }),
+    testConnectionContainer: css({
+      display: 'flex',
+      alignItems: 'center',
+      gap: theme.spacing(1),
+    }),
+  };
+};
+
 type Props = QueryEditorProps<DataSource, KafkaQuery, KafkaDataSourceOptions>;
 
 interface State {
@@ -57,17 +173,29 @@ interface State {
     status: 'valid' | 'invalid' | 'loading';
     message?: string;
   };
+  selectedFileName?: string;
 }
 
-export class QueryEditor extends PureComponent<Props, State> {
+// Wrapper component to use hooks
+const QueryEditorWithStyles = (props: Props) => {
+  const styles = useStyles2(getStyles);
+  return <QueryEditorInner {...props} styles={styles} />;
+};
+
+interface QueryEditorInnerProps extends Props {
+  styles: ReturnType<typeof getStyles>;
+}
+
+class QueryEditorInner extends PureComponent<QueryEditorInnerProps, State> {
   private debouncedSearchTopics: DebouncedFunc<(input: string) => void>;
   private debouncedRunQuery: DebouncedFunc<() => void>;
   private lastCommittedTopic = '';
   private fetchPartitionsTimeoutId?: ReturnType<typeof setTimeout>;
   private topicBlurTimeout?: ReturnType<typeof setTimeout>;
   private schemaValidationTimeout?: ReturnType<typeof setTimeout>;
+  private fileInputRef?: React.RefObject<HTMLInputElement>;
 
-  constructor(props: Props) {
+  constructor(props: QueryEditorInnerProps) {
     super(props);
     this.state = {
       availablePartitions: [],
@@ -82,6 +210,8 @@ export class QueryEditor extends PureComponent<Props, State> {
     this.debouncedRunQuery = debounce(() => {
       this.props.onRunQuery();
     }, 500);
+    // Ref for hidden file input
+    this.fileInputRef = React.createRef<HTMLInputElement>();
   }
 
   componentDidMount() {
@@ -274,9 +404,12 @@ export class QueryEditor extends PureComponent<Props, State> {
     const { onChange, query, onRunQuery } = this.props;
     const file = event.target.files?.[0];
     if (file) {
+      // store filename for UI feedback
+      this.setState({ selectedFileName: file.name });
       // Validate file type
       if (!file.name.match(/\.(avsc|json)$/i)) {
         this.setState({
+          selectedFileName: undefined,
           schemaValidation: { status: 'invalid', message: 'Please upload a .avsc or .json file' },
         });
         return;
@@ -284,6 +417,7 @@ export class QueryEditor extends PureComponent<Props, State> {
       // Validate file size (5MB limit)
       if (file.size > 5 * 1024 * 1024) {
         this.setState({
+          selectedFileName: undefined,
           schemaValidation: { status: 'invalid', message: 'File size must be less than 5MB' },
         });
         return;
@@ -298,6 +432,7 @@ export class QueryEditor extends PureComponent<Props, State> {
       };
       reader.onerror = () => {
         this.setState({
+          selectedFileName: undefined,
           schemaValidation: { status: 'invalid', message: 'Failed to read file' },
         });
       };
@@ -409,8 +544,8 @@ export class QueryEditor extends PureComponent<Props, State> {
             tooltip="Kafka topic name + click Fetch to load partitions"
             style={{ minWidth: 260 }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', position: 'relative', minWidth: 260 }}>
-              <div style={{ position: 'relative', minWidth: 180 }}>
+            <div className={this.props.styles.topicContainer}>
+              <div className={this.props.styles.topicInputWrapper}>
                 <Input
                   id="query-editor-topic"
                   value={topicName || ''}
@@ -434,42 +569,12 @@ export class QueryEditor extends PureComponent<Props, State> {
                   placeholder="Enter topic name"
                 />
                 {this.state.showingSuggestions && this.state.topicSuggestions.length > 0 && (
-                  <div
-                    style={{
-                      position: 'absolute',
-                      top: '100%',
-                      left: 0,
-                      right: 0,
-                      backgroundColor: 'var(--gf-color-background-primary, #1f1f20)',
-                      border: '1px solid var(--gf-color-border-medium, #444)',
-                      borderRadius: '2px',
-                      boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
-                      zIndex: 1000,
-                      maxHeight: '200px',
-                      overflowY: 'auto',
-                    }}
-                  >
+                  <div className={this.props.styles.suggestionDropdown}>
                     {this.state.topicSuggestions.map((topic, index) => (
                       <div
                         key={`${topic}-${index}`}
-                        style={{
-                          padding: '8px 12px',
-                          cursor: 'pointer',
-                          borderBottom:
-                            index < this.state.topicSuggestions.length - 1
-                              ? '1px solid var(--gf-color-border-weak, #333)'
-                              : 'none',
-                          fontSize: '13px',
-                          color: 'var(--gf-color-text-primary, #ffffff)',
-                          backgroundColor: 'transparent',
-                        }}
+                        className={this.props.styles.suggestionItem}
                         onClick={() => this.onTopicSuggestionClick(topic)}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.backgroundColor = 'var(--gf-color-background-secondary, #262628)';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.backgroundColor = 'transparent';
-                        }}
                       >
                         {topic}
                       </div>
@@ -485,14 +590,12 @@ export class QueryEditor extends PureComponent<Props, State> {
                   this.fetchPartitions();
                 }}
                 disabled={!topicName || this.state.loadingPartitions}
-                style={{ minWidth: 60 }}
+                className={this.props.styles.fetchButton}
               >
                 {this.state.loadingPartitions ? <Spinner size={14} /> : 'Fetch'}
               </Button>
               {this.state.partitionSuccess && (
-                <div style={{ color: 'var(--gf-color-success-text, #73BF69)', fontSize: '12px' }}>
-                  {this.state.partitionSuccess}
-                </div>
+                <div className={this.props.styles.successMessage}>{this.state.partitionSuccess}</div>
               )}
             </div>
           </InlineField>
@@ -517,7 +620,7 @@ export class QueryEditor extends PureComponent<Props, State> {
             tooltip="Where to start consuming from for this query"
             style={{ minWidth: 260 }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div className={this.props.styles.offsetContainer}>
               <Select
                 width={22}
                 value={autoOffsetReset}
@@ -590,7 +693,7 @@ export class QueryEditor extends PureComponent<Props, State> {
             {query.avroSchemaSource === AvroSchemaSource.SCHEMA_REGISTRY && (
               <InlineFieldRow>
                 <InlineField label="Schema Registry" labelWidth={25}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div className={this.props.styles.testConnectionContainer}>
                     <Button
                       variant="secondary"
                       size="sm"
@@ -624,36 +727,40 @@ export class QueryEditor extends PureComponent<Props, State> {
                   tooltip="Upload or paste your Avro schema (.avsc file)"
                   style={{ minWidth: 400 }}
                 >
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: 400 }}>
-                    <input
-                      type="file"
-                      accept=".avsc,.json"
-                      onChange={this.onAvroSchemaFileUpload}
-                      style={{ marginBottom: '8px' }}
-                    />
+                  <div className={this.props.styles.schemaValidationWrapper}>
+                    <div className={this.props.styles.fileRow}>
+                      <Button variant="secondary" size="sm" onClick={() => this.fileInputRef?.current?.click()}>
+                        Choose file
+                      </Button>
+                      <div className={this.props.styles.filenameText}>
+                        {this.state.selectedFileName || 'No file selected'}
+                      </div>
+                      <input
+                        ref={this.fileInputRef}
+                        type="file"
+                        accept=".avsc,.json"
+                        onChange={this.onAvroSchemaFileUpload}
+                        className={`${this.props.styles.fileInput} ${this.props.styles.hiddenFileInput}`}
+                      />
+                    </div>
                     <textarea
                       value={query.avroSchema || ''}
                       onChange={this.onAvroSchemaChanged}
                       placeholder="Paste your Avro schema JSON here..."
                       rows={8}
-                      style={{
-                        width: '100%',
-                        fontFamily: 'monospace',
-                        fontSize: '12px',
-                        resize: 'vertical',
-                      }}
+                      className={this.props.styles.textArea}
                     />
                     {this.state.schemaValidation && (
-                      <div style={{ marginTop: '4px' }}>
+                      <div className={this.props.styles.validationMessage}>
                         {this.state.schemaValidation.status === 'loading' ? (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <div className={this.props.styles.validationLoading}>
                             <Spinner size={12} />
-                            <span style={{ fontSize: '12px', color: '#666' }}>Validating schema...</span>
+                            <span className={this.props.styles.validationText}>Validating schema...</span>
                           </div>
                         ) : (
                           <InlineLabel
                             color={this.state.schemaValidation.status === 'valid' ? 'green' : 'red'}
-                            style={{ fontSize: '12px' }}
+                            className={this.props.styles.validationLabel}
                           >
                             {this.state.schemaValidation.message}
                           </InlineLabel>
@@ -668,7 +775,7 @@ export class QueryEditor extends PureComponent<Props, State> {
         )}
 
         {autoOffsetReset !== AutoOffsetReset.LATEST && (
-          <div style={{ marginTop: 8 }}>
+          <div className={this.props.styles.warningAlert}>
             <Alert severity="warning" title="Potential higher load">
               Starting from Earliest or reading the last N messages can increase load on Kafka and the backend.
             </Alert>
@@ -678,3 +785,5 @@ export class QueryEditor extends PureComponent<Props, State> {
     );
   }
 }
+
+export const QueryEditor = QueryEditorWithStyles;

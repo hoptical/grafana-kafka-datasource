@@ -1,6 +1,7 @@
 import React, { ChangeEvent, useEffect } from 'react';
-import { InlineField, Input, Divider, SecretInput, Checkbox, SecretTextArea, Select } from '@grafana/ui';
-import { DataSourcePluginOptionsEditorProps } from '@grafana/data';
+import { InlineField, Input, Divider, SecretInput, Checkbox, SecretTextArea, Select, useStyles2 } from '@grafana/ui';
+import { DataSourcePluginOptionsEditorProps, GrafanaTheme2 } from '@grafana/data';
+import { css } from '@emotion/css';
 import { ConfigSection, DataSourceDescription } from '@grafana/plugin-ui';
 import { KafkaDataSourceOptions, defaultDataSourceOptions, KafkaSecureJsonData } from './types';
 import { isEqual } from 'lodash';
@@ -22,7 +23,33 @@ const SASL_MECHANISM_OPTIONS = [
   { label: 'SCRAM-SHA-512', value: 'SCRAM-SHA-512', description: 'SCRAM with SHA-512' },
 ];
 
+const getStyles = (theme: GrafanaTheme2) => {
+  return {
+    tlsSettingsTitle: css({
+      marginTop: theme.spacing(2.5),
+      marginBottom: theme.spacing(1.25),
+    }),
+    checkboxRow: css({
+      display: 'flex',
+      alignItems: 'center',
+      gap: theme.spacing(1),
+      marginBottom: theme.spacing(1),
+    }),
+    checkboxLabel: css({
+      fontSize: theme.typography.bodySmall.fontSize,
+    }),
+    infoIcon: css({
+      color: theme.colors.text.secondary,
+      marginLeft: theme.spacing(0.5),
+    }),
+    tlsNestedSection: css({
+      marginLeft: theme.spacing(3.75),
+    }),
+  };
+};
+
 export const ConfigEditor = (props: Props) => {
+  const styles = useStyles2(getStyles);
   const { options, onOptionsChange } = props;
 
   // Ensure default values are set once
@@ -273,14 +300,14 @@ export const ConfigEditor = (props: Props) => {
         {/* TLS Settings */}
         {isTlsRequired && (
           <>
-            <h4 style={{ marginTop: '20px', marginBottom: '10px' }}>TLS Settings</h4>
+            <h4 className={styles.tlsSettingsTitle}>TLS Settings</h4>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+            <div className={styles.checkboxRow}>
               <Checkbox value={jsonData.tlsSkipVerify || false} onChange={onTlsSkipVerifyChange} />
-              <label style={{ fontSize: '13px' }}>
+              <label className={styles.checkboxLabel}>
                 Skip TLS Verification
                 <span
-                  style={{ color: '#888', marginLeft: '4px' }}
+                  className={styles.infoIcon}
                   title="Skip TLS certificate validation (not recommended for production)"
                 >
                   ⓘ
@@ -288,18 +315,18 @@ export const ConfigEditor = (props: Props) => {
               </label>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+            <div className={styles.checkboxRow}>
               <Checkbox value={jsonData.tlsAuthWithCACert || false} onChange={onTlsAuthWithCACertChange} />
-              <label style={{ fontSize: '13px' }}>
+              <label className={styles.checkboxLabel}>
                 Self-signed Certificate
-                <span style={{ color: '#888', marginLeft: '4px' }} title="Enable if using self-signed certificates">
+                <span className={styles.infoIcon} title="Enable if using self-signed certificates">
                   ⓘ
                 </span>
               </label>
             </div>
 
             {jsonData.tlsAuthWithCACert && (
-              <div style={{ marginLeft: '30px' }}>
+              <div className={styles.tlsNestedSection}>
                 <InlineField
                   label="CA Certificate"
                   labelWidth={30}
@@ -320,18 +347,18 @@ export const ConfigEditor = (props: Props) => {
               </div>
             )}
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+            <div className={styles.checkboxRow}>
               <Checkbox value={jsonData.tlsAuth || false} onChange={onTlsClientAuthChange} />
-              <label style={{ fontSize: '13px' }}>
+              <label className={styles.checkboxLabel}>
                 TLS Client Authentication
-                <span style={{ color: '#888', marginLeft: '4px' }} title="Enable TLS client authentication">
+                <span className={styles.infoIcon} title="Enable TLS client authentication">
                   ⓘ
                 </span>
               </label>
             </div>
 
             {jsonData.tlsAuth && (
-              <div style={{ marginLeft: '30px' }}>
+              <div className={styles.tlsNestedSection}>
                 <InlineField label="Server Name" labelWidth={30} tooltip="Server name for TLS validation" grow required>
                   <Input
                     id="config-editor-server-name"
