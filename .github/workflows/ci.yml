@@ -221,6 +221,7 @@ jobs:
           upload-report: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
           test-outcome: ${{ steps.run-tests.outcome }}
+          upload-successful-reports: true
 
       - name: Docker logs
         if: ${{ always() && steps.run-tests.outcome == 'failure' }}
