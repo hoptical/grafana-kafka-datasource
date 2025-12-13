@@ -90,7 +90,7 @@ go mod tidy
 - Build backend: `mage buildAll`
 - Frontend tests: `npm run test:ci`
 - Backend tests: `mage testRace`
-- E2E tests: `npm run e2e`
+- E2E tests: `npm run e2e -- --retries=3`
 
 ## Linting
 

@@ -143,6 +143,21 @@ async function selectInlineSchema(page: Page): Promise<void> {
   await inlineSchemaOption.first().click();
 }
 
+async function validateSchemaRegistryConnection(page: Page, validationPattern?: RegExp): Promise<void> {
+  const schemaRegistryButton = page
+    .getByRole('button', { name: /test.*connection|validate.*registry/i })
+    .or(page.locator('button').filter({ hasText: /test.*connection|validate/i }))
+    .or(page.getByText('Test Connection'));
+
+  if (await schemaRegistryButton.first().isVisible({ timeout: 3000 })) {
+    await schemaRegistryButton.first().click();
+    // Should show validation result (may pass or fail depending on setup)
+    const pattern = validationPattern || /accessible/i;
+    const validationResult = page.getByText(pattern);
+    await expect(validationResult.first()).toBeVisible({ timeout: 8000 });
+  }
+}
+
 test.describe.serial('Kafka Query Editor - Avro Tests', () => {
   test('should configure Avro message format and validate schema', async ({
     readProvisionedDataSource,
@@ -161,18 +176,8 @@ test.describe.serial('Kafka Query Editor - Avro Tests', () => {
     // Wait for Avro configuration to appear after format change
     await expect(getAvroSchemaSourceLocator(page).first()).toBeVisible({ timeout: 8000 });
 
-    // Test Schema Registry validation with better selectors - use "Test Connection" button text
-    const schemaRegistryButton = page
-      .getByRole('button', { name: /test.*connection|validate.*registry/i })
-      .or(page.locator('button').filter({ hasText: /test.*connection|validate/i }))
-      .or(page.getByText('Test Connection'));
-
-    if (await schemaRegistryButton.first().isVisible({ timeout: 3000 })) {
-      await schemaRegistryButton.first().click();
-      // Should show validation result (may pass or fail depending on setup)
-      const validationResult = page.getByText(/registry|connection|accessible|error|success|failed/i);
-      await expect(validationResult.first()).toBeVisible({ timeout: 8000 });
-    }
+    // Test Schema Registry validation
+    await validateSchemaRegistryConnection(page);
 
     // Test Inline Schema option - need to click the Avro Schema Source dropdown
     await selectInlineSchema(page);
@@ -278,18 +283,8 @@ test.describe.serial('Kafka Query Editor - Avro Tests', () => {
         .or(page.getByRole('option', { name: /^All partitions$/ }));
       await allPartitionsOption.first().click();
 
-      // Test Schema Registry validation with better selectors - use "Test Connection" button text
-      const schemaRegistryButton = page
-        .getByRole('button', { name: /test.*connection|validate.*registry/i })
-        .or(page.locator('button').filter({ hasText: /test.*connection|validate/i }))
-        .or(page.getByText('Test Connection'));
-
-      if (await schemaRegistryButton.first().isVisible({ timeout: 3000 })) {
-        await schemaRegistryButton.first().click();
-        // Should show validation result (may pass or fail depending on setup)
-        const validationResult = page.getByText(/accessible/i);
-        await expect(validationResult.first()).toBeVisible({ timeout: 8000 });
-      }
+      // Test Schema Registry validation
+      await validateSchemaRegistryConnection(page, /accessible/i);
 
       // Wait for the time column to appear first (this indicates data is flowing)
       await verifyColumnHeadersVisible(page);
