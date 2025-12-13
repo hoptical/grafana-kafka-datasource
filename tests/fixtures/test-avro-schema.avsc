@@ -1,0 +1,67 @@
+{
+  "type": "record",
+  "name": "TestRecord",
+  "fields": [
+    {
+      "name": "host",
+      "type": {
+        "type": "record",
+        "name": "Host",
+        "fields": [
+          { "name": "name", "type": "string" },
+          { "name": "ip", "type": "string" }
+        ]
+      }
+    },
+    {
+      "name": "metrics",
+      "type": {
+        "type": "record",
+        "name": "Metrics",
+        "fields": [
+          {
+            "name": "cpu",
+            "type": {
+              "type": "record",
+              "name": "CPU",
+              "fields": [
+                { "name": "load", "type": ["null", "double"], "default": null },
+                { "name": "temp", "type": "double" }
+              ]
+            }
+          },
+          {
+            "name": "mem",
+            "type": {
+              "type": "record",
+              "name": "Memory",
+              "fields": [
+                { "name": "used", "type": "int" },
+                { "name": "free", "type": "int" }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    { "name": "value1", "type": ["null", "double"], "default": null },
+    { "name": "value2", "type": ["null", "double"], "default": null },
+    { "name": "tags", "type": { "type": "array", "items": "string" } },
+    {
+      "name": "alerts",
+      "type": {
+        "type": "array",
+        "items": {
+          "type": "record",
+          "name": "Alert",
+          "fields": [
+            { "name": "type", "type": "string" },
+            { "name": "severity", "type": "string" },
+            { "name": "value", "type": "double" }
+          ]
+        }
+      }
+    },
+    { "name": "processes", "type": { "type": "array", "items": "string" } }
+  ]
+}
