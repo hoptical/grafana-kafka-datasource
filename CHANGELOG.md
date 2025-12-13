@@ -1,5 +1,13 @@
 # Changelog
 
+## [v1.2.2](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.2.2)
+
+[Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v1.2.1...v1.2.2)
+
+- Feat: Add PDC support for schema registry using grafana-plugin-sdk-http-client ([#113](https://github.com/hoptical/grafana-kafka-datasource/pull/113))
+- Enhancement: Add linting for frontend and backend with pre-commit hooks and CI updates ([#115](https://github.com/hoptical/grafana-kafka-datasource/pull/115))
+- Enhancement: Replace inline styling with emotion styling and update related tests ([#116](https://github.com/hoptical/grafana-kafka-datasource/pull/116))
+
 ## [v1.2.1](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.2.1)
 
 [Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v1.2.0...v1.2.1)
