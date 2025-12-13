@@ -199,6 +199,14 @@ jobs:
         with:
           url: http://localhost:3000/login
 
+      - name: Wait for schema-registry server
+        uses: grafana/plugin-actions/wait-for-grafana@main
+        with:
+          url: http://localhost:8081/subjects
+          responseCode: 200
+          timeout: 60
+          interval: 1
+
       - name: Install Playwright Browsers
         run: npm exec playwright install chromium --with-deps
 

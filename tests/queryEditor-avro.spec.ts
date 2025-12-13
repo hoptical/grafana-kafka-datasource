@@ -274,6 +274,19 @@ test.describe.serial('Kafka Query Editor - Avro Tests', () => {
         .or(page.getByRole('option', { name: /^All partitions$/ }));
       await allPartitionsOption.first().click();
 
+      // Test Schema Registry validation with better selectors - use "Test Connection" button text
+      const schemaRegistryButton = page
+        .getByRole('button', { name: /test.*connection|validate.*registry/i })
+        .or(page.locator('button').filter({ hasText: /test.*connection|validate/i }))
+        .or(page.getByText('Test Connection'));
+
+      if (await schemaRegistryButton.first().isVisible({ timeout: 3000 })) {
+        await schemaRegistryButton.first().click();
+        // Should show validation result (may pass or fail depending on setup)
+        const validationResult = page.getByText(/accessible/i);
+        await expect(validationResult.first()).toBeVisible({ timeout: 8000 });
+      }
+
       // Wait for the time column to appear first (this indicates data is flowing)
       await verifyColumnHeadersVisible(page);
 
