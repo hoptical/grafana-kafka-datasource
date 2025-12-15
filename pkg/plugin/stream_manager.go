@@ -87,7 +87,7 @@ func (sm *StreamManager) UpdateStreamConfig(config *StreamConfig, newMessageForm
 	config.mu.Lock()
 	config.MessageFormat = newMessageFormat
 	config.mu.Unlock()
-	log.DefaultLogger.Info("Updated stream message format", "newFormat", newMessageFormat)
+	log.DefaultLogger.Debug("Updated stream message format", "newFormat", newMessageFormat)
 }
 
 // ProcessMessageToFrame converts a Kafka message into a Grafana data frame.
@@ -651,7 +651,7 @@ func (sm *StreamManager) readFromPartition(
 	config.mu.RLock()
 	autoOffsetReset := config.AutoOffsetReset
 	config.mu.RUnlock()
-	log.DefaultLogger.Info("Starting partition reader",
+	log.DefaultLogger.Debug("Starting partition reader",
 		"topic", qm.Topic,
 		"partition", partition,
 		"autoOffsetReset", autoOffsetReset,
@@ -678,7 +678,7 @@ func (sm *StreamManager) readFromPartition(
 	for {
 		select {
 		case <-ctx.Done():
-			log.DefaultLogger.Info("Partition reader stopping",
+			log.DefaultLogger.Debug("Partition reader stopping",
 				"partition", partition,
 				"totalMessages", messageCount)
 			return
@@ -721,7 +721,7 @@ func (sm *StreamManager) readFromPartition(
 
 				select {
 				case messagesCh <- messageWithPartition{msg: errorMsg, partition: partition}:
-					log.DefaultLogger.Info("Sent error message to channel", "partition", partition, "error", err)
+					log.DefaultLogger.Debug("Sent error message to channel", "partition", partition, "error", err)
 				case <-ctx.Done():
 					return
 				}
@@ -747,7 +747,7 @@ func (sm *StreamManager) readFromPartition(
 
 // ValidateAndGetPartitions validates the query and returns the list of partitions to consume from.
 func (sm *StreamManager) ValidateAndGetPartitions(ctx context.Context, qm queryModel) ([]int32, error) {
-	log.DefaultLogger.Info("ValidateAndGetPartitions called", "topic", qm.Topic, "partition", qm.Partition, "partitionType", fmt.Sprintf("%T", qm.Partition))
+	log.DefaultLogger.Debug("ValidateAndGetPartitions called", "topic", qm.Topic, "partition", qm.Partition, "partitionType", fmt.Sprintf("%T", qm.Partition))
 	switch v := qm.Partition.(type) {
 	case float64: // JSON numbers are parsed as float64
 		// Validate topic exists and selected partition is within range
@@ -758,15 +758,15 @@ func (sm *StreamManager) ValidateAndGetPartitions(ctx context.Context, qm queryM
 		if err != nil {
 			return nil, sm.handleTopicError(err, qm.Topic)
 		}
-		log.DefaultLogger.Info("Available partitions", "topic", qm.Topic, "partitions", allPartitions)
+		log.DefaultLogger.Debug("Available partitions", "topic", qm.Topic, "partitions", allPartitions)
 		sel := int32(v)
 		count := int32(len(allPartitions))
-		log.DefaultLogger.Info("Partition validation", "selected", sel, "count", count, "validRange", fmt.Sprintf("[0..%d)", count))
+		log.DefaultLogger.Debug("Partition validation", "selected", sel, "count", count, "validRange", fmt.Sprintf("[0..%d)", count))
 		if sel < 0 || sel >= count {
 			return nil, fmt.Errorf("partition %d out of range [0..%d) for topic %s", sel, count, qm.Topic)
 		}
 		result := []int32{sel}
-		log.DefaultLogger.Info("Returning partitions for single partition", "partitions", result)
+		log.DefaultLogger.Debug("Returning partitions for single partition", "partitions", result)
 		return result, nil
 	case string:
 		if v == "all" {
@@ -775,7 +775,7 @@ func (sm *StreamManager) ValidateAndGetPartitions(ctx context.Context, qm queryM
 			if err != nil {
 				return nil, sm.handleTopicError(err, qm.Topic)
 			}
-			log.DefaultLogger.Info("Returning all partitions", "partitions", allPartitions)
+			log.DefaultLogger.Debug("Returning all partitions", "partitions", allPartitions)
 			return allPartitions, nil
 		} else {
 			return nil, fmt.Errorf("invalid partition value: %s", v)

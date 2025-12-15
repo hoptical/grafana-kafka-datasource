@@ -590,11 +590,11 @@ func (d *KafkaDatasource) SubscribeStream(ctx context.Context, req *backend.Subs
 }
 
 func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamRequest, sender *backend.StreamSender) error {
-	log.DefaultLogger.Info("RunStream called", "path", req.Path, "dataLength", len(req.Data))
+	log.DefaultLogger.Debug("RunStream called", "path", req.Path, "dataLength", len(req.Data))
 
 	// Log the raw request data for debugging
 	if len(req.Data) > 0 {
-		log.DefaultLogger.Info("RunStream raw request data", "data", string(req.Data))
+		log.DefaultLogger.Debug("RunStream raw request data", "data", string(req.Data))
 	}
 
 	var qm queryModel
@@ -604,9 +604,9 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 		return err
 	}
 
-	log.DefaultLogger.Info("Parsed queryModel", "topic", qm.Topic, "partition", qm.Partition, "partitionType", fmt.Sprintf("%T", qm.Partition))
+	log.DefaultLogger.Debug("Parsed queryModel", "topic", qm.Topic, "partition", qm.Partition, "partitionType", fmt.Sprintf("%T", qm.Partition))
 
-	log.DefaultLogger.Info("Starting Kafka stream with configuration",
+	log.DefaultLogger.Debug("Starting Kafka stream with configuration",
 		"topic", qm.Topic,
 		"partition", qm.Partition,
 		"messageFormat", qm.MessageFormat,
@@ -687,7 +687,7 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 			if configChanged && !topicChanged && !partitionsChanged {
 				reason = "configuration changes"
 			}
-			log.DefaultLogger.Info("Stopping existing stream due to "+reason,
+			log.DefaultLogger.Debug("Stopping existing stream due to "+reason,
 				"oldMessageFormat", func() string {
 					if d.streamConfig != nil {
 						return d.streamConfig.MessageFormat
@@ -702,7 +702,7 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 			if d.streamCtx != nil {
 				select {
 				case <-d.streamCtx.Done():
-					log.DefaultLogger.Info("Previous stream context confirmed cancelled")
+					log.DefaultLogger.Debug("Previous stream context confirmed cancelled")
 				case <-time.After(streamCancelTimeout):
 					log.DefaultLogger.Warn("Previous stream context cancellation timed out after 500ms")
 				}
@@ -713,7 +713,7 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 			// Additional delay to ensure all partition readers have stopped
 			// and message channels are drained - increased to 500ms for better reliability
 			time.Sleep(streamCleanupDelay)
-			log.DefaultLogger.Info("Stream cleanup delay completed - ready for new stream")
+			log.DefaultLogger.Debug("Stream cleanup delay completed - ready for new stream")
 		}
 
 		// Clear all previous state to ensure fresh start
@@ -727,7 +727,7 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 		d.currentPartitions = partitions
 		d.streamCtx, d.streamCancel = context.WithCancel(ctx)
 
-		log.DefaultLogger.Info("Updated stream state with new configuration",
+		log.DefaultLogger.Debug("Updated stream state with new configuration",
 			"messageFormat", d.streamConfig.MessageFormat,
 			"avroSchemaSource", d.streamConfig.AvroSchemaSource,
 			"autoOffsetReset", d.streamConfig.AutoOffsetReset,
@@ -738,7 +738,7 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 		messagesCh := make(chan messageWithPartition, streamMessageBuffer)
 		d.streamManager.StartPartitionReaders(d.streamCtx, partitions, qm, d.streamConfig, messagesCh)
 
-		log.DefaultLogger.Info("Started new stream",
+		log.DefaultLogger.Debug("Started new stream",
 			"topic", qm.Topic,
 			"partitions", partitions)
 
@@ -747,7 +747,7 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 		for {
 			select {
 			case <-d.streamCtx.Done():
-				log.DefaultLogger.Info("Stream context done, finishing",
+				log.DefaultLogger.Debug("Stream context done, finishing",
 					"path", req.Path,
 					"totalMessages", messageCount)
 				// Drain any remaining messages in the channel to prevent them from being processed
@@ -761,7 +761,7 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 						// Continue draining messages
 					case <-time.After(channelDrainTimeout):
 						// Stop draining after 100ms to avoid blocking too long
-						log.DefaultLogger.Info("Message channel drain completed",
+						log.DefaultLogger.Debug("Message channel drain completed",
 							"drainedMessages", drainedCount,
 							"drainDuration", time.Since(drainStart))
 						return nil
@@ -825,7 +825,7 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 		}
 	} else {
 		// No changes, just wait for context cancellation
-		log.DefaultLogger.Info("No changes detected, waiting for context cancellation")
+		log.DefaultLogger.Debug("No changes detected, waiting for context cancellation")
 		<-ctx.Done()
 		return nil
 	}
