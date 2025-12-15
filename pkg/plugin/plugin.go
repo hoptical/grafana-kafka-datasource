@@ -606,7 +606,7 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 
 	log.DefaultLogger.Debug("Parsed queryModel", "topic", qm.Topic, "partition", qm.Partition, "partitionType", fmt.Sprintf("%T", qm.Partition))
 
-	log.DefaultLogger.Info("Starting Kafka stream with configuration",
+	log.DefaultLogger.Debug("Starting Kafka stream with configuration",
 		"topic", qm.Topic,
 		"partition", qm.Partition,
 		"messageFormat", qm.MessageFormat,
@@ -687,7 +687,7 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 			if configChanged && !topicChanged && !partitionsChanged {
 				reason = "configuration changes"
 			}
-			log.DefaultLogger.Info("Stopping existing stream due to "+reason,
+			log.DefaultLogger.Debug("Stopping existing stream due to "+reason,
 				"oldMessageFormat", func() string {
 					if d.streamConfig != nil {
 						return d.streamConfig.MessageFormat
@@ -727,7 +727,7 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 		d.currentPartitions = partitions
 		d.streamCtx, d.streamCancel = context.WithCancel(ctx)
 
-		log.DefaultLogger.Info("Updated stream state with new configuration",
+		log.DefaultLogger.Debug("Updated stream state with new configuration",
 			"messageFormat", d.streamConfig.MessageFormat,
 			"avroSchemaSource", d.streamConfig.AvroSchemaSource,
 			"autoOffsetReset", d.streamConfig.AutoOffsetReset,
@@ -738,7 +738,7 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 		messagesCh := make(chan messageWithPartition, streamMessageBuffer)
 		d.streamManager.StartPartitionReaders(d.streamCtx, partitions, qm, d.streamConfig, messagesCh)
 
-		log.DefaultLogger.Info("Started new stream",
+		log.DefaultLogger.Debug("Started new stream",
 			"topic", qm.Topic,
 			"partitions", partitions)
 
@@ -747,7 +747,7 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 		for {
 			select {
 			case <-d.streamCtx.Done():
-				log.DefaultLogger.Info("Stream context done, finishing",
+				log.DefaultLogger.Debug("Stream context done, finishing",
 					"path", req.Path,
 					"totalMessages", messageCount)
 				// Drain any remaining messages in the channel to prevent them from being processed
