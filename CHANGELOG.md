@@ -1,5 +1,11 @@
 # Changelog
 
+## [v1.2.3](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.2.3)
+
+[Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v1.2.2...v1.2.3)
+
+- Enhancement: Change info levels to debug for all requests in the backend ([#118](https://github.com/hoptical/grafana-kafka-datasource/pull/118))
+
 ## [v1.2.2](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.2.2)
 
 [Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v1.2.1...v1.2.2)
