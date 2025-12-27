@@ -170,45 +170,8 @@ func getDatasourceSettings(s backend.DataSourceInstanceSettings) (*kafka_client.
 }
 
 type KafkaDatasource struct {
-	client            KafkaClientAPI
-	streamManager     *StreamManager
-	streamConfig      *StreamConfig
-	currentTopic      string
-	currentPartitions []int32
-	streamCtx         context.Context
-	streamCancel      context.CancelFunc
-	settings          *kafka_client.Options
-}
-
-// configChanged checks if the new query model differs from the current stream configuration
-// Note: Topic changes are handled separately and should not be included here
-func (d *KafkaDatasource) configChanged(qm queryModel) bool {
-	if d.streamConfig == nil {
-		return true
-	}
-
-	return d.streamConfig.MessageFormat != qm.MessageFormat ||
-		d.streamConfig.AvroSchemaSource != qm.AvroSchemaSource ||
-		d.streamConfig.AvroSchema != qm.AvroSchema ||
-		d.streamConfig.AutoOffsetReset != qm.AutoOffsetReset ||
-		d.streamConfig.TimestampMode != qm.TimestampMode ||
-		d.streamConfig.LastN != qm.LastN // Added LastN to config change detection
-}
-
-// partitionsChanged checks if the partitions have changed
-func (d *KafkaDatasource) partitionsChanged(qm queryModel, partitions []int32) bool {
-	if len(d.currentPartitions) != len(partitions) {
-		return true
-	}
-
-	// Check if partition list has changed
-	for i, p := range partitions {
-		if i >= len(d.currentPartitions) || d.currentPartitions[i] != p {
-			return true
-		}
-	}
-
-	return false
+	client   KafkaClientAPI
+	settings *kafka_client.Options
 }
 
 func (d *KafkaDatasource) Dispose() { d.client.Dispose() }
@@ -631,7 +594,7 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 	log.DefaultLogger.Debug("RunStream partitions", "topic", qm.Topic, "partitions", partitions)
 
 	// Create new stream configuration
-	newStreamConfig := &StreamConfig{
+	streamConfig := &StreamConfig{
 		MessageFormat:    qm.MessageFormat,
 		AvroSchemaSource: qm.AvroSchemaSource,
 		AvroSchema:       qm.AvroSchema,
@@ -641,193 +604,92 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 	}
 
 	// Set default values if not provided
-	if newStreamConfig.MessageFormat == "" {
-		newStreamConfig.MessageFormat = "json"
+	if streamConfig.MessageFormat == "" {
+		streamConfig.MessageFormat = "json"
 	}
-	if newStreamConfig.AvroSchemaSource == "" {
-		newStreamConfig.AvroSchemaSource = "schemaRegistry"
+	if streamConfig.AvroSchemaSource == "" {
+		streamConfig.AvroSchemaSource = "schemaRegistry"
 	}
-	if newStreamConfig.AutoOffsetReset == "" {
-		newStreamConfig.AutoOffsetReset = "latest"
+	if streamConfig.AutoOffsetReset == "" {
+		streamConfig.AutoOffsetReset = "latest"
 	}
-	if newStreamConfig.TimestampMode == "" {
-		newStreamConfig.TimestampMode = "message"
+	if streamConfig.TimestampMode == "" {
+		streamConfig.TimestampMode = "message"
 	}
 
-	// Check if we need to restart the stream or just update configuration
-	topicChanged := d.currentTopic != qm.Topic
-	partitionsChanged := d.partitionsChanged(qm, partitions)
-	configChanged := d.configChanged(qm)
+	// Create message channel and start partition readers
+	messagesCh := make(chan messageWithPartition, streamMessageBuffer)
+	streamManager.StartPartitionReaders(ctx, partitions, qm, streamConfig, messagesCh)
 
-	log.DefaultLogger.Debug("Stream change detection",
-		"topicChanged", topicChanged,
-		"partitionsChanged", partitionsChanged,
-		"configChanged", configChanged,
-		"hasExistingStream", d.streamManager != nil,
-		"currentMessageFormat", func() string {
-			if d.streamConfig != nil {
-				return d.streamConfig.MessageFormat
-			}
-			return "none"
-		}(),
-		"newMessageFormat", qm.MessageFormat,
-		"currentLastN", func() int32 {
-			if d.streamConfig != nil {
-				return d.streamConfig.LastN
-			}
-			return 0
-		}(),
-		"newLastN", qm.LastN)
+	log.DefaultLogger.Debug("Started new stream",
+		"topic", qm.Topic,
+		"partitions", partitions)
 
-	// If topic, partitions, or configuration changed, or no existing stream, start fresh
-	if topicChanged || partitionsChanged || configChanged || d.streamManager == nil {
-		// Stop existing stream if running
-		if d.streamCancel != nil {
-			reason := "topic/partition changes"
-			if configChanged && !topicChanged && !partitionsChanged {
-				reason = "configuration changes"
-			}
-			log.DefaultLogger.Debug("Stopping existing stream due to "+reason,
-				"oldMessageFormat", func() string {
-					if d.streamConfig != nil {
-						return d.streamConfig.MessageFormat
-					}
-					return "none"
-				}(),
-				"newMessageFormat", qm.MessageFormat)
-			d.streamCancel()
+	// Main processing loop
+	messageCount := 0
+	for {
+		select {
+		case <-ctx.Done():
+			log.DefaultLogger.Debug("Stream context done, finishing",
+				"path", req.Path,
+				"totalMessages", messageCount)
+			return nil
 
-			// Wait for the stream context to be fully cancelled
-			// This ensures the stream processing loop has exited cleanly
-			if d.streamCtx != nil {
-				select {
-				case <-d.streamCtx.Done():
-					log.DefaultLogger.Debug("Previous stream context confirmed cancelled")
-				case <-time.After(streamCancelTimeout):
-					log.DefaultLogger.Warn("Previous stream context cancellation timed out after 500ms")
-				}
-			}
+		case msgWithPartition := <-messagesCh:
+			messageCount++
+			log.DefaultLogger.Debug("Processing message from channel",
+				"messageNumber", messageCount,
+				"partition", msgWithPartition.partition,
+				"offset", msgWithPartition.msg.Offset)
 
-			d.streamCancel = nil
-
-			// Additional delay to ensure all partition readers have stopped
-			// and message channels are drained - increased to 500ms for better reliability
-			time.Sleep(streamCleanupDelay)
-			log.DefaultLogger.Debug("Stream cleanup delay completed - ready for new stream")
-		}
-
-		// Clear all previous state to ensure fresh start
-		d.streamManager = nil
-		d.streamConfig = nil
-
-		// Update persistent state with new configuration
-		d.streamManager = streamManager
-		d.streamConfig = newStreamConfig
-		d.currentTopic = qm.Topic
-		d.currentPartitions = partitions
-		d.streamCtx, d.streamCancel = context.WithCancel(ctx)
-
-		log.DefaultLogger.Debug("Updated stream state with new configuration",
-			"messageFormat", d.streamConfig.MessageFormat,
-			"avroSchemaSource", d.streamConfig.AvroSchemaSource,
-			"autoOffsetReset", d.streamConfig.AutoOffsetReset,
-			"topic", d.currentTopic,
-			"partitions", d.currentPartitions)
-
-		// Create message channel and start partition readers
-		messagesCh := make(chan messageWithPartition, streamMessageBuffer)
-		d.streamManager.StartPartitionReaders(d.streamCtx, partitions, qm, d.streamConfig, messagesCh)
-
-		log.DefaultLogger.Debug("Started new stream",
-			"topic", qm.Topic,
-			"partitions", partitions)
-
-		// Main processing loop
-		messageCount := 0
-		for {
-			select {
-			case <-d.streamCtx.Done():
-				log.DefaultLogger.Debug("Stream context done, finishing",
-					"path", req.Path,
-					"totalMessages", messageCount)
-				// Drain any remaining messages in the channel to prevent them from being processed
-				// with the wrong configuration when a new stream starts
-				drainedCount := 0
-				drainStart := time.Now()
-				for {
-					select {
-					case <-messagesCh:
-						drainedCount++
-						// Continue draining messages
-					case <-time.After(channelDrainTimeout):
-						// Stop draining after 100ms to avoid blocking too long
-						log.DefaultLogger.Debug("Message channel drain completed",
-							"drainedMessages", drainedCount,
-							"drainDuration", time.Since(drainStart))
-						return nil
-					}
-				}
-			case msgWithPartition := <-messagesCh:
-				messageCount++
-				log.DefaultLogger.Debug("Processing message from channel",
-					"messageNumber", messageCount,
-					"partition", msgWithPartition.partition,
-					"offset", msgWithPartition.msg.Offset)
-
-				frame, err := d.streamManager.ProcessMessage(
-					msgWithPartition.msg,
-					msgWithPartition.partition,
-					partitions,
-					d.streamConfig,
-					d.currentTopic,
-				)
-				if err != nil {
-					log.DefaultLogger.Error("Error processing message",
-						"messageNumber", messageCount,
-						"partition", msgWithPartition.partition,
-						"offset", msgWithPartition.msg.Offset,
-						"error", err)
-					continue
-				}
-
-				fieldCount := 0
-				if obj, ok := msgWithPartition.msg.Value.(map[string]interface{}); ok {
-					fieldCount = len(obj)
-				} else if arr, ok := msgWithPartition.msg.Value.([]interface{}); ok {
-					fieldCount = len(arr)
-				}
-
-				log.DefaultLogger.Debug("Message frame created",
+			frame, err := streamManager.ProcessMessage(
+				msgWithPartition.msg,
+				msgWithPartition.partition,
+				partitions,
+				streamConfig,
+				qm.Topic,
+			)
+			if err != nil {
+				log.DefaultLogger.Error("Error processing message",
 					"messageNumber", messageCount,
 					"partition", msgWithPartition.partition,
 					"offset", msgWithPartition.msg.Offset,
-					"timestamp", frame.Fields[0].At(0),
-					"fieldCount", fieldCount)
+					"error", err)
+				continue
+			}
 
-				log.DefaultLogger.Debug("Sending frame to Grafana",
-					"messageNumber", messageCount,
-					"partition", msgWithPartition.partition)
-				err = sender.SendFrame(frame, data.IncludeAll)
-				if err != nil {
-					log.DefaultLogger.Error("Error sending frame",
-						"messageNumber", messageCount,
-						"partition", msgWithPartition.partition,
-						"error", err)
-					continue
-				}
+			fieldCount := 0
+			if obj, ok := msgWithPartition.msg.Value.(map[string]interface{}); ok {
+				fieldCount = len(obj)
+			} else if arr, ok := msgWithPartition.msg.Value.([]interface{}); ok {
+				fieldCount = len(arr)
+			}
 
-				log.DefaultLogger.Debug("Successfully sent frame to Grafana",
+			log.DefaultLogger.Debug("Message frame created",
+				"messageNumber", messageCount,
+				"partition", msgWithPartition.partition,
+				"offset", msgWithPartition.msg.Offset,
+				"timestamp", frame.Fields[0].At(0),
+				"fieldCount", fieldCount)
+
+			log.DefaultLogger.Debug("Sending frame to Grafana",
+				"messageNumber", messageCount,
+				"partition", msgWithPartition.partition)
+			err = sender.SendFrame(frame, data.IncludeAll)
+			if err != nil {
+				log.DefaultLogger.Error("Error sending frame",
 					"messageNumber", messageCount,
 					"partition", msgWithPartition.partition,
-					"frameFields", len(frame.Fields),
-					"frameName", frame.Name)
+					"error", err)
+				continue
 			}
+
+			log.DefaultLogger.Debug("Successfully sent frame to Grafana",
+				"messageNumber", messageCount,
+				"partition", msgWithPartition.partition,
+				"frameFields", len(frame.Fields),
+				"frameName", frame.Name)
 		}
-	} else {
-		// No changes, just wait for context cancellation
-		log.DefaultLogger.Debug("No changes detected, waiting for context cancellation")
-		<-ctx.Done()
-		return nil
 	}
 }
 
