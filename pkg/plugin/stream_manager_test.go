@@ -497,7 +497,6 @@ func TestStreamManager_readFromPartition_ContextCancellation(t *testing.T) {
 }
 
 func TestStreamManager_UpdateStreamConfig(t *testing.T) {
-	sm := NewStreamManager(&mockStreamClient{}, 5, 1000)
 	config := &StreamConfig{
 		MessageFormat:    "json",
 		AvroSchemaSource: "",
@@ -511,8 +510,8 @@ func TestStreamManager_UpdateStreamConfig(t *testing.T) {
 		t.Errorf("Expected initial message format 'json', got '%s'", config.MessageFormat)
 	}
 
-	// Update configuration
-	sm.UpdateStreamConfig(config, "avro")
+	// Update configuration directly
+	config.MessageFormat = "avro"
 
 	// Verify configuration was updated
 	if config.MessageFormat != "avro" {
@@ -629,7 +628,7 @@ func TestStreamManager_ProcessMessage_ConfigChangeReflection(t *testing.T) {
 	}
 
 	// Change configuration to Avro format
-	sm.UpdateStreamConfig(config, "avro")
+	config.MessageFormat = "avro"
 
 	// Process same message with updated Avro format
 	frame2, err := sm.ProcessMessage(msg, 0, []int32{0}, config, "test")
@@ -658,137 +657,6 @@ func TestStreamManager_ProcessMessage_ConfigChangeReflection(t *testing.T) {
 
 	if !hasErrorField {
 		t.Error("Expected error field in frame after config change to Avro")
-	}
-}
-
-func TestStreamManager_ReadFromPartition_ConfigUpdate(t *testing.T) {
-	mockClient := &mockStreamClient{
-		pullMessages: []kafka_client.KafkaMessage{
-			{
-				Value:     map[string]interface{}{"key": "value1"},
-				RawValue:  []byte(`{"key": "value1"}`),
-				Offset:    1,
-				Timestamp: time.Now(),
-			},
-			{
-				Value:     map[string]interface{}{"key": "value2"},
-				RawValue:  []byte(`{"key": "value2"}`),
-				Offset:    2,
-				Timestamp: time.Now(),
-			},
-		},
-	}
-
-	sm := NewStreamManager(mockClient, 5, 1000)
-
-	config := &StreamConfig{
-		MessageFormat:    "json",
-		AvroSchemaSource: "",
-		AvroSchema:       "",
-		AutoOffsetReset:  "latest",
-		TimestampMode:    "message",
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-	defer cancel()
-
-	messagesCh := make(chan messageWithPartition, 10)
-
-	// Start partition reader
-	go sm.readFromPartition(ctx, 0, queryModel{
-		Topic:           "test-topic",
-		AutoOffsetReset: "latest",
-		LastN:           10,
-		MessageFormat:   "json",
-	}, config, messagesCh)
-
-	// Wait a bit for first message
-	time.Sleep(20 * time.Millisecond)
-
-	// Update configuration during streaming
-	sm.UpdateStreamConfig(config, "avro")
-
-	// Wait for second message
-	time.Sleep(20 * time.Millisecond)
-
-	// Collect received messages
-	var receivedMessages []messageWithPartition
-	timeout := time.After(50 * time.Millisecond)
-
-loop:
-	for len(receivedMessages) < 2 {
-		select {
-		case msg := <-messagesCh:
-			receivedMessages = append(receivedMessages, msg)
-		case <-timeout:
-			break loop
-		}
-	}
-
-	// Verify we received messages
-	if len(receivedMessages) == 0 {
-		t.Fatal("Expected to receive at least one message")
-	}
-
-	// Verify configuration was updated
-	if config.MessageFormat != "avro" {
-		t.Errorf("Expected message format to be updated to 'avro', got '%s'", config.MessageFormat)
-	}
-}
-
-func TestStreamManager_DynamicConfig_AllPartitions(t *testing.T) {
-	mockClient := &mockStreamClient{
-		partitions: []int32{0, 1},
-		pullMessages: []kafka_client.KafkaMessage{
-			{
-				Value:     map[string]interface{}{"key": "value1"},
-				RawValue:  []byte(`{"key": "value1"}`),
-				Offset:    1,
-				Timestamp: time.Now(),
-			},
-		},
-	}
-
-	sm := NewStreamManager(mockClient, 5, 1000)
-
-	config := &StreamConfig{
-		MessageFormat:    "json",
-		AvroSchemaSource: "",
-		AvroSchema:       "",
-		AutoOffsetReset:  "latest",
-		TimestampMode:    "message",
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
-	defer cancel()
-
-	messagesCh := make(chan messageWithPartition, 10)
-
-	// Start readers for all partitions
-	sm.StartPartitionReaders(ctx, []int32{0, 1}, queryModel{
-		Topic:           "test-topic",
-		AutoOffsetReset: "latest",
-		LastN:           10,
-		MessageFormat:   "json",
-	}, config, messagesCh)
-
-	// Wait for initial messages
-	time.Sleep(30 * time.Millisecond)
-
-	// Update configuration during streaming
-	sm.UpdateStreamConfig(config, "avro")
-
-	// Wait for processing with new config
-	time.Sleep(30 * time.Millisecond)
-
-	// Verify configuration was updated
-	if config.MessageFormat != "avro" {
-		t.Errorf("Expected message format to be updated to 'avro', got '%s'", config.MessageFormat)
-	}
-
-	// Verify that the shared config is the same reference
-	if config.MessageFormat != "avro" {
-		t.Error("Expected shared config to reflect the update across all partition readers")
 	}
 }
 

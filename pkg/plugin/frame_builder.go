@@ -10,9 +10,9 @@ import (
 
 // FieldBuilder handles building Grafana data fields from various JSON value types.
 type FieldBuilder struct {
-	mu sync.RWMutex // Protects typeRegistry from concurrent access
 	// typeRegistry tracks field types across messages to maintain schema consistency
 	typeRegistry map[string]data.FieldType
+	mu           sync.RWMutex
 }
 
 // NewFieldBuilder creates a new instance of FieldBuilder.
@@ -26,56 +26,43 @@ func NewFieldBuilder() *FieldBuilder {
 // creating the appropriate field type based on the value's type.
 // Note: frame.Fields must be pre-allocated to at least fieldIndex+1 length.
 func (fb *FieldBuilder) AddValueToFrame(frame *data.Frame, key string, value interface{}, fieldIndex int) {
+	fb.mu.Lock()
+	defer fb.mu.Unlock()
+
 	switch v := value.(type) {
 	case json.Number:
 		fb.addJSONNumberField(frame, key, v, fieldIndex)
 	case float64:
-		fb.mu.Lock()
 		fb.typeRegistry[key] = data.FieldTypeNullableFloat64
-		fb.mu.Unlock()
 		frame.Fields[fieldIndex] = data.NewField(key, nil, make([]*float64, 1))
 		frame.Fields[fieldIndex].SetConcrete(0, v)
 	case float32:
-		fb.mu.Lock()
 		fb.typeRegistry[key] = data.FieldTypeNullableFloat64
-		fb.mu.Unlock()
 		frame.Fields[fieldIndex] = data.NewField(key, nil, make([]*float64, 1))
 		frame.Fields[fieldIndex].SetConcrete(0, float64(v))
 	case int:
-		fb.mu.Lock()
 		fb.typeRegistry[key] = data.FieldTypeNullableInt64
-		fb.mu.Unlock()
 		frame.Fields[fieldIndex] = data.NewField(key, nil, make([]*int64, 1))
 		frame.Fields[fieldIndex].SetConcrete(0, int64(v))
 	case int8, int16, int32, int64:
-		fb.mu.Lock()
 		fb.typeRegistry[key] = data.FieldTypeNullableInt64
-		fb.mu.Unlock()
 		frame.Fields[fieldIndex] = data.NewField(key, nil, make([]*int64, 1))
 		frame.Fields[fieldIndex].SetConcrete(0, toInt64(v))
 	case uint, uint8, uint16, uint32, uint64:
-		fb.mu.Lock()
 		fb.typeRegistry[key] = data.FieldTypeNullableUint64
-		fb.mu.Unlock()
 		frame.Fields[fieldIndex] = data.NewField(key, nil, make([]*uint64, 1))
 		frame.Fields[fieldIndex].SetConcrete(0, toUint64(v))
 	case bool:
-		fb.mu.Lock()
 		fb.typeRegistry[key] = data.FieldTypeNullableBool
-		fb.mu.Unlock()
 		frame.Fields[fieldIndex] = data.NewField(key, nil, make([]*bool, 1))
 		frame.Fields[fieldIndex].SetConcrete(0, v)
 	case string:
-		fb.mu.Lock()
 		fb.typeRegistry[key] = data.FieldTypeNullableString
-		fb.mu.Unlock()
 		frame.Fields[fieldIndex] = data.NewField(key, nil, make([]*string, 1))
 		frame.Fields[fieldIndex].SetConcrete(0, v)
 	case nil:
 		// Use type registry to maintain schema consistency across messages
-		fb.mu.RLock()
 		fieldType, exists := fb.typeRegistry[key]
-		fb.mu.RUnlock()
 		if !exists {
 			// Default to nullable float64 for unknown fields (common for sensor/metric data)
 			fieldType = data.FieldTypeNullableFloat64
@@ -84,9 +71,7 @@ func (fb *FieldBuilder) AddValueToFrame(frame *data.Frame, key string, value int
 		fb.createNullableField(frame, key, fieldType, fieldIndex)
 	default:
 		// For unsupported types, use string representation as fallback
-		fb.mu.Lock()
 		fb.typeRegistry[key] = data.FieldTypeNullableString
-		fb.mu.Unlock()
 		frame.Fields[fieldIndex] = data.NewField(key, nil, make([]*string, 1))
 		strVal := fmt.Sprintf("%v", v)
 		frame.Fields[fieldIndex].SetConcrete(0, strVal)
@@ -118,21 +103,15 @@ func (fb *FieldBuilder) addJSONNumberField(frame *data.Frame, key string, num js
 	coerced := CoerceJSONNumber(num)
 	switch cv := coerced.(type) {
 	case int64:
-		fb.mu.Lock()
 		fb.typeRegistry[key] = data.FieldTypeNullableInt64
-		fb.mu.Unlock()
 		frame.Fields[fieldIndex] = data.NewField(key, nil, make([]*int64, 1))
 		frame.Fields[fieldIndex].SetConcrete(0, cv)
 	case float64:
-		fb.mu.Lock()
 		fb.typeRegistry[key] = data.FieldTypeNullableFloat64
-		fb.mu.Unlock()
 		frame.Fields[fieldIndex] = data.NewField(key, nil, make([]*float64, 1))
 		frame.Fields[fieldIndex].SetConcrete(0, cv)
 	default:
-		fb.mu.Lock()
 		fb.typeRegistry[key] = data.FieldTypeNullableString
-		fb.mu.Unlock()
 		frame.Fields[fieldIndex] = data.NewField(key, nil, make([]*string, 1))
 		frame.Fields[fieldIndex].SetConcrete(0, fmt.Sprintf("%v", cv))
 	}
