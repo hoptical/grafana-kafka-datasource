@@ -51,3 +51,7 @@ ci/
 
 # CMD folder for developing purposes
 /cmd/
+
+# Commitlint and Husky
+.husky/
+commitlint.config.js
