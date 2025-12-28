@@ -92,6 +92,8 @@ export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourc
         segments.push(encodeURIComponent(String(interpolatedQuery.autoOffsetReset)));
         segments.push(encodeURIComponent(String(interpolatedQuery.messageFormat || 'json')));
         segments.push(encodeURIComponent(String(interpolatedQuery.avroSchemaSource || 'schemaRegistry')));
+        // Include timestamp mode so changes to timestamp handling trigger a new path/subscription
+        segments.push(encodeURIComponent(String(interpolatedQuery.timestampMode || 'message')));
         // Include a hash of the Avro schema to detect changes
         const schemaHash = interpolatedQuery.avroSchema
           ? this.generateSchemaHash(interpolatedQuery.avroSchema)

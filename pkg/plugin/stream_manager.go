@@ -25,9 +25,8 @@ type StreamManager struct {
 	flattenFieldCap      int
 	fieldBuilder         *FieldBuilder                      // Maintains type registry across messages
 	schemaCache          map[string]string                  // Cache for schemas by subject name
-	schemaCacheMu        sync.RWMutex                       // Protects schemaCache for concurrent access
 	schemaRegistryClient *kafka_client.SchemaRegistryClient // Cached Schema Registry client
-	schemaClientMu       sync.RWMutex                       // Protects schemaRegistryClient
+	mu                   sync.RWMutex
 }
 
 // createErrorFrame creates a data frame containing error information
@@ -67,8 +66,7 @@ type StreamConfig struct {
 	AvroSchema       string
 	AutoOffsetReset  string
 	TimestampMode    string
-	LastN            int32        // Added to track lastN changes
-	mu               sync.RWMutex // Protects concurrent access to config fields
+	LastN            int32 // Added to track lastN changes
 }
 
 // NewStreamManager creates a new StreamManager instance.
@@ -80,14 +78,6 @@ func NewStreamManager(client KafkaClientAPI, flattenMaxDepth, flattenFieldCap in
 		fieldBuilder:    NewFieldBuilder(),
 		schemaCache:     make(map[string]string),
 	}
-}
-
-// UpdateStreamConfig updates the streaming configuration dynamically.
-func (sm *StreamManager) UpdateStreamConfig(config *StreamConfig, newMessageFormat string) {
-	config.mu.Lock()
-	config.MessageFormat = newMessageFormat
-	config.mu.Unlock()
-	log.DefaultLogger.Debug("Updated stream message format", "newFormat", newMessageFormat)
 }
 
 // ProcessMessageToFrame converts a Kafka message into a Grafana data frame.
@@ -110,10 +100,8 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 	}
 
 	// Check if message needs Avro decoding
-	config.mu.RLock()
 	messageFormat := config.MessageFormat
 	avroSchemaSource := config.AvroSchemaSource
-	config.mu.RUnlock()
 
 	log.DefaultLogger.Debug("Processing message with configuration",
 		"partition", partition,
@@ -187,9 +175,7 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 			}
 		}
 	} else {
-		config.mu.RLock()
 		messageFormat := config.MessageFormat
-		config.mu.RUnlock()
 		log.DefaultLogger.Debug("Using pre-decoded message value or non-Avro format",
 			"partition", partition,
 			"offset", msg.Offset,
@@ -202,9 +188,7 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 
 	// Add time field
 	timeField := data.NewField("time", nil, make([]time.Time, 1))
-	config.mu.RLock()
 	timestampMode := config.TimestampMode
-	config.mu.RUnlock()
 	var frameTime time.Time
 	if timestampMode == "now" {
 		frameTime = time.Now()
@@ -229,9 +213,7 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 
 	// Unwrap Avro union types before flattening (for Avro messages)
 	// This must happen BEFORE flattening to avoid creating keys like "value1.double"
-	config.mu.RLock()
 	isAvro := config.MessageFormat == "avro"
-	config.mu.RUnlock()
 
 	if isAvro {
 		messageValue = UnwrapAvroUnions(messageValue)
@@ -283,10 +265,8 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 // decodeAvroMessage decodes an Avro message using the appropriate schema
 // If sm is provided, it uses cached Schema Registry client and schema cache for better performance
 func decodeAvroMessage(sm *StreamManager, client KafkaClientAPI, data []byte, config *StreamConfig, topic string) (interface{}, error) {
-	config.mu.RLock()
 	avroSchemaSource := config.AvroSchemaSource
 	avroSchema := config.AvroSchema
-	config.mu.RUnlock()
 
 	log.DefaultLogger.Debug("Starting Avro message decoding",
 		"dataLength", len(data),
@@ -410,14 +390,13 @@ func decodeAvroMessage(sm *StreamManager, client KafkaClientAPI, data []byte, co
 // getSchemaWithCache retrieves a schema from the cache or fetches it from the registry
 // This method provides schema caching for better performance in high-throughput scenarios
 func (sm *StreamManager) getSchemaWithCache(subject string, schemaClient *kafka_client.SchemaRegistryClient) (string, error) {
-	// Check cache first with read lock
-	sm.schemaCacheMu.RLock()
+	sm.mu.RLock()
 	if cachedSchema, exists := sm.schemaCache[subject]; exists {
-		sm.schemaCacheMu.RUnlock()
+		sm.mu.RUnlock()
 		log.DefaultLogger.Debug("Using cached schema", "subject", subject)
 		return cachedSchema, nil
 	}
-	sm.schemaCacheMu.RUnlock()
+	sm.mu.RUnlock()
 
 	// Fetch from registry
 	log.DefaultLogger.Debug("Fetching schema from registry (not in cache)", "subject", subject)
@@ -426,10 +405,10 @@ func (sm *StreamManager) getSchemaWithCache(subject string, schemaClient *kafka_
 		return "", err
 	}
 
-	// Store in cache with write lock
-	sm.schemaCacheMu.Lock()
+	// Store in cache
+	sm.mu.Lock()
 	sm.schemaCache[subject] = schema
-	sm.schemaCacheMu.Unlock()
+	sm.mu.Unlock()
 
 	log.DefaultLogger.Debug("Cached schema", "subject", subject, "schemaLength", len(schema))
 
@@ -438,29 +417,28 @@ func (sm *StreamManager) getSchemaWithCache(subject string, schemaClient *kafka_
 
 // getSchemaFromRegistryWithCache gets or creates the Schema Registry client and retrieves schema with caching
 func (sm *StreamManager) getSchemaFromRegistryWithCache(registryUrl, username, password, subject string) (string, error) {
-	// Get or create Schema Registry client with read lock first
-	sm.schemaClientMu.RLock()
+	// Get or create Schema Registry client
+	sm.mu.RLock()
 	schemaClient := sm.schemaRegistryClient
-	sm.schemaClientMu.RUnlock()
+	sm.mu.RUnlock()
 
 	if schemaClient == nil {
-		// Create client with write lock
-		sm.schemaClientMu.Lock()
-		// Double-check after acquiring write lock
+		sm.mu.Lock()
+		// Double check locking
 		if sm.schemaRegistryClient == nil {
 			log.DefaultLogger.Debug("Creating Schema Registry client (first use)")
 
 			// Get HTTP client from KafkaClient
 			httpClient := sm.client.GetHTTPClient()
 			if httpClient == nil {
-				sm.schemaClientMu.Unlock()
+				sm.mu.Unlock()
 				return "", fmt.Errorf("HTTP client not available in KafkaClient")
 			}
 
 			sm.schemaRegistryClient = kafka_client.NewSchemaRegistryClient(registryUrl, username, password, httpClient)
 		}
 		schemaClient = sm.schemaRegistryClient
-		sm.schemaClientMu.Unlock()
+		sm.mu.Unlock()
 	}
 
 	// Use the cached schema retrieval method
@@ -488,9 +466,7 @@ func (sm *StreamManager) ProcessMessage(
 	}
 
 	// Check if message needs Avro decoding first to determine if nil Value is expected
-	config.mu.RLock()
 	messageFormat := config.MessageFormat
-	config.mu.RUnlock()
 
 	// Check if Value is nil - this indicates parsing/decoding failure for non-Avro formats
 	// For Avro format, Value is intentionally nil as decoding is deferred
@@ -553,9 +529,7 @@ func (sm *StreamManager) ProcessMessage(
 
 	// Add time field
 	timeField := data.NewField("time", nil, make([]time.Time, 1))
-	config.mu.RLock()
 	timestampMode := config.TimestampMode
-	config.mu.RUnlock()
 	var frameTime time.Time
 	if timestampMode == "now" {
 		frameTime = time.Now()
@@ -580,9 +554,7 @@ func (sm *StreamManager) ProcessMessage(
 
 	// Unwrap Avro union types before flattening (for Avro messages)
 	// This must happen BEFORE flattening to avoid creating keys like "value1.double"
-	config.mu.RLock()
 	isAvro := config.MessageFormat == "avro"
-	config.mu.RUnlock()
 
 	if isAvro {
 		messageValue = UnwrapAvroUnions(messageValue)
@@ -648,9 +620,7 @@ func (sm *StreamManager) readFromPartition(
 	config *StreamConfig,
 	messagesCh chan<- messageWithPartition,
 ) {
-	config.mu.RLock()
 	autoOffsetReset := config.AutoOffsetReset
-	config.mu.RUnlock()
 	log.DefaultLogger.Debug("Starting partition reader",
 		"topic", qm.Topic,
 		"partition", partition,
@@ -687,9 +657,7 @@ func (sm *StreamManager) readFromPartition(
 
 			// Add a timeout context to prevent infinite blocking
 			msgCtx, msgCancel := context.WithTimeout(ctx, messageReadTimeout)
-			config.mu.RLock()
 			messageFormat := config.MessageFormat
-			config.mu.RUnlock()
 			msg, err := sm.client.ConsumerPull(msgCtx, reader, messageFormat)
 			msgCancel() // Cancel immediately after use to avoid resource leaks in long-running loop
 

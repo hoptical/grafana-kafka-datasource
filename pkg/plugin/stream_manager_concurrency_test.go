@@ -139,71 +139,6 @@ func TestStreamManager_SchemaClientConcurrency(t *testing.T) {
 	}
 }
 
-// TestStreamConfig_ConcurrentAccess tests concurrent reads and writes to StreamConfig
-func TestStreamConfig_ConcurrentAccess(t *testing.T) {
-	config := &StreamConfig{
-		MessageFormat:    "json",
-		AvroSchemaSource: "inline",
-		AvroSchema:       `{"type":"string"}`,
-		AutoOffsetReset:  "latest",
-		TimestampMode:    "kafka",
-		LastN:            100,
-	}
-
-	// Create a mock client that properly implements KafkaClientAPI
-	mockClient := &mockStreamClient{}
-
-	sm := NewStreamManager(mockClient, 5, 100)
-
-	concurrency := 50
-	iterations := 100
-	var wg sync.WaitGroup
-	errCh := make(chan error, concurrency*2)
-
-	// Writers - update message format
-	wg.Add(concurrency)
-	for i := 0; i < concurrency; i++ {
-		go func(idx int) {
-			defer wg.Done()
-			for j := 0; j < iterations; j++ {
-				format := "json"
-				if j%2 == 0 {
-					format = "avro"
-				}
-				sm.UpdateStreamConfig(config, format)
-				time.Sleep(time.Microsecond)
-			}
-		}(i)
-	}
-
-	// Readers - read config fields
-	wg.Add(concurrency)
-	for i := 0; i < concurrency; i++ {
-		go func(idx int) {
-			defer wg.Done()
-			for j := 0; j < iterations; j++ {
-				config.mu.RLock()
-				format := config.MessageFormat
-				config.mu.RUnlock()
-
-				if format != "json" && format != "avro" {
-					errCh <- fmt.Errorf("reader %d: invalid format: %s", idx, format)
-					return
-				}
-				time.Sleep(time.Microsecond)
-			}
-		}(i)
-	}
-
-	wg.Wait()
-	close(errCh)
-
-	// Check for errors
-	for err := range errCh {
-		t.Errorf("Concurrent config access error: %v", err)
-	}
-}
-
 // TestProcessMessageToFrame_Concurrency tests concurrent message processing
 func TestProcessMessageToFrame_Concurrency(t *testing.T) {
 	mockClient := &mockStreamClient{
@@ -323,19 +258,6 @@ func TestStreamManager_MixedOperations(t *testing.T) {
 		}(i)
 	}
 
-	// Config update operations
-	wg.Add(concurrency)
-	for i := 0; i < concurrency; i++ {
-		go func(idx int) {
-			defer wg.Done()
-			format := "json"
-			if idx%2 == 0 {
-				format = "avro"
-			}
-			sm.UpdateStreamConfig(config, format)
-		}(i)
-	}
-
 	// Message processing operations
 	wg.Add(concurrency)
 	for i := 0; i < concurrency; i++ {
@@ -402,5 +324,52 @@ func TestValidateAndGetPartitions_Concurrency(t *testing.T) {
 	// Check for errors
 	for err := range errCh {
 		t.Errorf("Concurrent partition validation error: %v", err)
+	}
+}
+
+// TestStreamConfig_ConcurrentRead tests concurrent read access to StreamConfig
+// This verifies that the StreamConfig is safe for concurrent access (read-only pattern)
+func TestStreamConfig_ConcurrentRead(t *testing.T) {
+	config := &StreamConfig{
+		MessageFormat:    "json",
+		AvroSchemaSource: "registry",
+		AvroSchema:       "",
+		AutoOffsetReset:  "latest",
+		TimestampMode:    "kafka",
+		LastN:            100,
+	}
+
+	concurrency := 50
+	iterations := 1000
+	var wg sync.WaitGroup
+	errCh := make(chan error, concurrency)
+
+	wg.Add(concurrency)
+	for i := 0; i < concurrency; i++ {
+		go func(idx int) {
+			defer wg.Done()
+			for j := 0; j < iterations; j++ {
+				// Simulate concurrent reads of various fields
+				if config.MessageFormat != "json" {
+					errCh <- fmt.Errorf("goroutine %d: unexpected MessageFormat: %s", idx, config.MessageFormat)
+					return
+				}
+				if config.AutoOffsetReset != "latest" {
+					errCh <- fmt.Errorf("goroutine %d: unexpected AutoOffsetReset: %s", idx, config.AutoOffsetReset)
+					return
+				}
+				if config.LastN != 100 {
+					errCh <- fmt.Errorf("goroutine %d: unexpected LastN: %d", idx, config.LastN)
+					return
+				}
+			}
+		}(i)
+	}
+
+	wg.Wait()
+	close(errCh)
+
+	for err := range errCh {
+		t.Errorf("Concurrent config read error: %v", err)
 	}
 }
