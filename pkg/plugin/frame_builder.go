@@ -26,6 +26,11 @@ func NewFieldBuilder() *FieldBuilder {
 // creating the appropriate field type based on the value's type.
 // Note: frame.Fields must be pre-allocated to at least fieldIndex+1 length.
 func (fb *FieldBuilder) AddValueToFrame(frame *data.Frame, key string, value interface{}, fieldIndex int) {
+	// We use a write lock for the entire method because typeRegistry is accessed and potentially modified
+	// in almost every call. While a read lock could be used for the initial check, upgrading to a write lock
+	// is not atomic in Go's RWMutex and would require releasing the read lock first, introducing a race condition.
+	// Given that this method is called per-field per-message, the overhead of lock switching would likely
+	// outweigh the benefits of finer-grained locking.
 	fb.mu.Lock()
 	defer fb.mu.Unlock()
 

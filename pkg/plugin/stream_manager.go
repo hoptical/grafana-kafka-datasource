@@ -80,7 +80,6 @@ func NewStreamManager(client KafkaClientAPI, flattenMaxDepth, flattenFieldCap in
 	}
 }
 
-// UpdateStreamConfig updates the streaming configuration dynamically.
 // ProcessMessageToFrame converts a Kafka message into a Grafana data frame.
 // This is a shared function that can be used by both streaming and data query handlers.
 // Note: fieldBuilder should be a persistent instance (e.g., from StreamManager) to maintain

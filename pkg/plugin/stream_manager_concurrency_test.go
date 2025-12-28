@@ -326,3 +326,50 @@ func TestValidateAndGetPartitions_Concurrency(t *testing.T) {
 		t.Errorf("Concurrent partition validation error: %v", err)
 	}
 }
+
+// TestStreamConfig_ConcurrentRead tests concurrent read access to StreamConfig
+// This verifies that the StreamConfig is safe for concurrent access (read-only pattern)
+func TestStreamConfig_ConcurrentRead(t *testing.T) {
+	config := &StreamConfig{
+		MessageFormat:    "json",
+		AvroSchemaSource: "registry",
+		AvroSchema:       "",
+		AutoOffsetReset:  "latest",
+		TimestampMode:    "kafka",
+		LastN:            100,
+	}
+
+	concurrency := 50
+	iterations := 1000
+	var wg sync.WaitGroup
+	errCh := make(chan error, concurrency)
+
+	wg.Add(concurrency)
+	for i := 0; i < concurrency; i++ {
+		go func(idx int) {
+			defer wg.Done()
+			for j := 0; j < iterations; j++ {
+				// Simulate concurrent reads of various fields
+				if config.MessageFormat != "json" {
+					errCh <- fmt.Errorf("goroutine %d: unexpected MessageFormat: %s", idx, config.MessageFormat)
+					return
+				}
+				if config.AutoOffsetReset != "latest" {
+					errCh <- fmt.Errorf("goroutine %d: unexpected AutoOffsetReset: %s", idx, config.AutoOffsetReset)
+					return
+				}
+				if config.LastN != 100 {
+					errCh <- fmt.Errorf("goroutine %d: unexpected LastN: %d", idx, config.LastN)
+					return
+				}
+			}
+		}(i)
+	}
+
+	wg.Wait()
+	close(errCh)
+
+	for err := range errCh {
+		t.Errorf("Concurrent config read error: %v", err)
+	}
+}
