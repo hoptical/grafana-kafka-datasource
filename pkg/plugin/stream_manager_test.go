@@ -739,3 +739,34 @@ func TestStreamManager_ProcessMessage_ErrorHandling_Avro(t *testing.T) {
 		t.Error("Expected error field in frame for invalid Avro data")
 	}
 }
+
+func TestStreamManager_ProcessMessage_RefID_Alias(t *testing.T) {
+	sm := NewStreamManager(&mockStreamClient{}, 5, 1000)
+
+	msg := kafka_client.KafkaMessage{
+		Value: map[string]interface{}{
+			"value": 123,
+		},
+		Timestamp: time.Now(),
+		Offset:    100,
+	}
+
+	config := &StreamConfig{
+		MessageFormat: "json",
+		RefID:         "A",
+		Alias:         "MyAlias",
+	}
+
+	frame, err := sm.ProcessMessage(msg, 0, []int32{0}, config, "test-topic")
+	if err != nil {
+		t.Fatalf("ProcessMessage failed: %v", err)
+	}
+
+	if frame.RefID != "A" {
+		t.Errorf("Expected RefID 'A', got '%s'", frame.RefID)
+	}
+
+	if frame.Name != "MyAlias" {
+		t.Errorf("Expected Name 'MyAlias', got '%s'", frame.Name)
+	}
+}

@@ -100,6 +100,8 @@ export interface KafkaQuery extends DataQuery {
   // Avro Configuration
   avroSchemaSource?: AvroSchemaSource;
   avroSchema?: string;
+  // Optional alias for the query
+  alias?: string;
 }
 
 export const defaultQuery: Partial<KafkaQuery> = {

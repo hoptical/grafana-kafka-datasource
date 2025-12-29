@@ -211,6 +211,9 @@ type queryModel struct {
 	MessageFormat    string `json:"messageFormat"`
 	AvroSchemaSource string `json:"avroSchemaSource"`
 	AvroSchema       string `json:"avroSchema"`
+	// Metadata
+	RefID string `json:"refId"`
+	Alias string `json:"alias"`
 }
 
 func (d *KafkaDatasource) query(_ context.Context, pCtx backend.PluginContext, query backend.DataQuery) backend.DataResponse {
@@ -601,6 +604,8 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 		AutoOffsetReset:  qm.AutoOffsetReset,
 		TimestampMode:    qm.TimestampMode,
 		LastN:            qm.LastN, // Added LastN to stream config
+		RefID:            qm.RefID,
+		Alias:            qm.Alias,
 	}
 
 	// Set default values if not provided
