@@ -674,12 +674,7 @@ class QueryEditorInner extends PureComponent<QueryEditorInnerProps, State> {
             />
           </InlineField>
           <InlineField label="Alias" labelWidth={15} tooltip="Custom alias for the query series">
-            <Input
-              width={25}
-              value={query.alias || ''}
-              onChange={this.onAliasChange}
-              placeholder="Optional alias"
-            />
+            <Input width={25} value={query.alias || ''} onChange={this.onAliasChange} placeholder="Optional alias" />
           </InlineField>
         </InlineFieldRow>
 
