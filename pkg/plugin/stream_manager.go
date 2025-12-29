@@ -9,6 +9,7 @@ import (
 	"math"
 	"net/url"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -531,8 +532,11 @@ func (sm *StreamManager) ProcessMessage(
 	if config.RefID != "" {
 		frame.RefID = config.RefID
 	}
+	// Always set frame name if alias is present, using empty string for field placeholder
 	if config.Alias != "" {
-		frame.Name = config.Alias
+		formatted := formatAlias(config.Alias, config, topic, partition, "")
+		log.DefaultLogger.Debug("Applying frame alias", "original", config.Alias, "formatted", formatted)
+		frame.Name = formatted
 	}
 
 	// Add time field
@@ -602,6 +606,20 @@ func (sm *StreamManager) ProcessMessage(
 		value := flat[key]
 		fieldIdx := msgFieldStart + i
 		sm.fieldBuilder.AddValueToFrame(frame, key, value, fieldIdx)
+	}
+
+	// Always apply alias to fields if configured, skipping time field
+	if config.Alias != "" {
+		for _, field := range frame.Fields {
+			if field.Name == "time" {
+				continue
+			}
+			if field.Config == nil {
+				field.Config = &data.FieldConfig{}
+			}
+			formatted := formatAlias(config.Alias, config, topic, partition, field.Name)
+			field.Config.DisplayNameFromDS = formatted
+		}
 	}
 
 	return frame, nil
@@ -767,4 +785,15 @@ func (sm *StreamManager) handleTopicError(err error, topicName string) error {
 		return fmt.Errorf("topic %s %w", topicName, kafka_client.ErrTopicNotFound)
 	}
 	return fmt.Errorf("failed to get topic partitions: %w", err)
+}
+
+// formatAlias replaces placeholders in the alias string with actual values.
+func formatAlias(alias string, config *StreamConfig, topic string, partition int32, fieldName string) string {
+	alias = strings.ReplaceAll(alias, "{topic}", topic)
+	alias = strings.ReplaceAll(alias, "{partition}", fmt.Sprintf("%d", partition))
+	alias = strings.ReplaceAll(alias, "{refid}", config.RefID)
+	if fieldName != "" {
+		alias = strings.ReplaceAll(alias, "{field}", fieldName)
+	}
+	return alias
 }
