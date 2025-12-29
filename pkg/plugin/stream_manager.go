@@ -67,6 +67,8 @@ type StreamConfig struct {
 	AutoOffsetReset  string
 	TimestampMode    string
 	LastN            int32 // Added to track lastN changes
+	RefID            string
+	Alias            string
 }
 
 // NewStreamManager creates a new StreamManager instance.
@@ -526,6 +528,12 @@ func (sm *StreamManager) ProcessMessage(
 	}
 
 	frame := data.NewFrame("response")
+	if config.RefID != "" {
+		frame.RefID = config.RefID
+	}
+	if config.Alias != "" {
+		frame.Name = config.Alias
+	}
 
 	// Add time field
 	timeField := data.NewField("time", nil, make([]time.Time, 1))

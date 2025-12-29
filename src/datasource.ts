@@ -106,6 +106,12 @@ export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourc
         ) {
           segments.push(encodeURIComponent(String(interpolatedQuery.lastN)));
         }
+
+        // Include RefID to ensure separate streams for different queries in the same panel
+        segments.push(encodeURIComponent(String(interpolatedQuery.refId)));
+        // Include Alias to trigger stream restart when alias changes
+        segments.push(encodeURIComponent(String(interpolatedQuery.alias || '')));
+
         const path = segments.join('-');
 
         return getGrafanaLiveSrv()
