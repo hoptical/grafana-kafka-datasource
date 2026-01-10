@@ -243,7 +243,15 @@ export const ConfigEditor = (props: Props) => {
             }
             onChange={(selected) => {
               const protocol = selected.value || 'PLAINTEXT';
-              onOptionsChange({ ...options, jsonData: { ...options.jsonData, securityProtocol: protocol } });
+              const updates = { ...options.jsonData, securityProtocol: protocol };
+
+              // Set default SASL mechanism if switching to a SASL protocol and no mechanism is set
+              const isSasl = protocol === 'SASL_PLAINTEXT' || protocol === 'SASL_SSL';
+              if (isSasl && !updates.saslMechanisms) {
+                updates.saslMechanisms = 'PLAIN';
+              }
+
+              onOptionsChange({ ...options, jsonData: updates });
             }}
             placeholder="Select security protocol"
             width={40}

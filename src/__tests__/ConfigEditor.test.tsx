@@ -226,6 +226,23 @@ describe('ConfigEditor', () => {
     );
   });
 
+  it('defaults SASL mechanism to PLAIN when switching to SASL_PLAINTEXT and mechanism is empty', () => {
+    // Start with PLAINTEXT (no SASL mechanism set)
+    renderConfigEditor({ securityProtocol: 'PLAINTEXT' });
+    const select = screen.getByTestId('select');
+
+    fireEvent.change(select, { target: { value: 'SASL_PLAINTEXT' } });
+
+    expect(mockOnOptionsChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jsonData: expect.objectContaining({
+          securityProtocol: 'SASL_PLAINTEXT',
+          saslMechanisms: 'PLAIN',
+        }),
+      })
+    );
+  });
+
   it('shows SASL fields when SASL_PLAINTEXT is selected', () => {
     renderConfigEditor({ securityProtocol: 'SASL_PLAINTEXT' });
 
