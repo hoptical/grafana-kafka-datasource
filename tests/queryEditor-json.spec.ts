@@ -58,6 +58,10 @@ test.describe('Kafka Query Editor - JSON Tests', () => {
     await expect(page.getByText('Offset')).toBeVisible();
     await expect(page.getByText('Timestamp Mode')).toBeVisible();
 
+    // Check Alias field is visible
+    await expect(page.getByText('Alias')).toBeVisible();
+    await expect(page.getByPlaceholder('Optional alias')).toBeVisible();
+
     // Check input fields are visible
     await expect(page.getByRole('textbox', { name: 'Enter topic name' })).toBeVisible();
 
