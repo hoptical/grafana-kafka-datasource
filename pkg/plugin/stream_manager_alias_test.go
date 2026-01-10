@@ -28,31 +28,31 @@ func TestFormatAlias(t *testing.T) {
 		},
 		{
 			name:      "Topic template",
-			alias:     "{topic} - Data",
+			alias:     "{{topic}} - Data",
 			fieldName: "value",
 			expected:  "test-topic - Data",
 		},
 		{
 			name:      "Partition template",
-			alias:     "Partition {partition}",
+			alias:     "Partition {{partition}}",
 			fieldName: "value",
 			expected:  "Partition 0",
 		},
 		{
 			name:      "RefID template",
-			alias:     "Query {refid}",
+			alias:     "Query {{refid}}",
 			fieldName: "value",
 			expected:  "Query A",
 		},
 		{
 			name:      "Field template",
-			alias:     "{field} metric",
+			alias:     "{{field}} metric",
 			fieldName: "temperature",
 			expected:  "temperature metric",
 		},
 		{
 			name:      "Combined template",
-			alias:     "{refid} - {topic}:{partition} - {field}",
+			alias:     "{{refid}} - {{topic}}:{{partition}} - {{field}}",
 			fieldName: "voltage",
 			expected:  "A - test-topic:0 - voltage",
 		},
@@ -89,7 +89,7 @@ func TestProcessMessage_AliasApplication(t *testing.T) {
 		config := &StreamConfig{
 			MessageFormat: "json",
 			RefID:         "A",
-			Alias:         "{topic} Stream",
+			Alias:         "{{topic}} Stream",
 		}
 
 		frame, err := sm.ProcessMessage(msg, partition, partitions, config, topic)
@@ -107,7 +107,7 @@ func TestProcessMessage_AliasApplication(t *testing.T) {
 		config := &StreamConfig{
 			MessageFormat: "json",
 			RefID:         "A",
-			Alias:         "{field} ({topic})",
+			Alias:         "{{field}} ({{topic}})",
 		}
 
 		frame, err := sm.ProcessMessage(msg, partition, partitions, config, topic)
@@ -117,7 +117,7 @@ func TestProcessMessage_AliasApplication(t *testing.T) {
 
 		// Check fields
 		for _, field := range frame.Fields {
-			if field.Name == "time" || field.Name == "offset" || field.Name == "partition" {
+			if field.Name == "time" {
 				continue
 			}
 

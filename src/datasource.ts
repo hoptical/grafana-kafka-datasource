@@ -108,9 +108,17 @@ export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourc
         }
 
         // Include RefID to ensure separate streams for different queries in the same panel
-        segments.push(this.generateSchemaHash(String(interpolatedQuery.refId)));
+        segments.push(encodeURIComponent(String(interpolatedQuery.refId)));
         // Include Alias to trigger stream restart when alias changes
-        segments.push(this.generateSchemaHash(String(interpolatedQuery.alias || '')));
+        // Use a slug + hash strategy to ensure safe path characters while maintaining readability
+        const alias = interpolatedQuery.alias || '';
+        if (alias) {
+          const slug = alias.replace(/[^a-zA-Z0-9_]/g, '');
+          const hash = this.generateSchemaHash(alias);
+          segments.push(slug ? `${slug}-${hash}` : hash);
+        } else {
+          segments.push(encodeURIComponent(alias));
+        }
 
         const path = segments.join('-');
 

@@ -673,7 +673,11 @@ class QueryEditorInner extends PureComponent<QueryEditorInnerProps, State> {
               onChange={(value) => this.onMessageFormatChanged(value.value as MessageFormat)}
             />
           </InlineField>
-          <InlineField label="Alias" labelWidth={15} tooltip="Custom alias for the query series">
+          <InlineField
+            label="Alias"
+            labelWidth={15}
+            tooltip="Custom alias for the query series. Supports placeholders: {{topic}}, {{partition}}, {{refid}}, {{field}}"
+          >
             <Input width={25} value={query.alias || ''} onChange={this.onAliasChange} placeholder="Optional alias" />
           </InlineField>
         </InlineFieldRow>

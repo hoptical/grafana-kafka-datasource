@@ -789,11 +789,15 @@ func (sm *StreamManager) handleTopicError(err error, topicName string) error {
 
 // formatAlias replaces placeholders in the alias string with actual values.
 func formatAlias(alias string, config *StreamConfig, topic string, partition int32, fieldName string) string {
-	alias = strings.ReplaceAll(alias, "{topic}", topic)
-	alias = strings.ReplaceAll(alias, "{partition}", fmt.Sprintf("%d", partition))
-	alias = strings.ReplaceAll(alias, "{refid}", config.RefID)
+	// Simple replacement for now - can use regex if more complex logic needed
+	alias = strings.ReplaceAll(alias, "{{topic}}", topic)
+	alias = strings.ReplaceAll(alias, "{{partition}}", fmt.Sprintf("%d", partition))
+	alias = strings.ReplaceAll(alias, "{{refid}}", config.RefID)
+
 	if fieldName != "" {
-		alias = strings.ReplaceAll(alias, "{field}", fieldName)
+		alias = strings.ReplaceAll(alias, "{{field}}", fieldName)
+	} else {
+		alias = strings.ReplaceAll(alias, "{{field}}", "")
 	}
 	return alias
 }
