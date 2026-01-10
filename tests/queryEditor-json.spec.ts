@@ -268,7 +268,8 @@ test.describe('Kafka Query Editor - JSON Tests', () => {
       await page.getByPlaceholder('Optional alias').fill('{{topic}} - {{field}}');
 
       await page.getByRole('button', { name: 'Fetch' }).click();
-      await page.getByText('test-topic').click();
+      // Click the first test-topic option in the autocomplete dropdown (not the legend buttons that appear later)
+      await page.getByText('test-topic').first().click();
 
       // Set visualization to 'Table' (best-effort)
       try {
@@ -280,7 +281,7 @@ test.describe('Kafka Query Editor - JSON Tests', () => {
       // Wait for columns to be visible (data flowing)
       await verifyColumnHeadersVisible(page, [
         'time',
-        'test-topic - partition',
+        'test-topic - offset',
         'test-topic - partition',
         'test-topic - alerts',
       ]);

@@ -66,6 +66,20 @@ func createErrorFrame(msg kafka_client.KafkaMessage, partition int32, partitions
 	frame.Fields = append(frame.Fields, data.NewField("error", nil, make([]string, 1)))
 	frame.Fields[errorFieldIndex].Set(0, err.Error())
 
+	// Apply alias to fields if configured, skipping time field (consistent with ProcessMessage)
+	if config != nil && config.Alias != "" {
+		for _, field := range frame.Fields {
+			if field.Name == "time" {
+				continue
+			}
+			if field.Config == nil {
+				field.Config = &data.FieldConfig{}
+			}
+			formatted := formatAlias(config.Alias, config, topic, partition, field.Name)
+			field.Config.DisplayNameFromDS = formatted
+		}
+	}
+
 	return frame, nil
 }
 
