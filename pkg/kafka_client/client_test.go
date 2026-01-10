@@ -13,16 +13,17 @@ import (
 func TestNewKafkaClient_Defaults(t *testing.T) {
 	httpClient := &http.Client{}
 	options := Options{
-		BootstrapServers:  "localhost:9092",
-		ClientId:          "test-client",
-		TLSAuthWithCACert: true,
-		TLSAuth:           true,
-		TLSSkipVerify:     true,
-		ServerName:        "test-server",
-		TLSCACert:         "test-ca-cert",
-		TLSClientCert:     "test-client-cert",
-		TLSClientKey:      "test-client-key",
-		Timeout:           1234,
+		BootstrapServers:   "localhost:9092",
+		ClientId:           "test-client",
+		TLSAuthWithCACert:  true,
+		TLSAuth:            true,
+		TLSSkipVerify:      true,
+		ServerName:         "test-server",
+		TLSCACert:          "test-ca-cert",
+		TLSClientCert:      "test-client-cert",
+		TLSClientKey:       "test-client-key",
+		Timeout:            1234,
+		HealthcheckTimeout: 5678,
 	}
 	client := NewKafkaClient(options, httpClient)
 	if client.BootstrapServers != "localhost:9092" {
@@ -54,6 +55,9 @@ func TestNewKafkaClient_Defaults(t *testing.T) {
 	}
 	if client.Timeout != 1234 {
 		t.Errorf("Expected Timeout to be 1234, got %d", client.Timeout)
+	}
+	if client.HealthcheckTimeout != 5678 {
+		t.Errorf("Expected HealthcheckTimeout to be 5678, got %d", client.HealthcheckTimeout)
 	}
 }
 
@@ -96,12 +100,24 @@ func TestGetSASLMechanism_Unsupported(t *testing.T) {
 }
 
 func TestGetSASLMechanism_Supported(t *testing.T) {
-	cases := []struct{ mech string }{{"PLAIN"}, {"SCRAM-SHA-256"}, {"SCRAM-SHA-512"}, {""}}
+	cases := []struct {
+		mech         string
+		expectedName string
+	}{
+		{"PLAIN", "PLAIN"},
+		{"SCRAM-SHA-256", "SCRAM-SHA-256"},
+		{"SCRAM-SHA-512", "SCRAM-SHA-512"},
+		{"", "PLAIN"},
+	}
 	for _, c := range cases {
 		httpClient := &http.Client{}
-		cl := NewKafkaClient(Options{SaslMechanisms: c.mech}, httpClient)
-		if _, err := getSASLMechanism(&cl); err != nil {
+		cl := NewKafkaClient(Options{SaslMechanisms: c.mech, SaslUsername: "user", SaslPassword: "password"}, httpClient)
+		m, err := getSASLMechanism(&cl)
+		if err != nil {
 			t.Fatalf("expected support for %s got %v", c.mech, err)
+		}
+		if m.Name() != c.expectedName {
+			t.Errorf("For input '%s', expected mechanism name '%s' but got '%s'", c.mech, c.expectedName, m.Name())
 		}
 	}
 }

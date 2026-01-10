@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -50,7 +49,8 @@ type Options struct {
 	TLSClientCert     string `json:"tlsClientCert"`
 	TLSClientKey      string `json:"tlsClientKey"`
 	// Advanced settings
-	Timeout int32 `json:"timeout"` // ms; primary timeout
+	Timeout            int32 `json:"timeout"`            // ms; primary timeout
+	HealthcheckTimeout int32 `json:"healthcheckTimeout"` // ms; health check specific timeout
 	// Avro Configuration
 	MessageFormat          string `json:"messageFormat"`
 	SchemaRegistryUrl      string `json:"schemaRegistryUrl"`
@@ -82,7 +82,8 @@ type KafkaClient struct {
 	TLSClientCert     string
 	TLSClientKey      string
 	// Advanced settings
-	Timeout int32 // effective timeout (ms)
+	Timeout            int32 // effective timeout (ms)
+	HealthcheckTimeout int32 // health check specific timeout (ms)
 	// Avro Configuration
 	MessageFormat          string
 	SchemaRegistryUrl      string
@@ -202,22 +203,23 @@ func NewKafkaClient(options Options, httpClient *http.Client) KafkaClient {
 	}
 
 	return KafkaClient{
-		BootstrapServers:  options.BootstrapServers,
-		Brokers:           brokers,
-		ClientId:          options.ClientId,
-		SecurityProtocol:  options.SecurityProtocol,
-		SaslMechanisms:    options.SaslMechanisms,
-		SaslUsername:      options.SaslUsername,
-		SaslPassword:      options.SaslPassword,
-		LogLevel:          options.LogLevel,
-		TLSAuthWithCACert: options.TLSAuthWithCACert,
-		TLSAuth:           options.TLSAuth,
-		TLSSkipVerify:     options.TLSSkipVerify,
-		ServerName:        options.ServerName,
-		TLSCACert:         options.TLSCACert,
-		TLSClientCert:     options.TLSClientCert,
-		TLSClientKey:      options.TLSClientKey,
-		Timeout:           effectiveTimeoutMs,
+		BootstrapServers:   options.BootstrapServers,
+		Brokers:            brokers,
+		ClientId:           options.ClientId,
+		SecurityProtocol:   options.SecurityProtocol,
+		SaslMechanisms:     options.SaslMechanisms,
+		SaslUsername:       options.SaslUsername,
+		SaslPassword:       options.SaslPassword,
+		LogLevel:           options.LogLevel,
+		TLSAuthWithCACert:  options.TLSAuthWithCACert,
+		TLSAuth:            options.TLSAuth,
+		TLSSkipVerify:      options.TLSSkipVerify,
+		ServerName:         options.ServerName,
+		TLSCACert:          options.TLSCACert,
+		TLSClientCert:      options.TLSClientCert,
+		TLSClientKey:       options.TLSClientKey,
+		Timeout:            effectiveTimeoutMs,
+		HealthcheckTimeout: options.HealthcheckTimeout,
 		// Avro Configuration
 		MessageFormat:          options.MessageFormat,
 		SchemaRegistryUrl:      options.SchemaRegistryUrl,
@@ -451,24 +453,37 @@ func (client *KafkaClient) HealthCheck() error {
 		return fmt.Errorf("unable to initialize Kafka client: %w", err)
 	}
 	brokers := len(client.Brokers)
-	log.Printf("[KAFKA DEBUG] Attempting health check connection to %d broker(s)", brokers)
 
-	deadlineMs := client.Timeout
-	if deadlineMs <= 0 {
-		deadlineMs = defaultTimeoutMs
+	// Determine timeout preference: HealthcheckTimeout > Timeout > Default
+	timeoutMs := client.HealthcheckTimeout
+	if timeoutMs <= 0 {
+		timeoutMs = client.Timeout
 	}
-	deadline := time.After(time.Duration(deadlineMs) * time.Millisecond)
+	if timeoutMs <= 0 {
+		timeoutMs = defaultTimeoutMs
+	}
+
+	grafanalog.DefaultLogger.Debug("Attempting health check connection", "brokers", brokers, "timeoutMs", timeoutMs)
+
+	deadline := time.After(time.Duration(timeoutMs) * time.Millisecond)
 	ticker := time.NewTicker(200 * time.Millisecond)
 	defer ticker.Stop()
+
+	var lastErr error
 	for {
 		select {
 		case <-deadline:
-			return fmt.Errorf("health check timed out after %d ms", deadlineMs)
+			if lastErr != nil {
+				return fmt.Errorf("health check timed out after %d ms. Last error: %w", timeoutMs, lastErr)
+			}
+			return fmt.Errorf("health check timed out after %d ms", timeoutMs)
 		case <-ticker.C:
 			_, err := client.Conn.Metadata(context.Background(), &kafka.MetadataRequest{})
 			if err == nil {
 				return nil
 			}
+			lastErr = err
+			grafanalog.DefaultLogger.Debug("Health check failed attempt", "error", err)
 		}
 	}
 }
@@ -482,17 +497,23 @@ func (client *KafkaClient) Dispose() {
 }
 
 func getSASLMechanism(client *KafkaClient) (sasl.Mechanism, error) {
-	switch client.SaslMechanisms {
+	// Default to PLAIN if empty but usage is implied (this function is usually called when SASL is enabled)
+	mechanism := client.SaslMechanisms
+	if mechanism == "" {
+		mechanism = "PLAIN"
+	}
+
+	grafanalog.DefaultLogger.Debug("Configuring SASL", "mechanism", mechanism)
+
+	switch mechanism {
 	case "PLAIN":
 		return plain.Mechanism{Username: client.SaslUsername, Password: client.SaslPassword}, nil
 	case "SCRAM-SHA-256":
 		return scram.Mechanism(scram.SHA256, client.SaslUsername, client.SaslPassword)
 	case "SCRAM-SHA-512":
 		return scram.Mechanism(scram.SHA512, client.SaslUsername, client.SaslPassword)
-	case "":
-		return nil, nil
 	default:
-		return nil, fmt.Errorf("unsupported mechanism SASL: %s", client.SaslMechanisms)
+		return nil, fmt.Errorf("unsupported mechanism SASL: %s", mechanism)
 	}
 }
 
@@ -549,10 +570,16 @@ func getKafkaLogger(level string) (kafka.LoggerFunc, kafka.LoggerFunc) {
 	errorLogger := noop
 	switch strings.ToLower(level) {
 	case debugLogLevel:
-		logger = func(msg string, args ...interface{}) { log.Printf("[KAFKA DEBUG] "+msg, args...) }
-		errorLogger = func(msg string, args ...interface{}) { log.Printf("[KAFKA ERROR] "+msg, args...) }
+		logger = func(msg string, args ...interface{}) {
+			grafanalog.DefaultLogger.Debug("[KAFKA DEBUG] "+msg, args...)
+		}
+		errorLogger = func(msg string, args ...interface{}) {
+			grafanalog.DefaultLogger.Error("[KAFKA ERROR] "+msg, args...)
+		}
 	case errorLogLevel:
-		errorLogger = func(msg string, args ...interface{}) { log.Printf("[KAFKA ERROR] "+msg, args...) }
+		errorLogger = func(msg string, args ...interface{}) {
+			grafanalog.DefaultLogger.Error("[KAFKA ERROR] "+msg, args...)
+		}
 	}
 	return logger, errorLogger
 }
