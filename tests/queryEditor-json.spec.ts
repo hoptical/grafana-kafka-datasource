@@ -58,6 +58,10 @@ test.describe('Kafka Query Editor - JSON Tests', () => {
     await expect(page.getByText('Offset')).toBeVisible();
     await expect(page.getByText('Timestamp Mode')).toBeVisible();
 
+    // Check Alias field is visible
+    await expect(page.getByText('Alias')).toBeVisible();
+    await expect(page.getByPlaceholder('Optional alias')).toBeVisible();
+
     // Check input fields are visible
     await expect(page.getByRole('textbox', { name: 'Enter topic name' })).toBeVisible();
 
@@ -244,6 +248,51 @@ test.describe('Kafka Query Editor - JSON Tests', () => {
         exitPromise.catch(() => {}), // Ignore exit errors during cleanup
         new Promise((resolve) => setTimeout(resolve, 2000)),
       ]);
+    }
+  });
+
+  test('alias placeholders substitute topic and field', async ({ readProvisionedDataSource, page, panelEditPage }) => {
+    const ds = await readProvisionedDataSource({ fileName: 'datasource.yaml' });
+    await panelEditPage.datasource.set(ds.name);
+
+    // Start the Kafka producer
+    const { producer, exitPromise } = startKafkaProducer();
+    try {
+      // Wait for some data to be produced
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+
+      // Fill in topic and alias, then fetch and select the topic from autocomplete
+      await page.getByRole('textbox', { name: 'Enter topic name' }).fill('test-topic');
+
+      // Fill alias input (placeholder 'Optional alias') with the template
+      await page.getByPlaceholder('Optional alias').fill('{{topic}} - {{field}}');
+
+      await page.getByRole('button', { name: 'Fetch' }).click();
+      // Click the first test-topic option in the autocomplete dropdown (not the legend buttons that appear later)
+      await page.getByText('test-topic').first().click();
+
+      // Set visualization to 'Table' (best-effort)
+      try {
+        await panelEditPage.setVisualization('Table');
+      } catch (error) {
+        console.log('Visualization picker blocked by overlay, skipping visualization setting');
+      }
+
+      // Wait for columns to be visible (data flowing)
+      await verifyColumnHeadersVisible(page, [
+        'time',
+        'test-topic - offset',
+        'test-topic - partition',
+        'test-topic - alerts',
+      ]);
+
+      // Ensure panel contains data
+      await verifyPanelDataContains(panelEditPage);
+    } finally {
+      // Cleanup: terminate producer process
+      producer.kill();
+      // Wait for process to exit
+      await Promise.race([exitPromise.catch(() => {}), new Promise((resolve) => setTimeout(resolve, 2000))]);
     }
   });
 

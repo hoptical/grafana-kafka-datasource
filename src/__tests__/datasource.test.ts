@@ -249,7 +249,7 @@ describe('DataSource', () => {
         },
         complete: () => {
           try {
-            expect(capturedPath).toBe('my%20topic-0-latest-json-schemaRegistry-now-none');
+            expect(capturedPath).toBe('my%20topic-0-latest-json-schemaRegistry-now-none-A-no-alias');
             // Now with LAST_N
             capturedPath = undefined;
             const target2: KafkaQuery = {
@@ -261,7 +261,7 @@ describe('DataSource', () => {
             ds.query({ targets: [target2] } as any).subscribe({
               complete: () => {
                 try {
-                  expect(capturedPath).toBe('my%20topic-0-lastN-json-schemaRegistry-now-none-10');
+                  expect(capturedPath).toBe('my%20topic-0-lastN-json-schemaRegistry-now-none-10-A-no-alias');
                   done();
                 } catch (e) {
                   done(e as any);
@@ -285,7 +285,7 @@ describe('DataSource', () => {
       ds.query({ targets } as any).subscribe({
         complete: () => {
           // Only one valid query should have been processed
-          expect(capturedPath).toBe('valid-topic-all-latest-json-schemaRegistry-message-none');
+          expect(capturedPath).toBe('valid-topic-all-latest-json-schemaRegistry-message-none-B-no-alias');
           done();
         },
       });
@@ -314,7 +314,31 @@ describe('DataSource', () => {
 
       ds.query({ targets: [target] } as any).subscribe({
         complete: () => {
-          expect(capturedPath).toBe('topic%2Fwith-special%3Achars-all-earliest-json-schemaRegistry-now-none');
+          expect(capturedPath).toBe(
+            'topic%2Fwith-special%3Achars-all-earliest-json-schemaRegistry-now-none-A-no-alias'
+          );
+          done();
+        },
+      });
+    });
+
+    it('generates path with Alias using Slug+Hash strategy', (done) => {
+      const target: KafkaQuery = {
+        refId: 'A',
+        topicName: 'my-topic',
+        partition: 0,
+        autoOffsetReset: AutoOffsetReset.LATEST,
+        timestampMode: TimestampMode.Now,
+        messageFormat: MessageFormat.JSON,
+        alias: 'My Alias',
+      } as any;
+
+      ds.query({ targets: [target] } as any).subscribe({
+        complete: () => {
+          // Slug for "My Alias" is "MyAlias"
+          // We don't know the exact hash, but we can match the pattern
+          // Path: topic-partition-offset-format-schema-timestamp-lastN-refId-Slug-Hash
+          expect(capturedPath).toMatch(/^my-topic-0-latest-json-schemaRegistry-now-none-A-MyAlias-[a-z0-9]+$/);
           done();
         },
       });
@@ -380,6 +404,48 @@ describe('DataSource', () => {
       (ds as any).getResource = jest.fn().mockRejectedValue(error);
 
       await expect(ds.searchTopics('prefix')).rejects.toThrow('Search error');
+    });
+  });
+
+  describe('query stream path generation', () => {
+    it('uses "no-refid" sentinel when refId is missing', () => {
+      const query = {
+        ...ds.getDefaultQuery({} as any),
+        topicName: 'test',
+        refId: undefined as any,
+      };
+      ds.query({ targets: [query], scopedVars: {} } as any);
+      expect(capturedPath).toContain('no-refid');
+    });
+
+    it('uses "no-alias" sentinel when alias is missing', () => {
+      const query = {
+        ...ds.getDefaultQuery({} as any),
+        topicName: 'test',
+        alias: '',
+      };
+      ds.query({ targets: [query], scopedVars: {} } as any);
+      expect(capturedPath).toContain('no-alias');
+    });
+
+    it('sanitizes and caps alias slug', () => {
+      const longAlias = 'a'.repeat(100) + '!!!special!!!';
+      const query = {
+        ...ds.getDefaultQuery({} as any),
+        topicName: 'test',
+        alias: longAlias,
+      };
+      ds.query({ targets: [query], scopedVars: {} } as any);
+      // Valid chars are capped at 64
+      // The hash part is variable but deterministic. We check for the slug part.
+      // slug should be 64 'a's
+      const expectedSlug = 'a'.repeat(64);
+      expect(capturedPath).toContain(expectedSlug);
+      // Should NOT contain the 65th 'a' followed by hyphen (unless hash starts with a-, unlikely)
+      // Simpler check: the slug part before the last hyphen should be exactly 64 chars long (if we ignore hash collision)
+      // Actually checking for 64 'a's is good enough proof it didn't use all 100.
+      expect(capturedPath).not.toContain('a'.repeat(65));
+      expect(capturedPath).not.toContain('!');
     });
   });
 });

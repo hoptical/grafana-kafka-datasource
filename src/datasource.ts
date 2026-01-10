@@ -106,6 +106,20 @@ export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourc
         ) {
           segments.push(encodeURIComponent(String(interpolatedQuery.lastN)));
         }
+
+        // Include RefID to ensure separate streams for different queries in the same panel
+        segments.push(encodeURIComponent(String(interpolatedQuery.refId ?? 'no-refid')));
+        // Include Alias to trigger stream restart when alias changes
+        // Use a slug + hash strategy to ensure safe path characters while maintaining readability
+        const alias = interpolatedQuery.alias || '';
+        if (alias) {
+          const slug = alias.replace(/[^a-zA-Z0-9_]/g, '').slice(0, 64);
+          const hash = this.generateSchemaHash(alias);
+          segments.push(slug ? `${slug}-${hash}` : hash);
+        } else {
+          segments.push('no-alias');
+        }
+
         const path = segments.join('-');
 
         return getGrafanaLiveSrv()
