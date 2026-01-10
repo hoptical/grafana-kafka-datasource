@@ -233,7 +233,9 @@ func (client *KafkaClient) NewConnection() error {
 	var mechanism sasl.Mechanism
 	var err error
 
-	if client.SaslMechanisms != "" {
+	// Check if SASL is enabled based on security protocol
+	isSASL := client.SecurityProtocol == "SASL_PLAINTEXT" || client.SecurityProtocol == "SASL_SSL"
+	if isSASL {
 		mechanism, err = getSASLMechanism(client)
 		if err != nil {
 			return fmt.Errorf("unable to get SASL mechanism: %w", err)
@@ -513,7 +515,7 @@ func getSASLMechanism(client *KafkaClient) (sasl.Mechanism, error) {
 	case "SCRAM-SHA-512":
 		return scram.Mechanism(scram.SHA512, client.SaslUsername, client.SaslPassword)
 	default:
-		return nil, fmt.Errorf("unsupported mechanism SASL: %s", mechanism)
+		return nil, fmt.Errorf("unsupported SASL mechanism: %s", mechanism)
 	}
 }
 
@@ -571,14 +573,14 @@ func getKafkaLogger(level string) (kafka.LoggerFunc, kafka.LoggerFunc) {
 	switch strings.ToLower(level) {
 	case debugLogLevel:
 		logger = func(msg string, args ...interface{}) {
-			grafanalog.DefaultLogger.Debug("[KAFKA DEBUG] "+msg, args...)
+			grafanalog.DefaultLogger.Debug(fmt.Sprintf("[KAFKA DEBUG] "+msg, args...))
 		}
 		errorLogger = func(msg string, args ...interface{}) {
-			grafanalog.DefaultLogger.Error("[KAFKA ERROR] "+msg, args...)
+			grafanalog.DefaultLogger.Error(fmt.Sprintf("[KAFKA ERROR] "+msg, args...))
 		}
 	case errorLogLevel:
 		errorLogger = func(msg string, args ...interface{}) {
-			grafanalog.DefaultLogger.Error("[KAFKA ERROR] "+msg, args...)
+			grafanalog.DefaultLogger.Error(fmt.Sprintf("[KAFKA ERROR] "+msg, args...))
 		}
 	}
 	return logger, errorLogger
