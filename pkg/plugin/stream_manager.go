@@ -31,13 +31,22 @@ type StreamManager struct {
 }
 
 // createErrorFrame creates a data frame containing error information
-func createErrorFrame(msg kafka_client.KafkaMessage, partition int32, partitions []int32, err error) (*data.Frame, error) {
+func createErrorFrame(msg kafka_client.KafkaMessage, partition int32, partitions []int32, err error, config *StreamConfig, topic string) (*data.Frame, error) {
 	log.DefaultLogger.Warn("Creating error frame for message",
 		"partition", partition,
 		"offset", msg.Offset,
 		"error", err)
 
 	frame := data.NewFrame("response")
+
+	if config != nil {
+		if config.RefID != "" {
+			frame.RefID = config.RefID
+		}
+		if config.Alias != "" {
+			frame.Name = formatAlias(config.Alias, config, topic, partition, "")
+		}
+	}
 
 	// Add time field
 	frame.Fields = append(frame.Fields, data.NewField("time", nil, make([]time.Time, 1)))
@@ -99,7 +108,7 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 
 	// If there's an error in the message, create a frame with error information
 	if msg.Error != nil {
-		return createErrorFrame(msg, partition, partitions, msg.Error)
+		return createErrorFrame(msg, partition, partitions, msg.Error, config, topic)
 	}
 
 	// Check if message needs Avro decoding
@@ -131,7 +140,7 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 				"partition", partition,
 				"offset", msg.Offset)
 			// Return error frame instead of falling back to raw bytes
-			return createErrorFrame(msg, partition, partitions, fmt.Errorf("avro decoding failed: %w", err))
+			return createErrorFrame(msg, partition, partitions, fmt.Errorf("avro decoding failed: %w", err), config, topic)
 		} else {
 			log.DefaultLogger.Debug("Avro decoding successful",
 				"partition", partition,
@@ -159,7 +168,7 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 				"rawValueLength", len(msg.RawValue),
 				"partition", partition,
 				"offset", msg.Offset)
-			return createErrorFrame(msg, partition, partitions, fmt.Errorf("json decoding failed: %w", err))
+			return createErrorFrame(msg, partition, partitions, fmt.Errorf("json decoding failed: %w", err), config, topic)
 		} else {
 			// Accept both objects and arrays at the top level
 			switch v := v.(type) {
@@ -174,7 +183,7 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 					"partition", partition,
 					"offset", msg.Offset,
 					"decodedType", fmt.Sprintf("%T", v))
-				return createErrorFrame(msg, partition, partitions, fmt.Errorf("decoded JSON is not a valid object or array: %T", v))
+				return createErrorFrame(msg, partition, partitions, fmt.Errorf("decoded JSON is not a valid object or array: %T", v), config, topic)
 			}
 		}
 	} else {
@@ -465,7 +474,7 @@ func (sm *StreamManager) ProcessMessage(
 
 	// If there's an error in the message, create a frame with error information
 	if msg.Error != nil {
-		return createErrorFrame(msg, partition, partitions, msg.Error)
+		return createErrorFrame(msg, partition, partitions, msg.Error, config, topic)
 	}
 
 	// Check if message needs Avro decoding first to determine if nil Value is expected
@@ -475,7 +484,7 @@ func (sm *StreamManager) ProcessMessage(
 	// For Avro format, Value is intentionally nil as decoding is deferred
 	// Also allow nil values if there is raw data available (might be Avro data with wrong format)
 	if msg.Value == nil && messageFormat != "avro" && len(msg.RawValue) == 0 {
-		return createErrorFrame(msg, partition, partitions, fmt.Errorf("message value is nil - possible decoding failure"))
+		return createErrorFrame(msg, partition, partitions, fmt.Errorf("message value is nil - possible decoding failure"), config, topic)
 	}
 
 	messageValue := msg.Value
@@ -488,7 +497,7 @@ func (sm *StreamManager) ProcessMessage(
 		decoded, err := decodeAvroMessage(sm, sm.client, msg.RawValue, config, topic)
 		if err != nil {
 			log.DefaultLogger.Error("Failed to decode Avro message", "error", err)
-			return createErrorFrame(msg, partition, partitions, fmt.Errorf("avro decoding failed: %w", err))
+			return createErrorFrame(msg, partition, partitions, fmt.Errorf("avro decoding failed: %w", err), config, topic)
 		}
 		messageValue = decoded
 		log.DefaultLogger.Debug("Avro decoding successful")
@@ -508,7 +517,7 @@ func (sm *StreamManager) ProcessMessage(
 				"rawValueLength", len(msg.RawValue),
 				"partition", partition,
 				"offset", msg.Offset)
-			return createErrorFrame(msg, partition, partitions, fmt.Errorf("json decoding failed: %w", err))
+			return createErrorFrame(msg, partition, partitions, fmt.Errorf("json decoding failed: %w", err), config, topic)
 		} else {
 			// Accept both objects and arrays at the top level
 			switch v := v.(type) {
@@ -523,7 +532,7 @@ func (sm *StreamManager) ProcessMessage(
 					"partition", partition,
 					"offset", msg.Offset,
 					"decodedType", fmt.Sprintf("%T", v))
-				return createErrorFrame(msg, partition, partitions, fmt.Errorf("decoded JSON is not a valid object or array: %T", v))
+				return createErrorFrame(msg, partition, partitions, fmt.Errorf("decoded JSON is not a valid object or array: %T", v), config, topic)
 			}
 		}
 	}
