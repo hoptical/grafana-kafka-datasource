@@ -44,6 +44,7 @@ This plugin connects your Grafana instance directly to Kafka brokers, allowing y
 - Avro support with Schema Registry integration (inline schema or Schema Registry)
 - Configurable flattening depth (default: 5)
 - Configurable max fields per message (default: 1000)
+- Customizable query aliases with placeholders
 
 ## Installation
 
@@ -87,7 +88,12 @@ You can automatically configure the Kafka datasource using Grafana's provisionin
      - `latest`: Only new messages
      - `last N messages`: Start from the most recent N messages (set N in the UI)
      - `earliest`: Start from the oldest message
-     - **Timestamp Mode**: Choose between Kafka event time or dashboard received time.
+   - **Timestamp Mode**: Choose between Kafka event time or dashboard received time.
+   - **Alias**: Optional custom name for the query series. Supports template placeholders:
+     - `{{topic}}`: The Kafka topic name
+     - `{{field}}`: The field name (for field display names)
+     - `{{partition}}`: The partition number
+     - `{{refid}}`: The query RefID (e.g., A, B)
 
 **Tip:** Numeric fields become time series, string fields are labels, arrays and nested objects are automatically flattened for visualization.
 
