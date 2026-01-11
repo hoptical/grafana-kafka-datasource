@@ -202,6 +202,12 @@ func NewKafkaClient(options Options, httpClient *http.Client) KafkaClient {
 		effectiveTimeoutMs = 0
 	}
 
+	// Sanitize health check timeout
+	effectiveHealthcheckMs := options.HealthcheckTimeout
+	if effectiveHealthcheckMs < 0 {
+		effectiveHealthcheckMs = 0
+	}
+
 	return KafkaClient{
 		BootstrapServers:   options.BootstrapServers,
 		Brokers:            brokers,
@@ -219,7 +225,7 @@ func NewKafkaClient(options Options, httpClient *http.Client) KafkaClient {
 		TLSClientCert:      options.TLSClientCert,
 		TLSClientKey:       options.TLSClientKey,
 		Timeout:            effectiveTimeoutMs,
-		HealthcheckTimeout: options.HealthcheckTimeout,
+		HealthcheckTimeout: effectiveHealthcheckMs,
 		// Avro Configuration
 		MessageFormat:          options.MessageFormat,
 		SchemaRegistryUrl:      options.SchemaRegistryUrl,
@@ -236,6 +242,10 @@ func (client *KafkaClient) NewConnection() error {
 	// Check if SASL is enabled based on security protocol
 	isSASL := client.SecurityProtocol == "SASL_PLAINTEXT" || client.SecurityProtocol == "SASL_SSL"
 	if isSASL {
+		// Validate SASL credentials are provided
+		if client.SaslUsername == "" || client.SaslPassword == "" {
+			return fmt.Errorf("SASL authentication requires both username and password")
+		}
 		mechanism, err = getSASLMechanism(client)
 		if err != nil {
 			return fmt.Errorf("unable to get SASL mechanism: %w", err)

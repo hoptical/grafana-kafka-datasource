@@ -139,9 +139,7 @@ func TestNewStreamReader_EarliestAndLastN(t *testing.T) {
 	if reader == nil {
 		t.Fatalf("earliest: expected non-nil reader")
 	}
-	if reader != nil {
-		_ = reader.Close()
-	}
+	_ = reader.Close()
 
 	// lastN requires leader offset lookups; with no real broker, it should error
 	reader2, err2 := cl.NewStreamReader(ctx, "topic", 0, "lastN", 100)
