@@ -1,5 +1,13 @@
 # Changelog
 
+## [v1.3.0](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.3.0)
+
+[Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v1.2.3...v1.3.0)
+
+- Fix: Improve SASL defaulting, error clarity, and health check timeout handling ([#123](https://github.com/hoptical/grafana-kafka-datasource/pull/123))
+- Feat: Add support for `refid` and `alias` in queries ([#122](https://github.com/hoptical/grafana-kafka-datasource/pull/122))
+- Fix: Multiple query support by making streaming stateless ([#121](https://github.com/hoptical/grafana-kafka-datasource/pull/121))
+
 ## [v1.2.3](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.2.3)
 
 [Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v1.2.2...v1.2.3)
