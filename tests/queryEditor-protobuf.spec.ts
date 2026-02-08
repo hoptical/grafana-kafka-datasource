@@ -88,10 +88,41 @@ async function selectProtobufMessageFormat(page: Page): Promise<void> {
   await page.getByText('Protobuf').click();
 }
 
+function getProtobufSchemaSourceLocator(page: Page): Locator {
+  return page
+    .getByText('Protobuf Schema Source')
+    .or(page.getByText('Schema Source'))
+    .or(page.locator('label').filter({ hasText: /schema.*source/i }));
+}
+
+async function findProtobufSchemaSourceSelector(page: Page): Promise<Locator | null> {
+  const schemaSourceApproaches = [
+    page.locator('[data-testid="protobuf-schema-source"]'),
+    page
+      .locator('div')
+      .filter({ hasText: /^Schema Registry$/ })
+      .nth(2),
+    page.getByText('Protobuf Schema Source').locator('..').locator('button'),
+    page.getByRole('combobox').filter({ hasText: /Schema Registry|Inline Schema/ }),
+    page.locator('button').filter({ hasText: /Schema Registry|Inline/ }),
+    page.getByText('Schema Registry').locator('..').locator('.css-1eu65zc'),
+    page.locator('button').filter({ hasText: /Schema Registry/ }),
+  ];
+
+  for (const approach of schemaSourceApproaches) {
+    if (await approach.isVisible({ timeout: 1000 })) {
+      return approach;
+    }
+  }
+  return null;
+}
+
 async function selectInlineSchema(page: Page): Promise<void> {
-  const schemaSourceSelector = page.getByText('Protobuf Schema Source').locator('..').locator('button');
-  await expect(schemaSourceSelector.first()).toBeVisible({ timeout: 5000 });
-  await schemaSourceSelector.first().click();
+  const schemaSourceSelector = await findProtobufSchemaSourceSelector(page);
+  expect(schemaSourceSelector).not.toBeNull();
+
+  await expect(schemaSourceSelector!.first()).toBeVisible({ timeout: 5000 });
+  await schemaSourceSelector!.first().click();
   await page.getByText('Inline Schema', { exact: true }).click();
 }
 
@@ -107,7 +138,7 @@ test.describe.serial('Kafka Query Editor - Protobuf Tests', () => {
     await page.getByRole('textbox', { name: 'Enter topic name' }).fill('test-protobuf-topic');
     await selectProtobufMessageFormat(page);
 
-    await expect(page.getByText('Protobuf Schema Source')).toBeVisible({ timeout: 8000 });
+    await expect(getProtobufSchemaSourceLocator(page).first()).toBeVisible({ timeout: 8000 });
 
     await selectInlineSchema(page);
 
