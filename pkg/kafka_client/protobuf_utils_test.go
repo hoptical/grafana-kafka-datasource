@@ -73,6 +73,7 @@ func TestDecodeProtobufMessage_ConfluentWireFormat(t *testing.T) {
 	schemaID := make([]byte, 4)
 	binary.BigEndian.PutUint32(schemaID, 101)
 	wire = append(wire, schemaID...)
+	// count-prefixed indexes: count=1, index=0
 	wire = append(wire, protowire.AppendVarint(nil, 1)...)
 	wire = append(wire, protowire.AppendVarint(nil, 0)...)
 	wire = append(wire, payload...)

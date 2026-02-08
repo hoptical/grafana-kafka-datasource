@@ -252,10 +252,9 @@ func encodeProtobufWireFormat(schemaID int, messageIndex int, payload []byte) []
 	idBytes := make([]byte, 4)
 	binary.BigEndian.PutUint32(idBytes, uint32(schemaID))
 	buf.Write(idBytes)
-	// Use standard Confluent wire format: 1-based index with terminator
-	// This ensures unambiguous separation between index and payload
-	buf.Write(protowire.AppendVarint(nil, uint64(messageIndex+1)))
-	buf.Write(protowire.AppendVarint(nil, 0)) // terminator
+	// Confluent wire format: count-prefixed 0-based indexes
+	buf.Write(protowire.AppendVarint(nil, 1))
+	buf.Write(protowire.AppendVarint(nil, uint64(messageIndex)))
 	buf.Write(payload)
 	return buf.Bytes()
 }
@@ -288,7 +287,11 @@ func applyProtobufData(msg *dynamicpb.Message, data map[string]interface{}) erro
 					list.Append(protoreflect.ValueOfMessage(childMsg))
 					continue
 				}
-				list.Append(toProtobufValue(field, item))
+				value, err := toProtobufValue(field, item)
+				if err != nil {
+					return err
+				}
+				list.Append(value)
 			}
 			continue
 		}
@@ -301,7 +304,11 @@ func applyProtobufData(msg *dynamicpb.Message, data map[string]interface{}) erro
 			m := msg.Mutable(field).Map()
 			for k, v := range mapValue {
 				mapKey := protoreflect.ValueOfString(k).MapKey()
-				m.Set(mapKey, toProtobufValue(field.MapValue(), v))
+				mapped, err := toProtobufValue(field.MapValue(), v)
+				if err != nil {
+					return err
+				}
+				m.Set(mapKey, mapped)
 			}
 			continue
 		}
@@ -318,7 +325,11 @@ func applyProtobufData(msg *dynamicpb.Message, data map[string]interface{}) erro
 			continue
 		}
 
-		msg.Set(field, toProtobufValue(field, value))
+		mapped, err := toProtobufValue(field, value)
+		if err != nil {
+			return err
+		}
+		msg.Set(field, mapped)
 	}
 
 	return nil
@@ -345,29 +356,68 @@ func toInterfaceSlice(value interface{}) ([]interface{}, error) {
 	}
 }
 
-func toProtobufValue(field protoreflect.FieldDescriptor, value interface{}) protoreflect.Value {
+func toProtobufValue(field protoreflect.FieldDescriptor, value interface{}) (protoreflect.Value, error) {
 	switch field.Kind() {
 	case protoreflect.BoolKind:
-		return protoreflect.ValueOfBool(toBool(value))
+		return protoreflect.ValueOfBool(toBool(value)), nil
 	case protoreflect.Int32Kind, protoreflect.Sint32Kind, protoreflect.Sfixed32Kind:
-		return protoreflect.ValueOfInt32(int32(toInt64(value)))
+		return protoreflect.ValueOfInt32(int32(toInt64(value))), nil
 	case protoreflect.Int64Kind, protoreflect.Sint64Kind, protoreflect.Sfixed64Kind:
-		return protoreflect.ValueOfInt64(toInt64(value))
+		return protoreflect.ValueOfInt64(toInt64(value)), nil
 	case protoreflect.Uint32Kind, protoreflect.Fixed32Kind:
-		return protoreflect.ValueOfUint32(uint32(toUint64(value)))
+		return protoreflect.ValueOfUint32(uint32(toUint64(value))), nil
 	case protoreflect.Uint64Kind, protoreflect.Fixed64Kind:
-		return protoreflect.ValueOfUint64(toUint64(value))
+		return protoreflect.ValueOfUint64(toUint64(value)), nil
 	case protoreflect.FloatKind:
-		return protoreflect.ValueOfFloat32(float32(toFloat64(value)))
+		return protoreflect.ValueOfFloat32(float32(toFloat64(value))), nil
 	case protoreflect.DoubleKind:
-		return protoreflect.ValueOfFloat64(toFloat64(value))
+		return protoreflect.ValueOfFloat64(toFloat64(value)), nil
 	case protoreflect.StringKind:
-		return protoreflect.ValueOfString(fmt.Sprintf("%v", value))
+		return protoreflect.ValueOfString(fmt.Sprintf("%v", value)), nil
 	case protoreflect.EnumKind:
-		return protoreflect.ValueOfEnum(0)
+		enumNumber, err := enumNumberFromValue(field, value)
+		if err != nil {
+			return protoreflect.Value{}, err
+		}
+		return protoreflect.ValueOfEnum(enumNumber), nil
 	default:
-		return protoreflect.ValueOfString(fmt.Sprintf("%v", value))
+		return protoreflect.ValueOfString(fmt.Sprintf("%v", value)), nil
 	}
+}
+
+func enumNumberFromValue(field protoreflect.FieldDescriptor, value interface{}) (protoreflect.EnumNumber, error) {
+	switch v := value.(type) {
+	case string:
+		enumValue := field.Enum().Values().ByName(protoreflect.Name(v))
+		if enumValue == nil {
+			return 0, fmt.Errorf("unknown enum name %q for field %s", v, field.Name())
+		}
+		return enumValue.Number(), nil
+	case int:
+		return enumNumberFromInt(field, int64(v))
+	case int32:
+		return enumNumberFromInt(field, int64(v))
+	case int64:
+		return enumNumberFromInt(field, v)
+	case uint:
+		return enumNumberFromInt(field, int64(v))
+	case uint32:
+		return enumNumberFromInt(field, int64(v))
+	case uint64:
+		return enumNumberFromInt(field, int64(v))
+	case float64:
+		return enumNumberFromInt(field, int64(v))
+	default:
+		return 0, fmt.Errorf("unsupported enum value type %T for field %s", value, field.Name())
+	}
+}
+
+func enumNumberFromInt(field protoreflect.FieldDescriptor, value int64) (protoreflect.EnumNumber, error) {
+	enumNumber := protoreflect.EnumNumber(value)
+	if field.Enum().Values().ByNumber(enumNumber) == nil {
+		return 0, fmt.Errorf("unknown enum value %d for field %s", value, field.Name())
+	}
+	return enumNumber, nil
 }
 
 func toBool(value interface{}) bool {

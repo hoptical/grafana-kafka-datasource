@@ -66,7 +66,8 @@ func defaultTopLevelMessage(fileDesc protoreflect.FileDescriptor) protoreflect.M
 	if count == 0 {
 		return nil
 	}
-	return fileDesc.Messages().Get(count - 1)
+	// Confluent uses the first top-level message as default
+	return fileDesc.Messages().Get(0)
 }
 
 // DecodeProtobufMessage decodes a protobuf message using the provided schema.
@@ -118,35 +119,35 @@ func parseMessageIndexes(data []byte) ([]int, []byte, error) {
 		return nil, nil, fmt.Errorf("protobuf wire format missing message index")
 	}
 
-	// Confluent encodes message indexes as 1-based varints terminated by 0.
-	indexes, remaining, ok := parseTerminatedIndexes(data)
+	// Confluent encodes message indexes as count-prefixed 0-based varints
+	// (varint count + N varint indexes), with a single-varint(0) optimization
+	// for the default first message. We also accept a legacy terminated format
+	// for compatibility with non-standard encoders.
+	indexes, remaining, ok := parseCountPrefixedIndexes(data)
 	if ok {
 		return indexes, remaining, nil
 	}
 
-	// Fallback: Attempt count-prefixed indexes.
-	if indexes, remaining, ok := parseCountPrefixedIndexes(data); ok {
-		log.DefaultLogger.Debug("Parsed protobuf message indexes using count-prefixed format",
-			"indexes", indexes)
+	// Fallback: legacy terminated format.
+	if indexes, remaining, ok = parseTerminatedIndexes(data); ok {
+		warnMessageIndexFallback("parseTerminatedIndexes", data, remaining, indexes, "not matched", "matched")
 		return indexes, remaining, nil
 	}
 
-	// Fallback: single index without terminator.
+	// Fallback: single varint(0) optimization for first message (valid Confluent format)
 	index, n := protowire.ConsumeVarint(data)
 	if n <= 0 {
 		return nil, nil, fmt.Errorf("failed to parse protobuf message index")
 	}
-	// A single varint(0) means use the first message (index 0) - this is valid
-	// in Confluent wire format for schemas with a single top-level message type.
-	// Otherwise, indexes are 1-based, so subtract 1.
+	// A single varint(0) is a valid Confluent optimization for the default first message
 	if index == 0 {
-		log.DefaultLogger.Debug("Parsed protobuf message index using single-varint format",
-			"index", 0)
 		return []int{0}, data[n:], nil
 	}
-	log.DefaultLogger.Debug("Parsed protobuf message index using single-varint format",
-		"index", index-1)
-	return []int{int(index - 1)}, data[n:], nil
+	// Non-zero single varint is non-standard - warn and treat as 0-based index
+	indexes = []int{int(index)}
+	remaining = data[n:]
+	warnMessageIndexFallback("single-varint-nonzero", data, remaining, indexes, "not matched", "not matched")
+	return indexes, remaining, nil
 }
 
 func parseTerminatedIndexes(data []byte) ([]int, []byte, bool) {
@@ -164,7 +165,7 @@ func parseTerminatedIndexes(data []byte) ([]int, []byte, bool) {
 			}
 			return indexes, data[offset:], true
 		}
-		indexes = append(indexes, int(value-1))
+		indexes = append(indexes, int(value))
 		if len(indexes) > 16 {
 			return nil, nil, false
 		}
@@ -194,6 +195,21 @@ func parseCountPrefixedIndexes(data []byte) ([]int, []byte, bool) {
 	}
 
 	return indexes, data[offset:], true
+}
+
+func warnMessageIndexFallback(fallback string, raw []byte, remaining []byte, indexes []int, countPrefixedStatus, terminatedStatus string) {
+	rawPrefix := raw
+	if len(rawPrefix) > 32 {
+		rawPrefix = rawPrefix[:32]
+	}
+	log.DefaultLogger.Debug("parseMessageIndexes fallback used",
+		"fallback", fallback,
+		"parseCountPrefixedIndexes", countPrefixedStatus,
+		"parseTerminatedIndexes", terminatedStatus,
+		"indexes", indexes,
+		"rawPrefixHex", fmt.Sprintf("%x", rawPrefix),
+		"rawLength", len(raw),
+		"remainingLength", len(remaining))
 }
 
 func resolveMessageByIndexPath(fileDesc protoreflect.FileDescriptor, path []int) (protoreflect.MessageDescriptor, error) {

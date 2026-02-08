@@ -3,6 +3,7 @@ package plugin
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -467,9 +468,10 @@ func decodeProtobufMessage(sm *StreamManager, client KafkaClientAPI, data []byte
 		return nil, fmt.Errorf("inline Protobuf schema selected but no schema provided - please provide a valid Protobuf schema")
 	} else {
 		schemaRegistryUrl := client.GetSchemaRegistryUrl()
-		log.DefaultLogger.Debug("Using Schema Registry for Protobuf schema",
-			"protobufSchemaSource", protobufSchemaSource,
-			"schemaRegistryConfigured", schemaRegistryUrl != "")
+		if schemaRegistryUrl == "" {
+			log.DefaultLogger.Error("Schema Registry URL not configured")
+			return nil, fmt.Errorf("schema registry URL not configured")
+		}
 
 		// Redact credentials from URL for logging
 		redactedUrl := schemaRegistryUrl
@@ -479,40 +481,23 @@ func decodeProtobufMessage(sm *StreamManager, client KafkaClientAPI, data []byte
 				redactedUrl = parsedUrl.String()
 			}
 		}
-		log.DefaultLogger.Debug("Attempting to get schema from registry",
+		log.DefaultLogger.Debug("Using Schema Registry for Protobuf schema",
 			"schemaRegistryUrl", redactedUrl,
-			"hasUsername", client.GetSchemaRegistryUsername() != "",
-			"hasPassword", client.GetSchemaRegistryPassword() != "",
 			"topic", topic)
-		if schemaRegistryUrl == "" {
-			log.DefaultLogger.Error("Schema Registry URL not configured")
-			return nil, fmt.Errorf("schema registry URL not configured")
-		}
 
-		subject := kafka_client.GetSubjectName(topic, client.GetSubjectNamingStrategy())
-		if sm != nil {
-			schema, err = sm.getSchemaFromRegistryWithCache("protobuf", schemaRegistryUrl,
-				client.GetSchemaRegistryUsername(),
-				client.GetSchemaRegistryPassword(),
-				subject)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get schema from registry: %w", err)
-			}
+		// Extract schema ID from Confluent wire format if present
+		isConfluentWireFormat := len(data) > 5 && data[0] == 0x00
+		if isConfluentWireFormat {
+			schemaID := int(binary.BigEndian.Uint32(data[1:5]))
+			log.DefaultLogger.Debug("Extracted schema ID from Protobuf wire format", "schemaID", schemaID)
+			schema, err = getProtobufSchemaByID(sm, client, schemaRegistryUrl, schemaID)
 		} else {
-			httpClient := client.GetHTTPClient()
-			if httpClient == nil {
-				return nil, fmt.Errorf("HTTP client not available for Schema Registry")
-			}
-			schemaClient := kafka_client.NewSchemaRegistryClient(
-				schemaRegistryUrl,
-				client.GetSchemaRegistryUsername(),
-				client.GetSchemaRegistryPassword(),
-				httpClient,
-			)
-			schema, err = schemaClient.GetLatestSchema(subject)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get schema from registry: %w", err)
-			}
+			subject := kafka_client.GetSubjectName(topic, client.GetSubjectNamingStrategy())
+			log.DefaultLogger.Debug("Fetching latest Protobuf schema for subject", "subject", subject)
+			schema, err = getProtobufSchemaBySubject(sm, client, schemaRegistryUrl, subject)
+		}
+		if err != nil {
+			return nil, err
 		}
 	}
 
@@ -522,6 +507,50 @@ func decodeProtobufMessage(sm *StreamManager, client KafkaClientAPI, data []byte
 	}
 
 	return decoded, nil
+}
+
+// getProtobufSchemaByID retrieves a Protobuf schema by ID from Schema Registry
+func getProtobufSchemaByID(sm *StreamManager, client KafkaClientAPI, registryUrl string, schemaID int) (string, error) {
+	if sm != nil {
+		return sm.getSchemaByIDFromRegistryWithCache("protobuf", registryUrl,
+			client.GetSchemaRegistryUsername(),
+			client.GetSchemaRegistryPassword(),
+			schemaID)
+	}
+
+	httpClient := client.GetHTTPClient()
+	if httpClient == nil {
+		return "", fmt.Errorf("HTTP client not available for Schema Registry")
+	}
+	schemaClient := kafka_client.NewSchemaRegistryClient(
+		registryUrl,
+		client.GetSchemaRegistryUsername(),
+		client.GetSchemaRegistryPassword(),
+		httpClient,
+	)
+	return schemaClient.GetSchemaByID(schemaID)
+}
+
+// getProtobufSchemaBySubject retrieves the latest Protobuf schema for a subject from Schema Registry
+func getProtobufSchemaBySubject(sm *StreamManager, client KafkaClientAPI, registryUrl string, subject string) (string, error) {
+	if sm != nil {
+		return sm.getSchemaFromRegistryWithCache("protobuf", registryUrl,
+			client.GetSchemaRegistryUsername(),
+			client.GetSchemaRegistryPassword(),
+			subject)
+	}
+
+	httpClient := client.GetHTTPClient()
+	if httpClient == nil {
+		return "", fmt.Errorf("HTTP client not available for Schema Registry")
+	}
+	schemaClient := kafka_client.NewSchemaRegistryClient(
+		registryUrl,
+		client.GetSchemaRegistryUsername(),
+		client.GetSchemaRegistryPassword(),
+		httpClient,
+	)
+	return schemaClient.GetLatestSchema(subject)
 }
 
 // getSchemaWithCache retrieves a schema from the cache or fetches it from the registry
@@ -552,34 +581,72 @@ func (sm *StreamManager) getSchemaWithCache(cacheKey, subject string, schemaClie
 	return schema, nil
 }
 
-// getSchemaFromRegistryWithCache gets or creates the Schema Registry client and retrieves schema with caching
-func (sm *StreamManager) getSchemaFromRegistryWithCache(format, registryUrl, username, password, subject string) (string, error) {
-	// Get or create Schema Registry client
+func (sm *StreamManager) getSchemaByIDWithCache(cacheKey string, schemaID int, schemaClient *kafka_client.SchemaRegistryClient) (string, error) {
 	sm.mu.RLock()
-	schemaClient := sm.schemaRegistryClient
+	if cachedSchema, exists := sm.schemaCache[cacheKey]; exists {
+		sm.mu.RUnlock()
+		log.DefaultLogger.Debug("Using cached schema", "schemaID", schemaID)
+		return cachedSchema, nil
+	}
 	sm.mu.RUnlock()
 
-	if schemaClient == nil {
-		sm.mu.Lock()
-		// Double check locking
-		if sm.schemaRegistryClient == nil {
-			log.DefaultLogger.Debug("Creating Schema Registry client (first use)")
+	log.DefaultLogger.Debug("Fetching schema by ID from registry (not in cache)", "schemaID", schemaID)
+	schema, err := schemaClient.GetSchemaByID(schemaID)
+	if err != nil {
+		return "", err
+	}
 
-			// Get HTTP client from KafkaClient
-			httpClient := sm.client.GetHTTPClient()
-			if httpClient == nil {
-				sm.mu.Unlock()
-				return "", fmt.Errorf("HTTP client not available in KafkaClient")
-			}
+	sm.mu.Lock()
+	sm.schemaCache[cacheKey] = schema
+	sm.mu.Unlock()
 
-			sm.schemaRegistryClient = kafka_client.NewSchemaRegistryClient(registryUrl, username, password, httpClient)
-		}
-		schemaClient = sm.schemaRegistryClient
-		sm.mu.Unlock()
+	log.DefaultLogger.Debug("Cached schema by ID", "schemaID", schemaID, "schemaLength", len(schema))
+
+	return schema, nil
+}
+
+// getSchemaFromRegistryWithCache gets or creates the Schema Registry client and retrieves schema with caching
+func (sm *StreamManager) getSchemaFromRegistryWithCache(format, registryUrl, username, password, subject string) (string, error) {
+	schemaClient, err := sm.getSchemaRegistryClient(registryUrl, username, password)
+	if err != nil {
+		return "", err
 	}
 
 	cacheKey := fmt.Sprintf("%s:%s", format, subject)
 	return sm.getSchemaWithCache(cacheKey, subject, schemaClient)
+}
+
+func (sm *StreamManager) getSchemaByIDFromRegistryWithCache(format, registryUrl, username, password string, schemaID int) (string, error) {
+	schemaClient, err := sm.getSchemaRegistryClient(registryUrl, username, password)
+	if err != nil {
+		return "", err
+	}
+
+	cacheKey := fmt.Sprintf("%s:id:%d", format, schemaID)
+	return sm.getSchemaByIDWithCache(cacheKey, schemaID, schemaClient)
+}
+
+func (sm *StreamManager) getSchemaRegistryClient(registryUrl, username, password string) (*kafka_client.SchemaRegistryClient, error) {
+	sm.mu.RLock()
+	schemaClient := sm.schemaRegistryClient
+	sm.mu.RUnlock()
+
+	if schemaClient != nil {
+		return schemaClient, nil
+	}
+
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	if sm.schemaRegistryClient == nil {
+		log.DefaultLogger.Debug("Creating Schema Registry client (first use)")
+		httpClient := sm.client.GetHTTPClient()
+		if httpClient == nil {
+			return nil, fmt.Errorf("HTTP client not available in KafkaClient")
+		}
+		sm.schemaRegistryClient = kafka_client.NewSchemaRegistryClient(registryUrl, username, password, httpClient)
+	}
+
+	return sm.schemaRegistryClient, nil
 }
 
 // ProcessMessage converts a Kafka message into a Grafana data frame.
