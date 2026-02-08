@@ -407,15 +407,15 @@ func TestKafkaClient_GetSchemaRegistryPassword(t *testing.T) {
 	}
 }
 
-func TestKafkaClient_GetAvroSubjectNamingStrategy(t *testing.T) {
+func TestKafkaClient_GetSubjectNamingStrategy(t *testing.T) {
 	httpClient := &http.Client{}
 	client := NewKafkaClient(Options{
 		BootstrapServers: "localhost:9092",
 	}, httpClient)
 
-	result := client.GetAvroSubjectNamingStrategy()
+	result := client.GetSubjectNamingStrategy()
 	if result != "recordName" {
-		t.Errorf("Expected GetAvroSubjectNamingStrategy to return 'recordName', got %s", result)
+		t.Errorf("Expected GetSubjectNamingStrategy to return 'recordName', got %s", result)
 	}
 }
 

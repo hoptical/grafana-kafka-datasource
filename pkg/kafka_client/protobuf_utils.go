@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/bufbuild/protocompile"
+	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -125,6 +126,8 @@ func parseMessageIndexes(data []byte) ([]int, []byte, error) {
 
 	// Fallback: Attempt count-prefixed indexes.
 	if indexes, remaining, ok := parseCountPrefixedIndexes(data); ok {
+		log.DefaultLogger.Debug("Parsed protobuf message indexes using count-prefixed format",
+			"indexes", indexes)
 		return indexes, remaining, nil
 	}
 
@@ -137,8 +140,12 @@ func parseMessageIndexes(data []byte) ([]int, []byte, error) {
 	// in Confluent wire format for schemas with a single top-level message type.
 	// Otherwise, indexes are 1-based, so subtract 1.
 	if index == 0 {
+		log.DefaultLogger.Debug("Parsed protobuf message index using single-varint format",
+			"index", 0)
 		return []int{0}, data[n:], nil
 	}
+	log.DefaultLogger.Debug("Parsed protobuf message index using single-varint format",
+		"index", index-1)
 	return []int{int(index - 1)}, data[n:], nil
 }
 

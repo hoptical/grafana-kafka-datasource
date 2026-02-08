@@ -68,7 +68,7 @@ func (m *mockStreamClient) GetMessageFormat() string             { return "json"
 func (m *mockStreamClient) GetSchemaRegistryUrl() string         { return "" }
 func (m *mockStreamClient) GetSchemaRegistryUsername() string    { return "" }
 func (m *mockStreamClient) GetSchemaRegistryPassword() string    { return "" }
-func (m *mockStreamClient) GetAvroSubjectNamingStrategy() string { return "recordName" }
+func (m *mockStreamClient) GetSubjectNamingStrategy() string     { return "recordName" }
 func (m *mockStreamClient) GetHTTPClient() *http.Client          { return &http.Client{} }
 
 func TestStreamManager_ValidateAndGetPartitions(t *testing.T) {

@@ -56,7 +56,7 @@ type KafkaClientAPI interface {
 	GetSchemaRegistryUrl() string
 	GetSchemaRegistryUsername() string
 	GetSchemaRegistryPassword() string
-	GetAvroSubjectNamingStrategy() string
+	GetSubjectNamingStrategy() string
 	GetHTTPClient() *http.Client
 }
 

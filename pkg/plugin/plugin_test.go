@@ -87,7 +87,7 @@ func (m *mockKafkaClient) GetMessageFormat() string             { return m.messa
 func (m *mockKafkaClient) GetSchemaRegistryUrl() string         { return m.schemaRegistryUrl }
 func (m *mockKafkaClient) GetSchemaRegistryUsername() string    { return m.schemaRegistryUsername }
 func (m *mockKafkaClient) GetSchemaRegistryPassword() string    { return m.schemaRegistryPassword }
-func (m *mockKafkaClient) GetAvroSubjectNamingStrategy() string { return m.avroSubjectNamingStrategy }
+func (m *mockKafkaClient) GetSubjectNamingStrategy() string     { return m.avroSubjectNamingStrategy }
 func (m *mockKafkaClient) GetHTTPClient() *http.Client          { return &http.Client{} }
 
 func TestQueryData(t *testing.T) {
@@ -423,8 +423,8 @@ func TestMockKafkaClient_AvroMethods(t *testing.T) {
 	if mc.GetSchemaRegistryPassword() != "test-pass" {
 		t.Errorf("Expected GetSchemaRegistryPassword to return 'test-pass', got %s", mc.GetSchemaRegistryPassword())
 	}
-	if mc.GetAvroSubjectNamingStrategy() != "recordName" {
-		t.Errorf("Expected GetAvroSubjectNamingStrategy to return 'recordName', got %s", mc.GetAvroSubjectNamingStrategy())
+	if mc.GetSubjectNamingStrategy() != "recordName" {
+		t.Errorf("Expected GetSubjectNamingStrategy to return 'recordName', got %s", mc.GetSubjectNamingStrategy())
 	}
 }
 

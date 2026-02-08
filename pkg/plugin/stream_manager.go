@@ -384,10 +384,10 @@ func decodeAvroMessage(sm *StreamManager, client KafkaClientAPI, data []byte, co
 			return nil, fmt.Errorf("schema registry URL not configured")
 		}
 
-		subject := kafka_client.GetSubjectName(topic, client.GetAvroSubjectNamingStrategy())
+		subject := kafka_client.GetSubjectName(topic, client.GetSubjectNamingStrategy())
 		log.DefaultLogger.Debug("Generated subject name",
 			"subject", subject,
-			"strategy", client.GetAvroSubjectNamingStrategy())
+			"strategy", client.GetSubjectNamingStrategy())
 
 		// Use cached Schema Registry client and schema if StreamManager is available
 		if sm != nil {
@@ -467,12 +467,29 @@ func decodeProtobufMessage(sm *StreamManager, client KafkaClientAPI, data []byte
 		return nil, fmt.Errorf("inline Protobuf schema selected but no schema provided - please provide a valid Protobuf schema")
 	} else {
 		schemaRegistryUrl := client.GetSchemaRegistryUrl()
+		log.DefaultLogger.Debug("Using Schema Registry for Protobuf schema",
+			"protobufSchemaSource", protobufSchemaSource,
+			"schemaRegistryConfigured", schemaRegistryUrl != "")
+
+		// Redact credentials from URL for logging
+		redactedUrl := schemaRegistryUrl
+		if parsedUrl, err := url.Parse(schemaRegistryUrl); err == nil {
+			if parsedUrl.User != nil {
+				parsedUrl.User = nil
+				redactedUrl = parsedUrl.String()
+			}
+		}
+		log.DefaultLogger.Debug("Attempting to get schema from registry",
+			"schemaRegistryUrl", redactedUrl,
+			"hasUsername", client.GetSchemaRegistryUsername() != "",
+			"hasPassword", client.GetSchemaRegistryPassword() != "",
+			"topic", topic)
 		if schemaRegistryUrl == "" {
 			log.DefaultLogger.Error("Schema Registry URL not configured")
 			return nil, fmt.Errorf("schema registry URL not configured")
 		}
 
-		subject := kafka_client.GetSubjectName(topic, client.GetAvroSubjectNamingStrategy())
+		subject := kafka_client.GetSubjectName(topic, client.GetSubjectNamingStrategy())
 		if sm != nil {
 			schema, err = sm.getSchemaFromRegistryWithCache("protobuf", schemaRegistryUrl,
 				client.GetSchemaRegistryUsername(),
