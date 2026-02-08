@@ -7,6 +7,7 @@ import {
   defaultQuery,
   MessageFormat,
   AvroSchemaSource,
+  ProtobufSchemaSource,
   type KafkaQuery,
 } from '../types';
 import { deepFreeze } from '../test-utils/test-helpers';
@@ -409,9 +410,19 @@ describe('QueryEditor', () => {
     expect(screen.getByText('Avro Schema Source')).toBeInTheDocument();
   });
 
+  it('shows Protobuf configuration when message format is Protobuf', () => {
+    renderEditor({ messageFormat: MessageFormat.PROTOBUF });
+    expect(screen.getByText('Protobuf Schema Source')).toBeInTheDocument();
+  });
+
   it('does not show Avro configuration when message format is JSON', () => {
     renderEditor({ messageFormat: MessageFormat.JSON });
     expect(screen.queryByText('Avro Schema Source')).not.toBeInTheDocument();
+  });
+
+  it('does not show Protobuf configuration when message format is JSON', () => {
+    renderEditor({ messageFormat: MessageFormat.JSON });
+    expect(screen.queryByText('Protobuf Schema Source')).not.toBeInTheDocument();
   });
 
   it('renders Avro schema source select with Schema Registry as default', () => {
@@ -420,6 +431,14 @@ describe('QueryEditor', () => {
 
     expect(avroSourceSelect).toBeInTheDocument();
     expect(avroSourceSelect.value).toBe(AvroSchemaSource.SCHEMA_REGISTRY);
+  });
+
+  it('renders Protobuf schema source select with Schema Registry as default', () => {
+    renderEditor({ messageFormat: MessageFormat.PROTOBUF });
+    const protoSourceSelect = screen.getAllByTestId('select')[4] as HTMLSelectElement; // Fifth select is protobuf source
+
+    expect(protoSourceSelect).toBeInTheDocument();
+    expect(protoSourceSelect.value).toBe(ProtobufSchemaSource.SCHEMA_REGISTRY);
   });
 
   it('calls onChange and onRunQuery when Avro schema source changes', () => {
@@ -440,6 +459,11 @@ describe('QueryEditor', () => {
   it('shows inline schema textarea when Avro schema source is Inline Schema', () => {
     renderEditor({ messageFormat: MessageFormat.AVRO, avroSchemaSource: AvroSchemaSource.INLINE_SCHEMA });
     expect(screen.getByPlaceholderText('Paste your Avro schema JSON here...')).toBeInTheDocument();
+  });
+
+  it('shows inline schema textarea when Protobuf schema source is Inline Schema', () => {
+    renderEditor({ messageFormat: MessageFormat.PROTOBUF, protobufSchemaSource: ProtobufSchemaSource.INLINE_SCHEMA });
+    expect(screen.getByPlaceholderText('Paste your Protobuf schema here...')).toBeInTheDocument();
   });
 
   it('does not show inline schema textarea when Avro schema source is Schema Registry', () => {

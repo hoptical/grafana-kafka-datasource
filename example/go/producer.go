@@ -75,22 +75,22 @@ func main() {
 	valuesOffset := flag.Float64("values-offset", 1.0, "Offset for the values")
 	connectTimeout := flag.Int("connect-timeout", 5000, "Broker connect timeout in milliseconds")
 	shape := flag.String("shape", "nested", "Payload shape: nested, flat, or list")
-	format := flag.String("format", "json", "Message format: json or avro")
-	schemaRegistryURL := flag.String("schema-registry", "", "Schema registry URL (for Avro with schema registry)")
+	format := flag.String("format", "json", "Message format: json, avro, or protobuf")
+	schemaRegistryURL := flag.String("schema-registry", "", "Schema registry URL (for Avro/Protobuf with schema registry)")
 	schemaRegistryUser := flag.String("schema-registry-user", "", "Schema registry username (optional)")
 	schemaRegistryPass := flag.String("schema-registry-pass", "", "Schema registry password (optional)")
 	verbose := flag.Bool("verbose", false, "Enable verbose logging")
 	flag.Parse()
 
 	// Validate format
-	if *format != "json" && *format != "avro" {
-		fmt.Printf("Error: Invalid format %q. Valid options: json, avro\n", *format)
+	if *format != "json" && *format != "avro" && *format != "protobuf" {
+		fmt.Printf("Error: Invalid format %q. Valid options: json, avro, protobuf\n", *format)
 		os.Exit(1)
 	}
 
 	// Validate Avro compatibility
-	if *format == "avro" && *shape == "list" {
-		fmt.Printf("Error: Avro format does not support 'list' shape. Use 'flat' or 'nested' shapes with Avro.\n")
+	if (*format == "avro" || *format == "protobuf") && *shape == "list" {
+		fmt.Printf("Error: %s format does not support 'list' shape. Use 'flat' or 'nested' shapes.\n", *format)
 		os.Exit(1)
 	}
 
@@ -139,7 +139,7 @@ func main() {
 		switch *shape {
 		case "flat":
 			// Use appropriate field names based on format
-			if *format == "avro" {
+			if *format == "avro" || *format == "protobuf" {
 				// Avro requires valid field names (no dots)
 				payload = map[string]interface{}{
 					"host_name":        hostName,
@@ -248,6 +248,11 @@ func main() {
 				fmt.Printf("[PRODUCER DEBUG] Using Avro format for message #%d\n", counter)
 			}
 			messageData, err = EncodeAvroMessage(*shape, payload, *schemaRegistryURL, *schemaRegistryUser, *schemaRegistryPass, *topic, *verbose)
+		case "protobuf":
+			if *verbose {
+				fmt.Printf("[PRODUCER DEBUG] Using Protobuf format for message #%d\n", counter)
+			}
+			messageData, err = EncodeProtobufMessage(*shape, payload, *schemaRegistryURL, *schemaRegistryUser, *schemaRegistryPass, *topic, *verbose)
 		}
 
 		if err != nil {

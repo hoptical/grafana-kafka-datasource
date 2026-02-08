@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package testdata;
+
+message Host {
+  string name = 1;
+  string ip = 2;
+}
+
+message Cpu {
+  optional double load = 1;
+  double temp = 2;
+}
+
+message Mem {
+  int64 used = 1;
+  int64 free = 2;
+}
+
+message Metrics {
+  Cpu cpu = 1;
+  Mem mem = 2;
+}
+
+message Alert {
+  string type = 1;
+  string severity = 2;
+  double value = 3;
+}
+
+message NestedMessage {
+  Host host = 1;
+  Metrics metrics = 2;
+  optional double value1 = 3;
+  optional double value2 = 4;
+  repeated string tags = 5;
+  repeated Alert alerts = 6;
+  repeated string processes = 7;
+}

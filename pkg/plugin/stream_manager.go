@@ -85,14 +85,16 @@ func createErrorFrame(msg kafka_client.KafkaMessage, partition int32, partitions
 
 // StreamConfig holds the configuration for streaming that can be updated dynamically.
 type StreamConfig struct {
-	MessageFormat    string
-	AvroSchemaSource string
-	AvroSchema       string
-	AutoOffsetReset  string
-	TimestampMode    string
-	LastN            int32 // Added to track lastN changes
-	RefID            string
-	Alias            string
+	MessageFormat        string
+	AvroSchemaSource     string
+	AvroSchema           string
+	ProtobufSchemaSource string
+	ProtobufSchema       string
+	AutoOffsetReset      string
+	TimestampMode        string
+	LastN                int32 // Added to track lastN changes
+	RefID                string
+	Alias                string
 }
 
 // NewStreamManager creates a new StreamManager instance.
@@ -125,15 +127,17 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 		return createErrorFrame(msg, partition, partitions, msg.Error, config, topic)
 	}
 
-	// Check if message needs Avro decoding
+	// Check if message needs Avro/Protobuf decoding
 	messageFormat := config.MessageFormat
 	avroSchemaSource := config.AvroSchemaSource
+	protobufSchemaSource := config.ProtobufSchemaSource
 
 	log.DefaultLogger.Debug("Processing message with configuration",
 		"partition", partition,
 		"offset", msg.Offset,
 		"configMessageFormat", messageFormat,
-		"configAvroSchemaSource", avroSchemaSource)
+		"configAvroSchemaSource", avroSchemaSource,
+		"configProtobufSchemaSource", protobufSchemaSource)
 
 	messageValue := msg.Value
 	if messageFormat == "avro" && len(msg.RawValue) > 0 {
@@ -162,8 +166,34 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 				"decodedType", fmt.Sprintf("%T", decoded))
 			messageValue = decoded
 		}
+	} else if messageFormat == "protobuf" && len(msg.RawValue) > 0 {
+		log.DefaultLogger.Debug("Attempting Protobuf decoding for message",
+			"partition", partition,
+			"offset", msg.Offset,
+			"rawValueLength", len(msg.RawValue),
+			"topic", topic,
+			"protobufSchemaSource", protobufSchemaSource)
+
+		decoded, err := decodeProtobufMessage(nil, client, msg.RawValue, config, topic)
+		if err != nil {
+			log.DefaultLogger.Error("Failed to decode Protobuf message",
+				"error", err,
+				"rawValueLength", len(msg.RawValue),
+				"partition", partition,
+				"offset", msg.Offset)
+			return createErrorFrame(msg, partition, partitions, fmt.Errorf("protobuf decoding failed: %w", err), config, topic)
+		}
+		log.DefaultLogger.Debug("Protobuf decoding successful",
+			"partition", partition,
+			"offset", msg.Offset,
+			"decodedType", fmt.Sprintf("%T", decoded))
+		messageValue = decoded
 	} else if messageFormat == "avro" {
 		log.DefaultLogger.Debug("Avro format specified but no raw data available",
+			"hasParsedValue", msg.Value != nil,
+			"rawValueLength", len(msg.RawValue))
+	} else if messageFormat == "protobuf" {
+		log.DefaultLogger.Debug("Protobuf format specified but no raw data available",
 			"hasParsedValue", msg.Value != nil,
 			"rawValueLength", len(msg.RawValue))
 	} else if messageFormat == "json" && msg.Value == nil && len(msg.RawValue) > 0 {
@@ -361,7 +391,7 @@ func decodeAvroMessage(sm *StreamManager, client KafkaClientAPI, data []byte, co
 
 		// Use cached Schema Registry client and schema if StreamManager is available
 		if sm != nil {
-			schema, err = sm.getSchemaFromRegistryWithCache(schemaRegistryUrl,
+			schema, err = sm.getSchemaFromRegistryWithCache("avro", schemaRegistryUrl,
 				client.GetSchemaRegistryUsername(),
 				client.GetSchemaRegistryPassword(),
 				subject)
@@ -413,11 +443,75 @@ func decodeAvroMessage(sm *StreamManager, client KafkaClientAPI, data []byte, co
 	return decoded, nil
 }
 
+// decodeProtobufMessage decodes a Protobuf message using the appropriate schema
+// If sm is provided, it uses cached Schema Registry client and schema cache for better performance
+func decodeProtobufMessage(sm *StreamManager, client KafkaClientAPI, data []byte, config *StreamConfig, topic string) (interface{}, error) {
+	protobufSchemaSource := config.ProtobufSchemaSource
+	protobufSchema := config.ProtobufSchema
+
+	log.DefaultLogger.Debug("Starting Protobuf message decoding",
+		"dataLength", len(data),
+		"topic", topic,
+		"protobufSchemaSource", protobufSchemaSource,
+		"protobufSchemaLength", len(protobufSchema))
+
+	var schema string
+	var err error
+
+	if protobufSchemaSource == "inlineSchema" && protobufSchema != "" {
+		schema = protobufSchema
+		log.DefaultLogger.Debug("Using inline Protobuf schema",
+			"schemaLength", len(schema))
+	} else if protobufSchemaSource == "inlineSchema" && protobufSchema == "" {
+		log.DefaultLogger.Error("Inline Protobuf schema selected but no schema provided")
+		return nil, fmt.Errorf("inline Protobuf schema selected but no schema provided - please provide a valid Protobuf schema")
+	} else {
+		schemaRegistryUrl := client.GetSchemaRegistryUrl()
+		if schemaRegistryUrl == "" {
+			log.DefaultLogger.Error("Schema Registry URL not configured")
+			return nil, fmt.Errorf("schema registry URL not configured")
+		}
+
+		subject := kafka_client.GetSubjectName(topic, client.GetAvroSubjectNamingStrategy())
+		if sm != nil {
+			schema, err = sm.getSchemaFromRegistryWithCache("protobuf", schemaRegistryUrl,
+				client.GetSchemaRegistryUsername(),
+				client.GetSchemaRegistryPassword(),
+				subject)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get schema from registry: %w", err)
+			}
+		} else {
+			httpClient := client.GetHTTPClient()
+			if httpClient == nil {
+				return nil, fmt.Errorf("HTTP client not available for Schema Registry")
+			}
+			schemaClient := kafka_client.NewSchemaRegistryClient(
+				schemaRegistryUrl,
+				client.GetSchemaRegistryUsername(),
+				client.GetSchemaRegistryPassword(),
+				httpClient,
+			)
+			schema, err = schemaClient.GetLatestSchema(subject)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get schema from registry: %w", err)
+			}
+		}
+	}
+
+	decoded, err := kafka_client.DecodeProtobufMessage(data, schema)
+	if err != nil {
+		return nil, err
+	}
+
+	return decoded, nil
+}
+
 // getSchemaWithCache retrieves a schema from the cache or fetches it from the registry
 // This method provides schema caching for better performance in high-throughput scenarios
-func (sm *StreamManager) getSchemaWithCache(subject string, schemaClient *kafka_client.SchemaRegistryClient) (string, error) {
+func (sm *StreamManager) getSchemaWithCache(cacheKey, subject string, schemaClient *kafka_client.SchemaRegistryClient) (string, error) {
 	sm.mu.RLock()
-	if cachedSchema, exists := sm.schemaCache[subject]; exists {
+	if cachedSchema, exists := sm.schemaCache[cacheKey]; exists {
 		sm.mu.RUnlock()
 		log.DefaultLogger.Debug("Using cached schema", "subject", subject)
 		return cachedSchema, nil
@@ -433,7 +527,7 @@ func (sm *StreamManager) getSchemaWithCache(subject string, schemaClient *kafka_
 
 	// Store in cache
 	sm.mu.Lock()
-	sm.schemaCache[subject] = schema
+	sm.schemaCache[cacheKey] = schema
 	sm.mu.Unlock()
 
 	log.DefaultLogger.Debug("Cached schema", "subject", subject, "schemaLength", len(schema))
@@ -442,7 +536,7 @@ func (sm *StreamManager) getSchemaWithCache(subject string, schemaClient *kafka_
 }
 
 // getSchemaFromRegistryWithCache gets or creates the Schema Registry client and retrieves schema with caching
-func (sm *StreamManager) getSchemaFromRegistryWithCache(registryUrl, username, password, subject string) (string, error) {
+func (sm *StreamManager) getSchemaFromRegistryWithCache(format, registryUrl, username, password, subject string) (string, error) {
 	// Get or create Schema Registry client
 	sm.mu.RLock()
 	schemaClient := sm.schemaRegistryClient
@@ -467,8 +561,8 @@ func (sm *StreamManager) getSchemaFromRegistryWithCache(registryUrl, username, p
 		sm.mu.Unlock()
 	}
 
-	// Use the cached schema retrieval method
-	return sm.getSchemaWithCache(subject, schemaClient)
+	cacheKey := fmt.Sprintf("%s:%s", format, subject)
+	return sm.getSchemaWithCache(cacheKey, subject, schemaClient)
 }
 
 // ProcessMessage converts a Kafka message into a Grafana data frame.
@@ -491,13 +585,13 @@ func (sm *StreamManager) ProcessMessage(
 		return createErrorFrame(msg, partition, partitions, msg.Error, config, topic)
 	}
 
-	// Check if message needs Avro decoding first to determine if nil Value is expected
+	// Check if message needs Avro/Protobuf decoding first to determine if nil Value is expected
 	messageFormat := config.MessageFormat
 
 	// Check if Value is nil - this indicates parsing/decoding failure for non-Avro formats
-	// For Avro format, Value is intentionally nil as decoding is deferred
+	// For Avro/Protobuf format, Value is intentionally nil as decoding is deferred
 	// Also allow nil values if there is raw data available (might be Avro data with wrong format)
-	if msg.Value == nil && messageFormat != "avro" && len(msg.RawValue) == 0 {
+	if msg.Value == nil && messageFormat != "avro" && messageFormat != "protobuf" && len(msg.RawValue) == 0 {
 		return createErrorFrame(msg, partition, partitions, fmt.Errorf("message value is nil - possible decoding failure"), config, topic)
 	}
 
@@ -515,6 +609,19 @@ func (sm *StreamManager) ProcessMessage(
 		}
 		messageValue = decoded
 		log.DefaultLogger.Debug("Avro decoding successful")
+	} else if messageFormat == "protobuf" && len(msg.RawValue) > 0 {
+		log.DefaultLogger.Debug("Attempting Protobuf decoding for message",
+			"partition", partition,
+			"offset", msg.Offset,
+			"rawValueLength", len(msg.RawValue))
+
+		decoded, err := decodeProtobufMessage(sm, sm.client, msg.RawValue, config, topic)
+		if err != nil {
+			log.DefaultLogger.Error("Failed to decode Protobuf message", "error", err)
+			return createErrorFrame(msg, partition, partitions, fmt.Errorf("protobuf decoding failed: %w", err), config, topic)
+		}
+		messageValue = decoded
+		log.DefaultLogger.Debug("Protobuf decoding successful")
 	} else if messageFormat == "json" && msg.Value == nil && len(msg.RawValue) > 0 {
 		log.DefaultLogger.Debug("Attempting JSON decoding for message",
 			"partition", partition,

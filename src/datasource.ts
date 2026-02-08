@@ -16,6 +16,7 @@ import {
   defaultQuery,
   MessageFormat,
   AvroSchemaSource,
+  ProtobufSchemaSource,
   TimestampMode,
 } from './types';
 
@@ -74,6 +75,7 @@ export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourc
       autoOffsetReset: query.autoOffsetReset || AutoOffsetReset.LATEST,
       messageFormat: query.messageFormat || MessageFormat.JSON,
       avroSchemaSource: query.avroSchemaSource || AvroSchemaSource.SCHEMA_REGISTRY,
+      protobufSchemaSource: query.protobufSchemaSource || ProtobufSchemaSource.SCHEMA_REGISTRY,
       timestampMode: query.timestampMode || TimestampMode.Message,
     };
     return result;
@@ -92,6 +94,7 @@ export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourc
         segments.push(encodeURIComponent(String(interpolatedQuery.autoOffsetReset)));
         segments.push(encodeURIComponent(String(interpolatedQuery.messageFormat || 'json')));
         segments.push(encodeURIComponent(String(interpolatedQuery.avroSchemaSource || 'schemaRegistry')));
+        segments.push(encodeURIComponent(String(interpolatedQuery.protobufSchemaSource || 'schemaRegistry')));
         // Include timestamp mode so changes to timestamp handling trigger a new path/subscription
         segments.push(encodeURIComponent(String(interpolatedQuery.timestampMode || 'message')));
         // Include a hash of the Avro schema to detect changes
@@ -99,6 +102,10 @@ export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourc
           ? this.generateSchemaHash(interpolatedQuery.avroSchema)
           : 'none';
         segments.push(encodeURIComponent(schemaHash));
+        const protobufSchemaHash = interpolatedQuery.protobufSchema
+          ? this.generateSchemaHash(interpolatedQuery.protobufSchema)
+          : 'none';
+        segments.push(encodeURIComponent(protobufSchemaHash));
 
         if (
           interpolatedQuery.autoOffsetReset === AutoOffsetReset.LAST_N &&
@@ -191,8 +198,23 @@ export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourc
     }
   }
 
+  async validateProtobufSchema(schema: string): Promise<{ status: string; message: string }> {
+    try {
+      const response = (await this.postResource('validate-protobuf-schema', { schema })) as any;
+      return {
+        status: response.status || 'ok',
+        message: response.message || 'Schema is valid',
+      };
+    } catch (err: any) {
+      return {
+        status: 'error',
+        message: err?.message || 'Failed to validate schema',
+      };
+    }
+  }
+
   /**
-   * Generate a stable hash for Avro schema to detect changes
+   * Generate a stable hash for schema content to detect changes
    * Uses a simple but effective hash function for schema comparison
    */
   private generateSchemaHash(schema: string): string {

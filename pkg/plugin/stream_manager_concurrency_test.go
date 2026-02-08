@@ -54,7 +54,7 @@ func TestStreamManager_SchemaCacheConcurrency(t *testing.T) {
 
 			// Each goroutine tries to fetch the schema multiple times
 			for j := 0; j < 3; j++ {
-				schema, err := sm.getSchemaFromRegistryWithCache(server.URL, "", "", subject)
+				schema, err := sm.getSchemaFromRegistryWithCache("avro", server.URL, "", "", subject)
 				if err != nil {
 					errCh <- fmt.Errorf("goroutine %d iteration %d: %w", idx, j, err)
 					return
@@ -123,7 +123,7 @@ func TestStreamManager_SchemaClientConcurrency(t *testing.T) {
 			password := fmt.Sprintf("pass%d", idx%3)
 			subject := fmt.Sprintf("subject-%d", idx%5)
 
-			_, err := sm.getSchemaFromRegistryWithCache(server.URL, username, password, subject)
+			_, err := sm.getSchemaFromRegistryWithCache("avro", server.URL, username, password, subject)
 			if err != nil {
 				errCh <- fmt.Errorf("goroutine %d: %w", idx, err)
 			}
@@ -251,7 +251,7 @@ func TestStreamManager_MixedOperations(t *testing.T) {
 	for i := 0; i < concurrency; i++ {
 		go func(idx int) {
 			defer wg.Done()
-			_, err := sm.getSchemaFromRegistryWithCache(server.URL, "", "", "test-topic-value")
+			_, err := sm.getSchemaFromRegistryWithCache("avro", server.URL, "", "", "test-topic-value")
 			if err != nil {
 				errCh <- fmt.Errorf("schema fetch %d: %w", idx, err)
 			}

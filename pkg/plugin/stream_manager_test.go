@@ -9,6 +9,9 @@ import (
 
 	"github.com/hoptical/grafana-kafka-datasource/pkg/kafka_client"
 	"github.com/segmentio/kafka-go"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/types/dynamicpb"
 )
 
 // mockStreamClient implements KafkaClientAPI for stream manager tests
@@ -310,6 +313,57 @@ func TestStreamManager_ProcessMessage(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestStreamManager_ProcessMessage_Protobuf(t *testing.T) {
+	protoSchema := `syntax = "proto3";
+
+package testdata;
+
+message TestMessage {
+  string name = 1;
+  int64 value = 2;
+}
+`
+
+	parsed, err := kafka_client.ParseProtobufSchema(protoSchema)
+	if err != nil {
+		t.Fatalf("failed to parse protobuf schema: %v", err)
+	}
+
+	msg := dynamicpb.NewMessage(parsed.Message)
+	msg.Set(parsed.Message.Fields().ByName("name"), protoreflect.ValueOfString("alpha"))
+	msg.Set(parsed.Message.Fields().ByName("value"), protoreflect.ValueOfInt64(7))
+	encoded, err := proto.Marshal(msg)
+	if err != nil {
+		t.Fatalf("failed to marshal protobuf message: %v", err)
+	}
+
+	client := &mockStreamClient{}
+	sm := NewStreamManager(client, 5, 1000)
+
+	config := &StreamConfig{
+		MessageFormat:        "protobuf",
+		ProtobufSchemaSource: "inlineSchema",
+		ProtobufSchema:       protoSchema,
+		AutoOffsetReset:      "latest",
+		TimestampMode:        "message",
+	}
+
+	frame, err := sm.ProcessMessage(
+		kafka_client.KafkaMessage{RawValue: encoded, Timestamp: time.Now(), Offset: 10},
+		0,
+		[]int32{0},
+		config,
+		"test-topic",
+	)
+	if err != nil {
+		t.Fatalf("failed to process protobuf message: %v", err)
+	}
+
+	if frame == nil || len(frame.Fields) == 0 {
+		t.Fatalf("expected frame with fields")
 	}
 }
 

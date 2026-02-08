@@ -119,6 +119,11 @@ func (client *KafkaClient) decodeMessageValue(data []byte, format string) (inter
 			"valueLength", len(data))
 		// For Avro format, don't attempt JSON parsing
 		return nil, nil
+	case "protobuf":
+		grafanalog.DefaultLogger.Debug("Skipping JSON decoding for Protobuf format message",
+			"valueLength", len(data))
+		// For Protobuf format, don't attempt JSON parsing
+		return nil, nil
 	case "json":
 		// For JSON format, require successful JSON decoding
 		var doc interface{}
