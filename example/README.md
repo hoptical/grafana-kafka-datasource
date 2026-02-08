@@ -73,7 +73,7 @@ Enable verbose logging for debugging any format:
 go run producer.go -broker localhost:9094 -topic test -interval 1000 -format json -verbose
 ```
 
-> **Schema Registry Note**: When using Schema Registry, messages are encoded in Confluent wire format with a schema ID prefix. This allows efficient deserialization and schema evolution. If Schema Registry is unavailable, the producer automatically falls back to inline schemas.
+> **Schema Registry Note**: When using Schema Registry, messages are encoded in Confluent wire format with a schema ID prefix for efficient deserialization and schema evolution. Behavior on registry failures differs by format: the Avro encoder will automatically fall back to inline schema encoding when registration or retrieval fails (see `pkg/kafka_client/avro_utils.go` fallback logic); the Protobuf encoder does **not** fall back on registration failure and will return an error — Protobuf only uses inline schema when no Schema Registry URL is provided at startup (see `pkg/kafka_client/protobuf_utils.go`).
 
 ### Supported Shapes
 

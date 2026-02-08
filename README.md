@@ -183,7 +183,7 @@ message SensorReading {
 }
 ```
 
-Both flat and nested structures are supported. Confluent wire format uses a magic byte (0x00) followed by a 4-byte schema ID, then the message payload.
+Both flat and nested structures are supported. Confluent wire format uses a magic byte (0x00) followed by a 4-byte schema ID, then a variable-length message-indexes array (varint-encoded), and finally the Protobuf payload. The message-indexes identify which message type in the schema the payload encodes.
 
 ### Known Protobuf Limitations
 
