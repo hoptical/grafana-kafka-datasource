@@ -176,12 +176,54 @@ func TestDecodeProtobufMessage_MissingFieldsAsNil(t *testing.T) {
 		t.Errorf("expected name to be charlie, got %v", result["name"])
 	}
 
-	// Verify age field exists in map (not omitted) but is nil
+	// Verify age field exists in map and defaults to 0 for proto3 scalar without presence
 	ageValue, ageExists := result["age"]
 	if !ageExists {
 		t.Errorf("expected age field to exist in result map for schema stability")
 	}
-	if ageValue != nil {
-		t.Errorf("expected age to be nil for missing field, got %v", ageValue)
+	if ageValue != int64(0) {
+		t.Errorf("expected age to be 0 for default value, got %v", ageValue)
+	}
+}
+
+func TestDecodeProtobufMessage_DefaultValuesWithoutPresence(t *testing.T) {
+	schema := `syntax = "proto3";
+
+message DefaultValues {
+  int64 count = 1;
+  string name = 2;
+  optional int32 opt = 3;
+}
+`
+
+	parsed, err := ParseProtobufSchema(schema)
+	if err != nil {
+		t.Fatalf("failed to parse schema: %v", err)
+	}
+
+	msg := dynamicpb.NewMessage(parsed.Message)
+	data, err := proto.Marshal(msg)
+	if err != nil {
+		t.Fatalf("failed to marshal message: %v", err)
+	}
+
+	decoded, err := DecodeProtobufMessage(data, schema)
+	if err != nil {
+		t.Fatalf("failed to decode message: %v", err)
+	}
+
+	result, ok := decoded.(map[string]interface{})
+	if !ok {
+		t.Fatalf("decoded result is not a map")
+	}
+
+	if result["count"] != int64(0) {
+		t.Errorf("expected count to be 0, got %v", result["count"])
+	}
+	if result["name"] != "" {
+		t.Errorf("expected name to be empty string, got %v", result["name"])
+	}
+	if result["opt"] != nil {
+		t.Errorf("expected opt to be nil when unset, got %v", result["opt"])
 	}
 }

@@ -252,8 +252,14 @@ func protobufMessageToMap(message protoreflect.Message) map[string]interface{} {
 			continue
 		}
 
+		if !field.HasPresence() {
+			// Proto3 scalars without presence should always emit a value (even defaults).
+			out[string(field.Name())] = protobufValueToInterface(field, message.Get(field))
+			continue
+		}
+
 		if !message.Has(field) {
-			// Include missing optional fields as nil to maintain schema stability
+			// Include missing presence-aware fields as nil to maintain schema stability
 			out[string(field.Name())] = nil
 			continue
 		}
