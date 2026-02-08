@@ -130,7 +130,7 @@ func parseMessageIndexes(data []byte) ([]int, []byte, error) {
 
 	// Fallback: legacy terminated format.
 	if indexes, remaining, ok = parseTerminatedIndexes(data); ok {
-		warnMessageIndexFallback("parseTerminatedIndexes", data, remaining, indexes, "not matched", "matched")
+		logMessageIndexFallback("parseTerminatedIndexes", data, remaining, indexes, "not matched", "matched")
 		return indexes, remaining, nil
 	}
 
@@ -146,7 +146,7 @@ func parseMessageIndexes(data []byte) ([]int, []byte, error) {
 	// Non-zero single varint is non-standard - warn and treat as 0-based index
 	indexes = []int{int(index)}
 	remaining = data[n:]
-	warnMessageIndexFallback("single-varint-nonzero", data, remaining, indexes, "not matched", "not matched")
+	logMessageIndexFallback("single-varint-nonzero", data, remaining, indexes, "not matched", "not matched")
 	return indexes, remaining, nil
 }
 
@@ -197,7 +197,7 @@ func parseCountPrefixedIndexes(data []byte) ([]int, []byte, bool) {
 	return indexes, data[offset:], true
 }
 
-func warnMessageIndexFallback(fallback string, raw []byte, remaining []byte, indexes []int, countPrefixedStatus, terminatedStatus string) {
+func logMessageIndexFallback(fallback string, raw []byte, remaining []byte, indexes []int, countPrefixedStatus, terminatedStatus string) {
 	rawPrefix := raw
 	if len(rawPrefix) > 32 {
 		rawPrefix = rawPrefix[:32]
