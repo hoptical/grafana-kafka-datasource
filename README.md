@@ -42,6 +42,7 @@ This plugin connects your Grafana instance directly to Kafka brokers, allowing y
 - Timestamp modes (Kafka event time, dashboard received time)
 - Advanced JSON support (flat, nested, arrays, mixed types)
 - Avro support with Schema Registry integration (inline schema or Schema Registry)
+- Protobuf support with Schema Registry integration (inline schema or Schema Registry)
 - Configurable flattening depth (default: 5)
 - Configurable max fields per message (default: 1000)
 - Customizable query aliases with placeholders
@@ -83,7 +84,8 @@ You can automatically configure the Kafka datasource using Grafana's provisionin
    - **Partition**: Choose a specific partition or "all" for all partitions.
    - **Message Format**:
      - `JSON`: For JSON messages
-     - `Avro`: For Avro messages (requires schema)
+     - `Avro`: For Avro messages (requires schema registry or inline schema)
+     - `Protobuf`: For Protobuf messages (requires schema registry or inline schema)
    - **Offset Reset**:
      - `latest`: Only new messages
      - `last N messages`: Start from the most recent N messages (set N in the UI)
@@ -139,9 +141,59 @@ Top-level array (flattened as `item_0.id`, `item_0.value`, `item_1.id`, etc.):
 ]
 ```
 
-## Limitations
+## Avro Support
 
-- Protobuf not yet supported (Avro is supported with schema registry integration)
+Avro messages are supported using either:
+
+- **Inline schema**: paste your Avro schema (JSON format) in the UI
+- **Schema Registry**: the plugin fetches the latest schema by subject from the configured Schema Registry
+
+**Example Avro schema:**
+
+```json
+{
+  "type": "record",
+  "name": "SensorReading",
+  "fields": [
+    { "name": "sensor_id", "type": "string" },
+    { "name": "temperature", "type": "double" },
+    { "name": "timestamp", "type": "long" }
+  ]
+}
+```
+
+Both flat and nested structures are supported. When using Schema Registry, messages are encoded in Confluent wire format with schema ID prefix for efficient deserialization.
+
+## Protobuf Support
+
+Protobuf messages are supported using either:
+
+- **Inline schema**: paste your `.proto` schema definition in the UI
+- **Schema Registry**: the plugin extracts the schema ID from the Confluent wire format header and fetches the schema from the configured Schema Registry
+
+**Example Protobuf schema:**
+
+```protobuf
+syntax = "proto3";
+
+message SensorReading {
+  string sensor_id = 1;
+  double temperature = 2;
+  int64 timestamp = 3;
+}
+```
+
+Both flat and nested structures are supported. Confluent wire format uses a magic byte (0x00) followed by a 4-byte schema ID, then the message payload.
+
+### Known Protobuf Limitations
+
+- **Inline schemas do not support imports**
+  - Well-known types like `google.protobuf.Timestamp` won't compile when provided inline
+  - Use inline schema for simple schemas, or provide the schema via Schema Registry if imports are needed
+- **Default message selection**: the first top-level message in the `.proto` file is used as the default
+- **Schema caching**: schemas are cached by ID/subject to avoid repeated registry requests
+
+If you encounter issues with complex Protobuf schemas, open an issue so we can prioritize improvements.
 
 ## Live Demo
 
@@ -149,19 +201,7 @@ Top-level array (flattened as `item_0.id`, `item_0.value`, `item_1.id`, etc.):
 
 ## Sample Data Generator
 
-Want to test the plugin? Use our [Go sample producer](https://github.com/hoptical/grafana-kafka-datasource/blob/main/example/go/producer.go) to generate realistic Kafka messages:
-
-```bash
-go run example/go/producer.go -broker localhost:9094 -topic test -interval 500 -num-partitions 3 -shape nested
-```
-
-Avro example (produce Avro messages using Schema Registry):
-
-```bash
-go run example/go/producer.go -broker localhost:9094 -topic test-avro -interval 500 -num-partitions 3 -format avro -schema-registry http://localhost:8081
-```
-
-Supports flat, nested, and array JSON payloads, plus Avro format with **full schema registry integration**. Features verbose logging for debugging. See [example/README.md](https://github.com/hoptical/grafana-kafka-datasource/blob/main/example/README.md) for details.
+Want to test the plugin with realistic Kafka messages? Use the included sample producers to generate JSON, Avro, or Protobuf messages with various structures and schema configurations. For detailed usage, see the [example README](./example/README.md). The producers support flexible options for message format, structure, intervals, and schema registry integration.
 
 ## FAQ & Troubleshooting
 
