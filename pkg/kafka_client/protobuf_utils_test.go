@@ -95,6 +95,49 @@ func TestDecodeProtobufMessage_ConfluentWireFormat(t *testing.T) {
 	}
 }
 
+func TestDecodeProtobufMessage_ConfluentWireFormatWithVarintZero(t *testing.T) {
+	// Test decoding wire format with varint(0) as used by Kafka Cloud and some producers
+	parsed, err := ParseProtobufSchema(simpleProtoSchema)
+	if err != nil {
+		t.Fatalf("failed to parse schema: %v", err)
+	}
+
+	msg := dynamicpb.NewMessage(parsed.Message)
+	msg.Set(parsed.Message.Fields().ByName("name"), protoreflect.ValueOfString("kafka-cloud"))
+	msg.Set(parsed.Message.Fields().ByName("age"), protoreflect.ValueOfInt64(99))
+
+	payload, err := proto.Marshal(msg)
+	if err != nil {
+		t.Fatalf("failed to marshal message: %v", err)
+	}
+
+	// Create wire format: magic byte + schema ID + varint(0) + payload
+	wire := make([]byte, 0, 6+len(payload))
+	wire = append(wire, 0) // magic byte
+	schemaID := make([]byte, 4)
+	binary.BigEndian.PutUint32(schemaID, 99491) // Kafka Cloud schema ID from user's example
+	wire = append(wire, schemaID...)
+	wire = append(wire, protowire.AppendVarint(nil, 0)...) // varint(0) - use first message
+	wire = append(wire, payload...)
+
+	decoded, err := DecodeProtobufMessage(wire, simpleProtoSchema)
+	if err != nil {
+		t.Fatalf("failed to decode wire format message with varint(0): %v", err)
+	}
+
+	result, ok := decoded.(map[string]interface{})
+	if !ok {
+		t.Fatalf("decoded result is not a map")
+	}
+
+	if result["name"] != "kafka-cloud" {
+		t.Errorf("expected name to be kafka-cloud, got %v", result["name"])
+	}
+	if result["age"] != int64(99) {
+		t.Errorf("expected age to be 99, got %v", result["age"])
+	}
+}
+
 func TestDecodeProtobufMessage_InvalidSchema(t *testing.T) {
 	_, err := DecodeProtobufMessage([]byte{0x01, 0x02}, "invalid proto")
 	if err == nil {

@@ -133,8 +133,11 @@ func parseMessageIndexes(data []byte) ([]int, []byte, error) {
 	if n <= 0 {
 		return nil, nil, fmt.Errorf("failed to parse protobuf message index")
 	}
+	// A single varint(0) means use the first message (index 0) - this is valid
+	// in Confluent wire format for schemas with a single top-level message type.
+	// Otherwise, indexes are 1-based, so subtract 1.
 	if index == 0 {
-		return nil, nil, fmt.Errorf("protobuf message index cannot be 0")
+		return []int{0}, data[n:], nil
 	}
 	return []int{int(index - 1)}, data[n:], nil
 }
