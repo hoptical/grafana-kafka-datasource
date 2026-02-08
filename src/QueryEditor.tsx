@@ -848,7 +848,7 @@ class QueryEditorInner extends PureComponent<QueryEditorInnerProps, State> {
                 >
                   <div className={this.props.styles.schemaValidationWrapper}>
                     <div className={this.props.styles.fileRow}>
-                      <Button variant="secondary" size="sm" onClick={() => this.fileInputRef?.current?.click()}>
+                      <Button variant="secondary" size="sm" onClick={() => this.avroFileInputRef?.current?.click()}>
                         Choose file
                       </Button>
                       <div className={this.props.styles.filenameText}>
