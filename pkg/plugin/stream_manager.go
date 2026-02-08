@@ -306,7 +306,7 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 	copy(frame.Fields, fields)
 
 	// Use the passed-in fieldBuilder to maintain type registry across messages
-	// This is critical for proper null value handling in Avro messages
+	// This is critical for proper null value handling in Avro/Protobuf messages
 
 	// Add message fields by direct assignment
 	for i, key := range keys {

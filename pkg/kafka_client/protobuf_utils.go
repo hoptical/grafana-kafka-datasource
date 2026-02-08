@@ -215,6 +215,8 @@ func protobufMessageToMap(message protoreflect.Message) map[string]interface{} {
 		if field.IsList() {
 			list := message.Get(field).List()
 			if list.Len() == 0 {
+				// Include empty lists as nil to maintain schema stability
+				out[string(field.Name())] = nil
 				continue
 			}
 			values := make([]interface{}, 0, list.Len())
@@ -227,6 +229,8 @@ func protobufMessageToMap(message protoreflect.Message) map[string]interface{} {
 		if field.IsMap() {
 			m := message.Get(field).Map()
 			if m.Len() == 0 {
+				// Include empty maps as nil to maintain schema stability
+				out[string(field.Name())] = nil
 				continue
 			}
 			values := make(map[string]interface{})
@@ -239,6 +243,8 @@ func protobufMessageToMap(message protoreflect.Message) map[string]interface{} {
 		}
 
 		if !message.Has(field) {
+			// Include missing optional fields as nil to maintain schema stability
+			out[string(field.Name())] = nil
 			continue
 		}
 		out[string(field.Name())] = protobufValueToInterface(field, message.Get(field))

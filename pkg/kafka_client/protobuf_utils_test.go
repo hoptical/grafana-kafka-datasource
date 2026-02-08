@@ -101,3 +101,44 @@ func TestDecodeProtobufMessage_InvalidSchema(t *testing.T) {
 		t.Fatalf("expected error for invalid schema")
 	}
 }
+
+func TestDecodeProtobufMessage_MissingFieldsAsNil(t *testing.T) {
+	// Test that missing optional fields are included as nil for schema stability
+	parsed, err := ParseProtobufSchema(simpleProtoSchema)
+	if err != nil {
+		t.Fatalf("failed to parse schema: %v", err)
+	}
+
+	msg := dynamicpb.NewMessage(parsed.Message)
+	// Only set name, leave age unset
+	msg.Set(parsed.Message.Fields().ByName("name"), protoreflect.ValueOfString("charlie"))
+
+	data, err := proto.Marshal(msg)
+	if err != nil {
+		t.Fatalf("failed to marshal message: %v", err)
+	}
+
+	decoded, err := DecodeProtobufMessage(data, simpleProtoSchema)
+	if err != nil {
+		t.Fatalf("failed to decode message: %v", err)
+	}
+
+	result, ok := decoded.(map[string]interface{})
+	if !ok {
+		t.Fatalf("decoded result is not a map")
+	}
+
+	// Verify name is present
+	if result["name"] != "charlie" {
+		t.Errorf("expected name to be charlie, got %v", result["name"])
+	}
+
+	// Verify age field exists in map (not omitted) but is nil
+	ageValue, ageExists := result["age"]
+	if !ageExists {
+		t.Errorf("expected age field to exist in result map for schema stability")
+	}
+	if ageValue != nil {
+		t.Errorf("expected age to be nil for missing field, got %v", ageValue)
+	}
+}
