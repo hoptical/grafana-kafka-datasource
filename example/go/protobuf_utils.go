@@ -252,8 +252,10 @@ func encodeProtobufWireFormat(schemaID int, messageIndex int, payload []byte) []
 	idBytes := make([]byte, 4)
 	binary.BigEndian.PutUint32(idBytes, uint32(schemaID))
 	buf.Write(idBytes)
+	// Use standard Confluent wire format: 1-based index with terminator
+	// This ensures unambiguous separation between index and payload
 	buf.Write(protowire.AppendVarint(nil, uint64(messageIndex+1)))
-	buf.Write(protowire.AppendVarint(nil, 0))
+	buf.Write(protowire.AppendVarint(nil, 0)) // terminator
 	buf.Write(payload)
 	return buf.Bytes()
 }
