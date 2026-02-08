@@ -1,6 +1,13 @@
 import { of } from 'rxjs';
 import { DataSource } from '../datasource';
-import { AutoOffsetReset, TimestampMode, MessageFormat, AvroSchemaSource, type KafkaQuery } from '../types';
+import {
+  AutoOffsetReset,
+  TimestampMode,
+  MessageFormat,
+  AvroSchemaSource,
+  ProtobufSchemaSource,
+  type KafkaQuery,
+} from '../types';
 
 import { deepFreeze } from '../test-utils/test-helpers';
 
@@ -73,6 +80,7 @@ describe('DataSource', () => {
         lastN: 100,
         messageFormat: MessageFormat.JSON,
         avroSchemaSource: AvroSchemaSource.SCHEMA_REGISTRY,
+        protobufSchemaSource: ProtobufSchemaSource.SCHEMA_REGISTRY,
       });
     });
     it('returns query values with Kafka Message Timestamp mode', () => {
@@ -249,7 +257,9 @@ describe('DataSource', () => {
         },
         complete: () => {
           try {
-            expect(capturedPath).toBe('my%20topic-0-latest-json-schemaRegistry-now-none-A-no-alias');
+            expect(capturedPath).toBe(
+              'my%20topic-0-latest-json-schemaRegistry-schemaRegistry-now-none-none-A-no-alias'
+            );
             // Now with LAST_N
             capturedPath = undefined;
             const target2: KafkaQuery = {
@@ -261,7 +271,9 @@ describe('DataSource', () => {
             ds.query({ targets: [target2] } as any).subscribe({
               complete: () => {
                 try {
-                  expect(capturedPath).toBe('my%20topic-0-lastN-json-schemaRegistry-now-none-10-A-no-alias');
+                  expect(capturedPath).toBe(
+                    'my%20topic-0-lastN-json-schemaRegistry-schemaRegistry-now-none-none-10-A-no-alias'
+                  );
                   done();
                 } catch (e) {
                   done(e as any);
@@ -285,7 +297,9 @@ describe('DataSource', () => {
       ds.query({ targets } as any).subscribe({
         complete: () => {
           // Only one valid query should have been processed
-          expect(capturedPath).toBe('valid-topic-all-latest-json-schemaRegistry-message-none-B-no-alias');
+          expect(capturedPath).toBe(
+            'valid-topic-all-latest-json-schemaRegistry-schemaRegistry-message-none-none-B-no-alias'
+          );
           done();
         },
       });
@@ -315,7 +329,7 @@ describe('DataSource', () => {
       ds.query({ targets: [target] } as any).subscribe({
         complete: () => {
           expect(capturedPath).toBe(
-            'topic%2Fwith-special%3Achars-all-earliest-json-schemaRegistry-now-none-A-no-alias'
+            'topic%2Fwith-special%3Achars-all-earliest-json-schemaRegistry-schemaRegistry-now-none-none-A-no-alias'
           );
           done();
         },
@@ -338,7 +352,9 @@ describe('DataSource', () => {
           // Slug for "My Alias" is "MyAlias"
           // We don't know the exact hash, but we can match the pattern
           // Path: topic-partition-offset-format-schema-timestamp-lastN-refId-Slug-Hash
-          expect(capturedPath).toMatch(/^my-topic-0-latest-json-schemaRegistry-now-none-A-MyAlias-[a-z0-9]+$/);
+          expect(capturedPath).toMatch(
+            /^my-topic-0-latest-json-schemaRegistry-schemaRegistry-now-none-none-A-MyAlias-[a-z0-9]+$/
+          );
           done();
         },
       });

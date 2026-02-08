@@ -22,9 +22,15 @@ export type TimestampModeInterface = {
 export enum MessageFormat {
   JSON = 'json',
   AVRO = 'avro',
+  PROTOBUF = 'protobuf',
 }
 
 export enum AvroSchemaSource {
+  SCHEMA_REGISTRY = 'schemaRegistry',
+  INLINE_SCHEMA = 'inlineSchema',
+}
+
+export enum ProtobufSchemaSource {
   SCHEMA_REGISTRY = 'schemaRegistry',
   INLINE_SCHEMA = 'inlineSchema',
 }
@@ -35,6 +41,10 @@ export type MessageFormatInterface = {
 
 export type AvroSchemaSourceInterface = {
   [key in AvroSchemaSource]: string;
+};
+
+export type ProtobufSchemaSourceInterface = {
+  [key in ProtobufSchemaSource]: string;
 };
 
 export interface KafkaDataSourceOptions extends DataSourceJsonData {
@@ -100,6 +110,9 @@ export interface KafkaQuery extends DataQuery {
   // Avro Configuration
   avroSchemaSource?: AvroSchemaSource;
   avroSchema?: string;
+  // Protobuf Configuration
+  protobufSchemaSource?: ProtobufSchemaSource;
+  protobufSchema?: string;
   // Optional alias for the query
   alias?: string;
 }
@@ -111,4 +124,5 @@ export const defaultQuery: Partial<KafkaQuery> = {
   lastN: 100,
   messageFormat: MessageFormat.JSON,
   avroSchemaSource: AvroSchemaSource.SCHEMA_REGISTRY,
+  protobufSchemaSource: ProtobufSchemaSource.SCHEMA_REGISTRY,
 };

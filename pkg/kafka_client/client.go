@@ -119,6 +119,11 @@ func (client *KafkaClient) decodeMessageValue(data []byte, format string) (inter
 			"valueLength", len(data))
 		// For Avro format, don't attempt JSON parsing
 		return nil, nil
+	case "protobuf":
+		grafanalog.DefaultLogger.Debug("Skipping JSON decoding for Protobuf format message",
+			"valueLength", len(data))
+		// For Protobuf format, don't attempt JSON parsing
+		return nil, nil
 	case "json":
 		// For JSON format, require successful JSON decoding
 		var doc interface{}
@@ -616,7 +621,7 @@ func (client *KafkaClient) GetSchemaRegistryPassword() string {
 	return client.SchemaRegistryPassword
 }
 
-// GetAvroSubjectNamingStrategy returns the Avro subject naming strategy
-func (client *KafkaClient) GetAvroSubjectNamingStrategy() string {
+// GetSubjectNamingStrategy returns the Schema Registry subject naming strategy
+func (client *KafkaClient) GetSubjectNamingStrategy() string {
 	return "recordName" // Uses record name from schema as subject name
 }

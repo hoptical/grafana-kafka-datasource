@@ -21,6 +21,7 @@ import {
   AutoOffsetReset,
   TimestampMode,
   AvroSchemaSource,
+  ProtobufSchemaSource,
   MessageFormat,
 } from './types';
 
@@ -45,9 +46,15 @@ const avroSchemaSources: Array<{ label: string; value: AvroSchemaSource }> = [
   { label: 'Inline Schema', value: AvroSchemaSource.INLINE_SCHEMA },
 ];
 
+const protobufSchemaSources: Array<{ label: string; value: ProtobufSchemaSource }> = [
+  { label: 'Schema Registry', value: ProtobufSchemaSource.SCHEMA_REGISTRY },
+  { label: 'Inline Schema', value: ProtobufSchemaSource.INLINE_SCHEMA },
+];
+
 const messageFormats: Array<{ label: string; value: MessageFormat }> = [
   { label: 'JSON', value: MessageFormat.JSON },
   { label: 'Avro', value: MessageFormat.AVRO },
+  { label: 'Protobuf', value: MessageFormat.PROTOBUF },
 ];
 
 const partitionOptions: Array<{ label: string; value: number | 'all' }> = [{ label: 'All partitions', value: 'all' }];
@@ -166,11 +173,16 @@ interface State {
     status: 'valid' | 'invalid' | 'loading';
     message?: string;
   };
+  protobufSchemaValidation?: {
+    status: 'valid' | 'invalid' | 'loading';
+    message?: string;
+  };
   schemaRegistryValidation?: {
     status: 'valid' | 'invalid' | 'loading';
     message?: string;
   };
-  selectedFileName?: string;
+  selectedAvroFileName?: string;
+  selectedProtobufFileName?: string;
 }
 
 // Wrapper component to use hooks
@@ -189,8 +201,10 @@ class QueryEditorInner extends PureComponent<QueryEditorInnerProps, State> {
   private lastCommittedTopic = '';
   private fetchPartitionsTimeoutId?: ReturnType<typeof setTimeout>;
   private topicBlurTimeout?: ReturnType<typeof setTimeout>;
-  private schemaValidationTimeout?: ReturnType<typeof setTimeout>;
-  private fileInputRef?: React.RefObject<HTMLInputElement>;
+  private avroSchemaValidationTimeout?: ReturnType<typeof setTimeout>;
+  private protobufSchemaValidationTimeout?: ReturnType<typeof setTimeout>;
+  private avroFileInputRef?: React.RefObject<HTMLInputElement>;
+  private protobufFileInputRef?: React.RefObject<HTMLInputElement>;
 
   constructor(props: QueryEditorInnerProps) {
     super(props);
@@ -208,7 +222,8 @@ class QueryEditorInner extends PureComponent<QueryEditorInnerProps, State> {
       this.props.onRunQuery();
     }, 500);
     // Ref for hidden file input
-    this.fileInputRef = React.createRef<HTMLInputElement>();
+    this.avroFileInputRef = React.createRef<HTMLInputElement>();
+    this.protobufFileInputRef = React.createRef<HTMLInputElement>();
   }
 
   componentDidMount() {
@@ -232,9 +247,13 @@ class QueryEditorInner extends PureComponent<QueryEditorInnerProps, State> {
       clearTimeout(this.topicBlurTimeout);
       this.topicBlurTimeout = undefined;
     }
-    if (this.schemaValidationTimeout) {
-      clearTimeout(this.schemaValidationTimeout);
-      this.schemaValidationTimeout = undefined;
+    if (this.avroSchemaValidationTimeout) {
+      clearTimeout(this.avroSchemaValidationTimeout);
+      this.avroSchemaValidationTimeout = undefined;
+    }
+    if (this.protobufSchemaValidationTimeout) {
+      clearTimeout(this.protobufSchemaValidationTimeout);
+      this.protobufSchemaValidationTimeout = undefined;
     }
   }
 
@@ -382,6 +401,12 @@ class QueryEditorInner extends PureComponent<QueryEditorInnerProps, State> {
     onRunQuery();
   };
 
+  onProtobufSchemaSourceChanged = (value: ProtobufSchemaSource) => {
+    const { onChange, query, onRunQuery } = this.props;
+    onChange({ ...query, protobufSchemaSource: value });
+    onRunQuery();
+  };
+
   onAvroSchemaChanged = (event: ChangeEvent<HTMLTextAreaElement>) => {
     const { onChange, query, onRunQuery } = this.props;
     const newSchema = event.target.value;
@@ -389,11 +414,25 @@ class QueryEditorInner extends PureComponent<QueryEditorInnerProps, State> {
     onRunQuery();
 
     // Validate the schema after a short delay
-    if (this.schemaValidationTimeout) {
-      clearTimeout(this.schemaValidationTimeout);
+    if (this.avroSchemaValidationTimeout) {
+      clearTimeout(this.avroSchemaValidationTimeout);
     }
-    this.schemaValidationTimeout = setTimeout(() => {
+    this.avroSchemaValidationTimeout = setTimeout(() => {
       this.validateAvroSchema(newSchema);
+    }, 500);
+  };
+
+  onProtobufSchemaChanged = (event: ChangeEvent<HTMLTextAreaElement>) => {
+    const { onChange, query, onRunQuery } = this.props;
+    const newSchema = event.target.value;
+    onChange({ ...query, protobufSchema: newSchema });
+    onRunQuery();
+
+    if (this.protobufSchemaValidationTimeout) {
+      clearTimeout(this.protobufSchemaValidationTimeout);
+    }
+    this.protobufSchemaValidationTimeout = setTimeout(() => {
+      this.validateProtobufSchema(newSchema);
     }, 500);
   };
 
@@ -402,11 +441,11 @@ class QueryEditorInner extends PureComponent<QueryEditorInnerProps, State> {
     const file = event.target.files?.[0];
     if (file) {
       // store filename for UI feedback
-      this.setState({ selectedFileName: file.name });
+      this.setState({ selectedAvroFileName: file.name });
       // Validate file type
       if (!file.name.match(/\.(avsc|json)$/i)) {
         this.setState({
-          selectedFileName: undefined,
+          selectedAvroFileName: undefined,
           schemaValidation: { status: 'invalid', message: 'Please upload a .avsc or .json file' },
         });
         return;
@@ -414,7 +453,7 @@ class QueryEditorInner extends PureComponent<QueryEditorInnerProps, State> {
       // Validate file size (5MB limit)
       if (file.size > 5 * 1024 * 1024) {
         this.setState({
-          selectedFileName: undefined,
+          selectedAvroFileName: undefined,
           schemaValidation: { status: 'invalid', message: 'File size must be less than 5MB' },
         });
         return;
@@ -429,8 +468,44 @@ class QueryEditorInner extends PureComponent<QueryEditorInnerProps, State> {
       };
       reader.onerror = () => {
         this.setState({
-          selectedFileName: undefined,
+          selectedAvroFileName: undefined,
           schemaValidation: { status: 'invalid', message: 'Failed to read file' },
+        });
+      };
+      reader.readAsText(file);
+    }
+  };
+
+  onProtobufSchemaFileUpload = (event: ChangeEvent<HTMLInputElement>) => {
+    const { onChange, query, onRunQuery } = this.props;
+    const file = event.target.files?.[0];
+    if (file) {
+      this.setState({ selectedProtobufFileName: file.name });
+      if (!file.name.match(/\.(proto)$/i)) {
+        this.setState({
+          selectedProtobufFileName: undefined,
+          protobufSchemaValidation: { status: 'invalid', message: 'Please upload a .proto file' },
+        });
+        return;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        this.setState({
+          selectedProtobufFileName: undefined,
+          protobufSchemaValidation: { status: 'invalid', message: 'File size must be less than 5MB' },
+        });
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const schema = e.target?.result as string;
+        onChange({ ...query, protobufSchema: schema });
+        onRunQuery();
+        this.validateProtobufSchema(schema);
+      };
+      reader.onerror = () => {
+        this.setState({
+          selectedProtobufFileName: undefined,
+          protobufSchemaValidation: { status: 'invalid', message: 'Failed to read file' },
         });
       };
       reader.readAsText(file);
@@ -485,6 +560,36 @@ class QueryEditorInner extends PureComponent<QueryEditorInnerProps, State> {
         schemaRegistryValidation: {
           status: 'invalid',
           message: 'Failed to validate schema registry',
+        },
+      });
+    }
+  };
+
+  validateProtobufSchema = async (schema: string) => {
+    if (!schema.trim()) {
+      this.setState({
+        protobufSchemaValidation: { status: 'invalid', message: 'Schema cannot be empty' },
+      });
+      return;
+    }
+
+    this.setState({
+      protobufSchemaValidation: { status: 'loading' },
+    });
+
+    try {
+      const result = await this.props.datasource.validateProtobufSchema(schema);
+      this.setState({
+        protobufSchemaValidation: {
+          status: result.status === 'error' ? 'invalid' : 'valid',
+          message: result.message,
+        },
+      });
+    } catch (error) {
+      this.setState({
+        protobufSchemaValidation: {
+          status: 'invalid',
+          message: 'Failed to validate schema',
         },
       });
     }
@@ -665,7 +770,11 @@ class QueryEditorInner extends PureComponent<QueryEditorInnerProps, State> {
         </InlineFieldRow>
 
         <InlineFieldRow>
-          <InlineField label="Message Format" labelWidth={25} tooltip="Format of the Kafka messages (JSON or Avro)">
+          <InlineField
+            label="Message Format"
+            labelWidth={25}
+            tooltip="Format of the Kafka messages (JSON, Avro, or Protobuf)"
+          >
             <Select
               width={25}
               value={messageFormat || MessageFormat.JSON}
@@ -739,14 +848,14 @@ class QueryEditorInner extends PureComponent<QueryEditorInnerProps, State> {
                 >
                   <div className={this.props.styles.schemaValidationWrapper}>
                     <div className={this.props.styles.fileRow}>
-                      <Button variant="secondary" size="sm" onClick={() => this.fileInputRef?.current?.click()}>
+                      <Button variant="secondary" size="sm" onClick={() => this.avroFileInputRef?.current?.click()}>
                         Choose file
                       </Button>
                       <div className={this.props.styles.filenameText}>
-                        {this.state.selectedFileName || 'No file selected'}
+                        {this.state.selectedAvroFileName || 'No file selected'}
                       </div>
                       <input
-                        ref={this.fileInputRef}
+                        ref={this.avroFileInputRef}
                         type="file"
                         accept=".avsc,.json"
                         onChange={this.onAvroSchemaFileUpload}
@@ -773,6 +882,108 @@ class QueryEditorInner extends PureComponent<QueryEditorInnerProps, State> {
                             className={this.props.styles.validationLabel}
                           >
                             {this.state.schemaValidation.message}
+                          </InlineLabel>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </InlineField>
+              </InlineFieldRow>
+            )}
+          </>
+        )}
+
+        {/* Protobuf Configuration */}
+        {messageFormat === MessageFormat.PROTOBUF && (
+          <>
+            <InlineFieldRow>
+              <InlineField
+                label="Protobuf Schema Source"
+                labelWidth={25}
+                tooltip="Source of the Protobuf schema for deserialization"
+              >
+                <Select
+                  width={25}
+                  value={query.protobufSchemaSource || ProtobufSchemaSource.SCHEMA_REGISTRY}
+                  options={protobufSchemaSources}
+                  onChange={(value) => this.onProtobufSchemaSourceChanged(value.value as ProtobufSchemaSource)}
+                />
+              </InlineField>
+            </InlineFieldRow>
+
+            {query.protobufSchemaSource === ProtobufSchemaSource.SCHEMA_REGISTRY && (
+              <InlineFieldRow>
+                <InlineField label="Schema Registry" labelWidth={25}>
+                  <div className={this.props.styles.testConnectionContainer}>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={this.validateSchemaRegistry}
+                      disabled={this.state.schemaRegistryValidation?.status === 'loading'}
+                    >
+                      {this.state.schemaRegistryValidation?.status === 'loading' ? (
+                        <>
+                          <Spinner size={12} />
+                          Validating...
+                        </>
+                      ) : (
+                        'Test Connection'
+                      )}
+                    </Button>
+                    {this.state.schemaRegistryValidation && (
+                      <InlineLabel color={this.state.schemaRegistryValidation.status === 'valid' ? 'green' : 'red'}>
+                        {this.state.schemaRegistryValidation.message}
+                      </InlineLabel>
+                    )}
+                  </div>
+                </InlineField>
+              </InlineFieldRow>
+            )}
+
+            {query.protobufSchemaSource === ProtobufSchemaSource.INLINE_SCHEMA && (
+              <InlineFieldRow>
+                <InlineField
+                  label="Protobuf Schema"
+                  labelWidth={20}
+                  tooltip="Upload or paste your Protobuf schema (.proto file)"
+                  style={{ minWidth: 400 }}
+                >
+                  <div className={this.props.styles.schemaValidationWrapper}>
+                    <div className={this.props.styles.fileRow}>
+                      <Button variant="secondary" size="sm" onClick={() => this.protobufFileInputRef?.current?.click()}>
+                        Choose file
+                      </Button>
+                      <div className={this.props.styles.filenameText}>
+                        {this.state.selectedProtobufFileName || 'No file selected'}
+                      </div>
+                      <input
+                        ref={this.protobufFileInputRef}
+                        type="file"
+                        accept=".proto"
+                        onChange={this.onProtobufSchemaFileUpload}
+                        className={this.props.styles.hiddenFileInput}
+                      />
+                    </div>
+                    <textarea
+                      value={query.protobufSchema || ''}
+                      onChange={this.onProtobufSchemaChanged}
+                      placeholder="Paste your Protobuf schema here..."
+                      rows={8}
+                      className={this.props.styles.textArea}
+                    />
+                    {this.state.protobufSchemaValidation && (
+                      <div className={this.props.styles.validationMessage}>
+                        {this.state.protobufSchemaValidation.status === 'loading' ? (
+                          <div className={this.props.styles.validationLoading}>
+                            <Spinner size={12} />
+                            <span className={this.props.styles.validationText}>Validating schema...</span>
+                          </div>
+                        ) : (
+                          <InlineLabel
+                            color={this.state.protobufSchemaValidation.status === 'valid' ? 'green' : 'red'}
+                            className={this.props.styles.validationLabel}
+                          >
+                            {this.state.protobufSchemaValidation.message}
                           </InlineLabel>
                         )}
                       </div>

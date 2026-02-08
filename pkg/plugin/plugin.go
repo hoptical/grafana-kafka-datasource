@@ -56,7 +56,7 @@ type KafkaClientAPI interface {
 	GetSchemaRegistryUrl() string
 	GetSchemaRegistryUsername() string
 	GetSchemaRegistryPassword() string
-	GetAvroSubjectNamingStrategy() string
+	GetSubjectNamingStrategy() string
 	GetHTTPClient() *http.Client
 }
 
@@ -211,6 +211,9 @@ type queryModel struct {
 	MessageFormat    string `json:"messageFormat"`
 	AvroSchemaSource string `json:"avroSchemaSource"`
 	AvroSchema       string `json:"avroSchema"`
+	// Protobuf Configuration
+	ProtobufSchemaSource string `json:"protobufSchemaSource"`
+	ProtobufSchema       string `json:"protobufSchema"`
 	// Metadata
 	RefID string `json:"refId"`
 	Alias string `json:"alias"`
@@ -250,6 +253,9 @@ func (d *KafkaDatasource) CallResource(ctx context.Context, req *backend.CallRes
 	}
 	if req.Path == "validate-avro-schema" && req.Method == "POST" {
 		return d.handleValidateAvroSchema(ctx, req, sender)
+	}
+	if req.Path == "validate-protobuf-schema" && req.Method == "POST" {
+		return d.handleValidateProtobufSchema(ctx, req, sender)
 	}
 	return sendJSON(sender, 404, map[string]string{"error": "Not found"})
 }
@@ -358,6 +364,31 @@ func (d *KafkaDatasource) handleValidateAvroSchema(ctx context.Context, req *bac
 	}
 
 	result, err := d.ValidateAvroSchema(requestBody.Schema)
+	if err != nil {
+		return sendJSON(sender, 500, map[string]string{"error": err.Error()})
+	}
+
+	status := 200
+	if result.Status == backend.HealthStatusError {
+		status = 400
+	}
+
+	return sendJSON(sender, status, map[string]interface{}{
+		"status":  result.Status,
+		"message": result.Message,
+	})
+}
+
+func (d *KafkaDatasource) handleValidateProtobufSchema(ctx context.Context, req *backend.CallResourceRequest, sender backend.CallResourceResponseSender) error {
+	var requestBody struct {
+		Schema string `json:"schema"`
+	}
+
+	if err := json.Unmarshal(req.Body, &requestBody); err != nil {
+		return sendJSON(sender, 400, map[string]string{"error": "Invalid JSON in request body"})
+	}
+
+	result, err := d.ValidateProtobufSchema(requestBody.Schema)
 	if err != nil {
 		return sendJSON(sender, 500, map[string]string{"error": err.Error()})
 	}
@@ -493,6 +524,28 @@ func (d *KafkaDatasource) ValidateAvroSchema(schema string) (*backend.CheckHealt
 	}, nil
 }
 
+// ValidateProtobufSchema validates a Protobuf schema string
+func (d *KafkaDatasource) ValidateProtobufSchema(schema string) (*backend.CheckHealthResult, error) {
+	if strings.TrimSpace(schema) == "" {
+		return &backend.CheckHealthResult{
+			Status:  backend.HealthStatusError,
+			Message: "Schema cannot be empty",
+		}, nil
+	}
+
+	if _, err := kafka_client.ParseProtobufSchema(schema); err != nil {
+		return &backend.CheckHealthResult{
+			Status:  backend.HealthStatusError,
+			Message: fmt.Sprintf("Invalid Protobuf schema: %s", err.Error()),
+		}, nil
+	}
+
+	return &backend.CheckHealthResult{
+		Status:  backend.HealthStatusOk,
+		Message: "Schema is valid",
+	}, nil
+}
+
 // isSubjectNotFoundError checks if the error indicates a subject not found (404)
 func isSubjectNotFoundError(err error) bool {
 	if err == nil {
@@ -578,6 +631,8 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 		"messageFormat", qm.MessageFormat,
 		"avroSchemaSource", qm.AvroSchemaSource,
 		"avroSchemaLength", len(qm.AvroSchema),
+		"protobufSchemaSource", qm.ProtobufSchemaSource,
+		"protobufSchemaLength", len(qm.ProtobufSchema),
 		"autoOffsetReset", qm.AutoOffsetReset,
 		"timestampMode", qm.TimestampMode)
 
@@ -598,14 +653,16 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 
 	// Create new stream configuration
 	streamConfig := &StreamConfig{
-		MessageFormat:    qm.MessageFormat,
-		AvroSchemaSource: qm.AvroSchemaSource,
-		AvroSchema:       qm.AvroSchema,
-		AutoOffsetReset:  qm.AutoOffsetReset,
-		TimestampMode:    qm.TimestampMode,
-		LastN:            qm.LastN, // Added LastN to stream config
-		RefID:            qm.RefID,
-		Alias:            qm.Alias,
+		MessageFormat:        qm.MessageFormat,
+		AvroSchemaSource:     qm.AvroSchemaSource,
+		AvroSchema:           qm.AvroSchema,
+		ProtobufSchemaSource: qm.ProtobufSchemaSource,
+		ProtobufSchema:       qm.ProtobufSchema,
+		AutoOffsetReset:      qm.AutoOffsetReset,
+		TimestampMode:        qm.TimestampMode,
+		LastN:                qm.LastN, // Added LastN to stream config
+		RefID:                qm.RefID,
+		Alias:                qm.Alias,
 	}
 
 	// Set default values if not provided
@@ -614,6 +671,9 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 	}
 	if streamConfig.AvroSchemaSource == "" {
 		streamConfig.AvroSchemaSource = "schemaRegistry"
+	}
+	if streamConfig.ProtobufSchemaSource == "" {
+		streamConfig.ProtobufSchemaSource = "schemaRegistry"
 	}
 	if streamConfig.AutoOffsetReset == "" {
 		streamConfig.AutoOffsetReset = "latest"

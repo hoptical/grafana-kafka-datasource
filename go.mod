@@ -5,9 +5,11 @@ go 1.24.6
 toolchain go1.24.10
 
 require (
+	github.com/bufbuild/protocompile v0.14.1
 	github.com/grafana/grafana-plugin-sdk-go v0.284.0
 	github.com/linkedin/goavro/v2 v2.14.0
 	github.com/segmentio/kafka-go v0.4.47
+	google.golang.org/protobuf v1.36.11
 )
 
 require (
@@ -91,6 +93,5 @@ require (
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
 	google.golang.org/genproto v0.0.0-20220503193339-ba3ae3f07e29 // indirect
 	google.golang.org/grpc v1.76.0 // indirect
-	google.golang.org/protobuf v1.36.10 // indirect
 	gopkg.in/fsnotify/fsnotify.v1 v1.4.7 // indirect
 )
