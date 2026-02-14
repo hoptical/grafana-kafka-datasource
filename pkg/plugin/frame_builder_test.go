@@ -287,6 +287,7 @@ func TestNewFieldBuilder(t *testing.T) {
 	fb := NewFieldBuilder()
 	if fb == nil {
 		t.Fatal("NewFieldBuilder should return a non-nil FieldBuilder")
+		return
 	}
 	if fb.typeRegistry == nil {
 		t.Error("NewFieldBuilder should initialize typeRegistry")

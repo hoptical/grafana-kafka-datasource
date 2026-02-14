@@ -201,7 +201,7 @@ If you encounter issues with complex Protobuf schemas, open an issue so we can p
 
 ## Sample Data Generator
 
-Want to test the plugin with realistic Kafka messages? Use the included sample producers to generate JSON, Avro, or Protobuf messages with various structures and schema configurations. For detailed usage, see the [example README](./example/README.md). The producers support flexible options for message format, structure, intervals, and schema registry integration.
+Want to test the plugin with realistic Kafka messages? Use the included sample producers to generate JSON, Avro, or Protobuf messages with various structures and schema configurations. For detailed usage, see the [example README](https://github.com/hoptical/grafana-kafka-datasource/blob/fix/security-issues/example/README.md). The producers support flexible options for message format, structure, intervals, and schema registry integration.
 
 ## FAQ & Troubleshooting
 
