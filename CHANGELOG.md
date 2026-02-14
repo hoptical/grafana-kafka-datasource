@@ -1,5 +1,14 @@
 # Changelog
 
+## [v1.4.0](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.4.0)
+
+[Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v1.3.0...v1.4.0)
+
+- Feat: add **Protobuf** Support ([#128](https://github.com/hoptical/grafana-kafka-datasource/pull/128))
+- Chore: bump @grafana/create-plugin configuration to 6.8.4 ([#129](https://github.com/hoptical/grafana-kafka-datasource/pull/129))
+- Feat: improve backend tests to increase coverage and reliability ([#130](https://github.com/hoptical/grafana-kafka-datasource/pull/130))
+- Feat: update backend and frontend packages to fix security vulnerabilities ([#130](https://github.com/hoptical/grafana-kafka-datasource/pull/130))
+
 ## [v1.3.0](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.3.0)
 
 [Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v1.2.3...v1.3.0)
