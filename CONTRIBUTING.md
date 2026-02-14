@@ -35,7 +35,7 @@ Recommended workflow:
 ### Prerequisites
 
 - Node.js >= 22
-- Go >= 1.24.6
+- Go >= 1.25.6
 - Mage >= 1.15.0 (for backend builds)
 - Docker (for running Grafana/Kafka locally)
 - Python 3 (for `pre-commit` hooks)
