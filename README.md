@@ -43,6 +43,7 @@ This plugin connects your Grafana instance directly to Kafka brokers, allowing y
 - Advanced JSON support (flat, nested, arrays, mixed types)
 - Avro support with Schema Registry integration (inline schema or Schema Registry)
 - Protobuf support with Schema Registry integration (inline schema or Schema Registry)
+- Message key support (None, String, JSON formats)
 - Configurable flattening depth (default: 5)
 - Configurable max fields per message (default: 1000)
 - Customizable query aliases with placeholders
@@ -96,6 +97,10 @@ You can automatically configure the Kafka datasource using Grafana's provisionin
      - `{{field}}`: The field name (for field display names)
      - `{{partition}}`: The partition number
      - `{{refid}}`: The query RefID (e.g., A, B)
+   - **Key Format**: Choose how to process Kafka message keys:
+     - `None`: Ignore keys (default, backward compatible)
+     - `String`: Single "key" column with UTF-8 decoded key
+     - `JSON`: Flatten JSON keys with "key." prefix (e.g., key.userId, key.region)
 
 **Tip:** Numeric fields become time series, string fields are labels, arrays and nested objects are automatically flattened for visualization.
 

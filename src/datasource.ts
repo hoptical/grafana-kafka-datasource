@@ -95,6 +95,8 @@ export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourc
         segments.push(encodeURIComponent(String(interpolatedQuery.messageFormat || 'json')));
         segments.push(encodeURIComponent(String(interpolatedQuery.avroSchemaSource || 'schemaRegistry')));
         segments.push(encodeURIComponent(String(interpolatedQuery.protobufSchemaSource || 'schemaRegistry')));
+        // Include key format so changes trigger a new path/subscription
+        segments.push(encodeURIComponent(String(interpolatedQuery.keyFormat || 'none')));
         // Include timestamp mode so changes to timestamp handling trigger a new path/subscription
         segments.push(encodeURIComponent(String(interpolatedQuery.timestampMode || 'message')));
         // Include a hash of the Avro schema to detect changes

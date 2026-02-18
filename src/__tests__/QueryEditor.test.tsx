@@ -427,7 +427,7 @@ describe('QueryEditor', () => {
 
   it('renders Avro schema source select with Schema Registry as default', () => {
     renderEditor({ messageFormat: MessageFormat.AVRO });
-    const avroSourceSelect = screen.getAllByTestId('select')[4] as HTMLSelectElement; // Fifth select is avro source
+    const avroSourceSelect = screen.getAllByTestId('select')[5] as HTMLSelectElement; // Sixth select is avro source (after Key Format)
 
     expect(avroSourceSelect).toBeInTheDocument();
     expect(avroSourceSelect.value).toBe(AvroSchemaSource.SCHEMA_REGISTRY);
@@ -435,7 +435,7 @@ describe('QueryEditor', () => {
 
   it('renders Protobuf schema source select with Schema Registry as default', () => {
     renderEditor({ messageFormat: MessageFormat.PROTOBUF });
-    const protoSourceSelect = screen.getAllByTestId('select')[4] as HTMLSelectElement; // Fifth select is protobuf source
+    const protoSourceSelect = screen.getAllByTestId('select')[5] as HTMLSelectElement; // Sixth select is protobuf source (after Key Format)
 
     expect(protoSourceSelect).toBeInTheDocument();
     expect(protoSourceSelect.value).toBe(ProtobufSchemaSource.SCHEMA_REGISTRY);
@@ -443,7 +443,7 @@ describe('QueryEditor', () => {
 
   it('calls onChange and onRunQuery when Avro schema source changes', () => {
     renderEditor({ messageFormat: MessageFormat.AVRO, avroSchemaSource: AvroSchemaSource.SCHEMA_REGISTRY });
-    const avroSourceSelect = screen.getAllByTestId('select')[4];
+    const avroSourceSelect = screen.getAllByTestId('select')[5]; // Sixth select (after Key Format)
 
     fireEvent.change(avroSourceSelect, { target: { value: AvroSchemaSource.INLINE_SCHEMA } });
 

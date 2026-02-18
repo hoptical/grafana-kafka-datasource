@@ -252,3 +252,86 @@ func TestToUint64(t *testing.T) {
 		})
 	}
 }
+
+func TestFlattenJSONWithKeyPrefix(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    interface{}
+		prefix   string
+		expected map[string]interface{}
+	}{
+		{
+			name: "simple key prefix",
+			input: map[string]interface{}{
+				"userId": "123",
+				"region": "us-east",
+			},
+			prefix: "key",
+			expected: map[string]interface{}{
+				"key.userId": "123",
+				"key.region": "us-east",
+			},
+		},
+		{
+			name: "nested object with key prefix",
+			input: map[string]interface{}{
+				"user": map[string]interface{}{
+					"id":   123,
+					"name": "Alice",
+				},
+			},
+			prefix: "key",
+			expected: map[string]interface{}{
+				"key.user.id":   123,
+				"key.user.name": "Alice",
+			},
+		},
+		{
+			name: "multiple levels with key prefix",
+			input: map[string]interface{}{
+				"order": map[string]interface{}{
+					"customer": map[string]interface{}{
+						"id":   "cust-123",
+						"type": "premium",
+					},
+					"total": 99.99,
+				},
+			},
+			prefix: "key",
+			expected: map[string]interface{}{
+				"key.order.customer.id":   "cust-123",
+				"key.order.customer.type": "premium",
+				"key.order.total":         99.99,
+			},
+		},
+		{
+			name: "array with key prefix",
+			input: map[string]interface{}{
+				"tags": []interface{}{"prod", "web"},
+			},
+			prefix: "key",
+			expected: map[string]interface{}{
+				"key.tags": `["prod","web"]`,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := make(map[string]interface{})
+			FlattenJSON(tt.prefix, tt.input, result, 0, 5, 1000)
+
+			if len(result) != len(tt.expected) {
+				t.Errorf("Expected %d fields, got %d", len(tt.expected), len(result))
+			}
+
+			for key, expectedValue := range tt.expected {
+				if actualValue, exists := result[key]; !exists {
+					t.Errorf("Missing key: %s", key)
+				} else if actualValue != expectedValue {
+					t.Errorf("Key %s: expected %v, got %v", key, expectedValue, actualValue)
+				}
+			}
+		})
+	}
+}

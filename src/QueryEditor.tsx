@@ -23,6 +23,7 @@ import {
   AvroSchemaSource,
   ProtobufSchemaSource,
   MessageFormat,
+  KeyFormat,
 } from './types';
 
 // Constants for Last N messages input
@@ -55,6 +56,12 @@ const messageFormats: Array<{ label: string; value: MessageFormat }> = [
   { label: 'JSON', value: MessageFormat.JSON },
   { label: 'Avro', value: MessageFormat.AVRO },
   { label: 'Protobuf', value: MessageFormat.PROTOBUF },
+];
+
+const keyFormats: Array<{ label: string; value: KeyFormat }> = [
+  { label: 'None', value: KeyFormat.NONE },
+  { label: 'String', value: KeyFormat.STRING },
+  { label: 'JSON', value: KeyFormat.JSON },
 ];
 
 const partitionOptions: Array<{ label: string; value: number | 'all' }> = [{ label: 'All partitions', value: 'all' }];
@@ -604,6 +611,13 @@ class QueryEditorInner extends PureComponent<QueryEditorInnerProps, State> {
     onRunQuery();
   };
 
+  onKeyFormatChanged = (value: KeyFormat) => {
+    const { onChange, query, onRunQuery } = this.props;
+    onChange({ ...query, keyFormat: value });
+    this.debouncedRunQuery.cancel();
+    onRunQuery();
+  };
+
   onTopicSuggestionClick = (topic: string) => {
     const { onChange, query, onRunQuery } = this.props;
     onChange({ ...query, topicName: topic });
@@ -788,6 +802,21 @@ class QueryEditorInner extends PureComponent<QueryEditorInnerProps, State> {
             tooltip="Custom alias for the query series. Supports placeholders: {{topic}}, {{partition}}, {{refid}}, {{field}}"
           >
             <Input width={25} value={query.alias || ''} onChange={this.onAliasChange} placeholder="Optional alias" />
+          </InlineField>
+        </InlineFieldRow>
+
+        <InlineFieldRow>
+          <InlineField
+            label="Key Format"
+            labelWidth={25}
+            tooltip="Format of Kafka message keys. None = ignore keys (default), String = single 'key' column, JSON = flatten key fields with 'key.' prefix"
+          >
+            <Select
+              width={25}
+              value={query.keyFormat || KeyFormat.NONE}
+              options={keyFormats}
+              onChange={(value) => this.onKeyFormatChanged(value.value as KeyFormat)}
+            />
           </InlineField>
         </InlineFieldRow>
 

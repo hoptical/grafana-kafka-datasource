@@ -93,7 +93,8 @@ type StreamConfig struct {
 	ProtobufSchema       string
 	AutoOffsetReset      string
 	TimestampMode        string
-	LastN                int32 // Added to track lastN changes
+	LastN                int32  // Added to track lastN changes
+	KeyFormat            string // "none", "string", or "json"
 	RefID                string
 	Alias                string
 }
@@ -268,6 +269,37 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 	offsetField.Set(0, msg.Offset)
 	fields = append(fields, offsetField)
 
+	//Decode and process message key if configured
+	keyFormat := config.KeyFormat
+	if keyFormat == "" {
+		keyFormat = "none" // Default for backward compatibility
+	}
+
+	decodedKey, shouldAddKey, err := decodeMessageKey(msg.RawKey, keyFormat)
+	if err != nil {
+		log.DefaultLogger.Error("Error decoding message key",
+			"keyFormat", keyFormat,
+			"error", err)
+	}
+
+	var keyFields map[string]interface{}
+	if shouldAddKey && decodedKey != nil {
+		keyFields = make(map[string]interface{})
+
+		switch keyFormat {
+		case "string":
+			// Single "key" field
+			keyFields["key"] = decodedKey
+		case "json":
+			// Flatten JSON key with "key." prefix
+			FlattenJSON("key", decodedKey, keyFields, 0, flattenMaxDepth, flattenFieldCap)
+			log.DefaultLogger.Debug("Flattened JSON key",
+				"partition", partition,
+				"offset", msg.Offset,
+				"keyFieldCount", len(keyFields))
+		}
+	}
+
 	// Unwrap Avro union types before flattening (for Avro messages)
 	// This must happen BEFORE flattening to avoid creating keys like "value1.double"
 	isAvro := config.MessageFormat == "avro"
@@ -300,19 +332,44 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 	}
 	sort.Strings(keys)
 
+	// Combine key fields and value fields
+	var allKeys []string
+	if len(keyFields) > 0 {
+		allKeys = make([]string, 0, len(keyFields)+len(keys))
+		// Add key fields first (sorted)
+		keyFieldNames := make([]string, 0, len(keyFields))
+		for k := range keyFields {
+			keyFieldNames = append(keyFieldNames, k)
+		}
+		sort.Strings(keyFieldNames)
+		allKeys = append(allKeys, keyFieldNames...)
+		// Add value fields after
+		allKeys = append(allKeys, keys...)
+	} else {
+		allKeys = keys // No key fields, use value fields only
+	}
+
 	// Pre-allocate fields slice
 	msgFieldStart := len(fields)
-	totalFields := len(fields) + len(keys)
+	totalFields := len(fields) + len(allKeys)
 	frame.Fields = make([]*data.Field, totalFields)
 	copy(frame.Fields, fields)
 
 	// Use the passed-in fieldBuilder to maintain type registry across messages
 	// This is critical for proper null value handling in Avro/Protobuf messages
 
-	// Add message fields by direct assignment
-	for i, key := range keys {
-		value := flat[key]
+	// Add all fields (key fields first, then value fields)
+	for i, key := range allKeys {
 		fieldIdx := msgFieldStart + i
+
+		// Check if this is a key field or value field
+		var value interface{}
+		if v, isKeyField := keyFields[key]; isKeyField {
+			value = v
+		} else {
+			value = flat[key]
+		}
+
 		fieldBuilder.AddValueToFrame(frame, key, value, fieldIdx)
 	}
 
@@ -507,6 +564,57 @@ func decodeProtobufMessage(sm *StreamManager, client KafkaClientAPI, data []byte
 	}
 
 	return decoded, nil
+}
+
+// decodeMessageKey decodes the message key based on the specified format.
+// Returns (decodedKey, shouldAddToFrame, error)
+func decodeMessageKey(rawKey []byte, keyFormat string) (interface{}, bool, error) {
+	if len(rawKey) == 0 {
+		// No key present
+		if keyFormat == "string" {
+			return "", true, nil // Empty string for consistency
+		}
+		return nil, false, nil
+	}
+
+	switch keyFormat {
+	case "string":
+		// Decode as UTF-8 string
+		return string(rawKey), true, nil
+
+	case "json":
+		// Attempt to parse as JSON
+		var v interface{}
+		dec := json.NewDecoder(bytes.NewReader(rawKey))
+		dec.UseNumber() // Preserve numeric precision
+		if err := dec.Decode(&v); err != nil {
+			// Log warning but don't fail the message
+			previewLen := 50
+			if len(rawKey) < previewLen {
+				previewLen = len(rawKey)
+			}
+			log.DefaultLogger.Warn("Failed to parse key as JSON, skipping key fields",
+				"error", err,
+				"keyLength", len(rawKey),
+				"keyPreview", string(rawKey[:previewLen]))
+			return nil, false, nil // Skip key, don't fail message
+		}
+
+		// Validate JSON is object (not array or primitive)
+		if _, ok := v.(map[string]interface{}); !ok {
+			log.DefaultLogger.Warn("JSON key is not an object, skipping key fields",
+				"keyType", fmt.Sprintf("%T", v),
+				"keyValue", fmt.Sprintf("%v", v))
+			return nil, false, nil
+		}
+
+		return v, true, nil
+
+	case "none":
+		fallthrough
+	default:
+		return nil, false, nil
+	}
 }
 
 // getProtobufSchemaByID retrieves a Protobuf schema by ID from Schema Registry
@@ -778,6 +886,37 @@ func (sm *StreamManager) ProcessMessage(
 	offsetField.Set(0, msg.Offset)
 	fields = append(fields, offsetField)
 
+	//Decode and process message key if configured
+	keyFormat := config.KeyFormat
+	if keyFormat == "" {
+		keyFormat = "none" // Default for backward compatibility
+	}
+
+	decodedKey, shouldAddKey, err := decodeMessageKey(msg.RawKey, keyFormat)
+	if err != nil {
+		log.DefaultLogger.Error("Error decoding message key",
+			"keyFormat", keyFormat,
+			"error", err)
+	}
+
+	var keyFields map[string]interface{}
+	if shouldAddKey && decodedKey != nil {
+		keyFields = make(map[string]interface{})
+
+		switch keyFormat {
+		case "string":
+			// Single "key" field
+			keyFields["key"] = decodedKey
+		case "json":
+			// Flatten JSON key with "key." prefix
+			FlattenJSON("key", decodedKey, keyFields, 0, sm.flattenMaxDepth, sm.flattenFieldCap)
+			log.DefaultLogger.Debug("Flattened JSON key",
+				"partition", partition,
+				"offset", msg.Offset,
+				"keyFieldCount", len(keyFields))
+		}
+	}
+
 	// Unwrap Avro union types before flattening (for Avro messages)
 	// This must happen BEFORE flattening to avoid creating keys like "value1.double"
 	isAvro := config.MessageFormat == "avro"
@@ -809,16 +948,41 @@ func (sm *StreamManager) ProcessMessage(
 	}
 	sort.Strings(keys)
 
+	// Combine key fields and value fields
+	var allKeys []string
+	if len(keyFields) > 0 {
+		allKeys = make([]string, 0, len(keyFields)+len(keys))
+		// Add key fields first (sorted)
+		keyFieldNames := make([]string, 0, len(keyFields))
+		for k := range keyFields {
+			keyFieldNames = append(keyFieldNames, k)
+		}
+		sort.Strings(keyFieldNames)
+		allKeys = append(allKeys, keyFieldNames...)
+		// Add value fields after
+		allKeys = append(allKeys, keys...)
+	} else {
+		allKeys = keys // No key fields, use value fields only
+	}
+
 	// Pre-allocate fields slice
 	msgFieldStart := len(fields)
-	totalFields := len(fields) + len(keys)
+	totalFields := len(fields) + len(allKeys)
 	frame.Fields = make([]*data.Field, totalFields)
 	copy(frame.Fields, fields)
 
-	// Add message fields by direct assignment
-	for i, key := range keys {
-		value := flat[key]
+	// Add all fields (key fields first, then value fields)
+	for i, key := range allKeys {
 		fieldIdx := msgFieldStart + i
+
+		// Check if this is a key field or value field
+		var value interface{}
+		if v, isKeyField := keyFields[key]; isKeyField {
+			value = v
+		} else {
+			value = flat[key]
+		}
+
 		sm.fieldBuilder.AddValueToFrame(frame, key, value, fieldIdx)
 	}
 
