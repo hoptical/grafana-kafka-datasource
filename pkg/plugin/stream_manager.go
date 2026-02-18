@@ -3,6 +3,7 @@ package plugin
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -562,7 +563,7 @@ func buildKeyFields(rawKey []byte, keyFormat string, flattenMaxDepth, flattenFie
 	}
 	keyFields := make(map[string]interface{})
 	switch keyFormat {
-	case "string":
+	case "string", "base64":
 		keyFields["key"] = decodedKey
 	case "json":
 		FlattenJSON("key", decodedKey, keyFields, 0, flattenMaxDepth, flattenFieldCap)
@@ -576,7 +577,7 @@ func buildKeyFields(rawKey []byte, keyFormat string, flattenMaxDepth, flattenFie
 func decodeMessageKey(rawKey []byte, keyFormat string) (interface{}, bool, error) {
 	if len(rawKey) == 0 {
 		// No key present
-		if keyFormat == "string" {
+		if keyFormat == "string" || keyFormat == "base64" {
 			return "", true, nil // Empty string for consistency
 		}
 		return nil, false, nil
@@ -586,6 +587,10 @@ func decodeMessageKey(rawKey []byte, keyFormat string) (interface{}, bool, error
 	case "string":
 		// Decode as UTF-8 string
 		return string(rawKey), true, nil
+
+	case "base64":
+		// Encode raw bytes as standard base64 string
+		return base64.StdEncoding.EncodeToString(rawKey), true, nil
 
 	case "json":
 		// Attempt to parse as JSON

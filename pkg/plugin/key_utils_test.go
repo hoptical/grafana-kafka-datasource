@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"encoding/base64"
 	"testing"
 )
 
@@ -259,6 +260,91 @@ func TestDecodeMessageKeyEdgeCases(t *testing.T) {
 
 			if tt.shouldAdd && result == nil {
 				t.Error("decodeMessageKey() result is nil but shouldAdd is true")
+			}
+		})
+	}
+}
+
+func TestDecodeMessageKeyBase64(t *testing.T) {
+	tests := []struct {
+		name      string
+		rawKey    []byte
+		expected  string
+		shouldAdd bool
+		wantErr   bool
+	}{
+		{
+			name:      "binary bytes encode correctly",
+			rawKey:    []byte{0x00, 0x01, 0x02},
+			expected:  "AAEC",
+			shouldAdd: true,
+			wantErr:   false,
+		},
+		{
+			name:      "empty key returns empty string",
+			rawKey:    []byte{},
+			expected:  "",
+			shouldAdd: true,
+			wantErr:   false,
+		},
+		{
+			name:      "single byte",
+			rawKey:    []byte{0xFF},
+			expected:  "/w==",
+			shouldAdd: true,
+			wantErr:   false,
+		},
+		{
+			name:      "all-zero bytes",
+			rawKey:    []byte{0x00, 0x00, 0x00, 0x00},
+			expected:  "AAAAAA==",
+			shouldAdd: true,
+			wantErr:   false,
+		},
+		{
+			name:      "utf8 string round-trips via base64",
+			rawKey:    []byte("hello"),
+			expected:  base64.StdEncoding.EncodeToString([]byte("hello")),
+			shouldAdd: true,
+			wantErr:   false,
+		},
+		{
+			name:      "arbitrary binary data",
+			rawKey:    []byte{0xDE, 0xAD, 0xBE, 0xEF},
+			expected:  base64.StdEncoding.EncodeToString([]byte{0xDE, 0xAD, 0xBE, 0xEF}),
+			shouldAdd: true,
+			wantErr:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, shouldAdd, err := decodeMessageKey(tt.rawKey, "base64")
+			if (err != nil) != tt.wantErr {
+				t.Errorf("decodeMessageKey() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if shouldAdd != tt.shouldAdd {
+				t.Errorf("decodeMessageKey() shouldAdd = %v, want %v", shouldAdd, tt.shouldAdd)
+			}
+			got, ok := result.(string)
+			if !ok && tt.shouldAdd {
+				t.Errorf("decodeMessageKey() result type = %T, want string", result)
+				return
+			}
+			if got != tt.expected {
+				t.Errorf("decodeMessageKey() result = %q, want %q", got, tt.expected)
+			}
+			// Round-trip check: decode base64 back to original bytes
+			if tt.shouldAdd && len(tt.rawKey) > 0 {
+				decoded, err := base64.StdEncoding.DecodeString(got)
+				if err != nil {
+					t.Errorf("base64 result is not valid base64: %v", err)
+					return
+				}
+				if string(decoded) != string(tt.rawKey) {
+					t.Errorf("round-trip mismatch: decoded %v, want %v", decoded, tt.rawKey)
+				}
 			}
 		})
 	}

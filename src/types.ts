@@ -103,6 +103,7 @@ export enum KeyFormat {
   NONE = 'none',
   STRING = 'string',
   JSON = 'json',
+  BASE64 = 'base64',
 }
 
 export interface KafkaQuery extends DataQuery {

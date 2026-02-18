@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -79,7 +80,7 @@ func main() {
 	schemaRegistryURL := flag.String("schema-registry", "", "Schema registry URL (for Avro/Protobuf with schema registry)")
 	schemaRegistryUser := flag.String("schema-registry-user", "", "Schema registry username (optional)")
 	schemaRegistryPass := flag.String("schema-registry-pass", "", "Schema registry password (optional)")
-	keyFormat := flag.String("key-format", "string", "Message key format: none, string, or json")
+	keyFormat := flag.String("key-format", "string", "Message key format: none, string, json, or binary (raw bytes, displayed as base64 in Grafana)")
 	verbose := flag.Bool("verbose", false, "Enable verbose logging")
 	flag.Parse()
 
@@ -90,8 +91,8 @@ func main() {
 	}
 
 	// Validate key format
-	if *keyFormat != "none" && *keyFormat != "string" && *keyFormat != "json" {
-		fmt.Printf("Error: Invalid key-format %q. Valid options: none, string, json\n", *keyFormat)
+	if *keyFormat != "none" && *keyFormat != "string" && *keyFormat != "json" && *keyFormat != "binary" {
+		fmt.Printf("Error: Invalid key-format %q. Valid options: none, string, json, binary\n", *keyFormat)
 		os.Exit(1)
 	}
 
@@ -292,6 +293,12 @@ func main() {
 				fmt.Printf("Error encoding JSON key: %v\n", err)
 				continue
 			}
+		case "binary":
+			// Send raw 8-byte big-endian binary key (no pre-encoding).
+			// The plugin will base64-encode these bytes for display.
+			binKey := make([]byte, 8)
+			binary.BigEndian.PutUint64(binKey, uint64(counter))
+			msgKey = binKey
 		case "none":
 			msgKey = nil
 		}

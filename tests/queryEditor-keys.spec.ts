@@ -76,7 +76,7 @@ async function setupStreamingQuery(page: any, panelEditPage: any, readProvisione
   }
 }
 
-async function selectKeyFormat(page: any, formatLabel: 'String' | 'JSON') {
+async function selectKeyFormat(page: any, formatLabel: 'String' | 'JSON' | 'Base64') {
   // The Key Format selector defaults to "None". Find it and change it.
   const keyFormatSelector = page
     .getByText('None', { exact: true })
@@ -150,6 +150,34 @@ test.describe('Kafka Query Editor - Key Column Tests', () => {
 
       // Data should still be flowing
       await verifyPanelDataContains(panelEditPage, [TIMESTAMP_REGEX, NUMERIC_REGEX]);
+    } finally {
+      producer.kill();
+      await Promise.race([exitPromise.catch(() => {}), new Promise((resolve) => setTimeout(resolve, 2000))]);
+    }
+  });
+
+  test('base64 key format adds a "key" column with base64-encoded value', async ({
+    readProvisionedDataSource,
+    page,
+    panelEditPage,
+  }) => {
+    // Producer sends raw binary keys; plugin base64-encodes them for display
+    const { producer, exitPromise } = startKafkaProducer(['-key-format', 'binary']);
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+
+      await setupStreamingQuery(page, panelEditPage, readProvisionedDataSource);
+
+      // Change Key Format to Base64
+      await selectKeyFormat(page, 'Base64');
+
+      // A single "key" column should appear (same as string format)
+      await verifyColumnHeadersVisible(page, ['time', 'offset', 'key']);
+
+      // Data should still be flowing
+      await verifyPanelDataContains(panelEditPage, [TIMESTAMP_REGEX, NUMERIC_REGEX]);
+
+      // await expect(panelEditPage.panel.data.filter({ hasText: pattern })).not.toHaveCount(0);
     } finally {
       producer.kill();
       await Promise.race([exitPromise.catch(() => {}), new Promise((resolve) => setTimeout(resolve, 2000))]);

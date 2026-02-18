@@ -62,6 +62,7 @@ const keyFormats: Array<{ label: string; value: KeyFormat }> = [
   { label: 'None', value: KeyFormat.NONE },
   { label: 'String', value: KeyFormat.STRING },
   { label: 'JSON', value: KeyFormat.JSON },
+  { label: 'Base64', value: KeyFormat.BASE64 },
 ];
 
 const partitionOptions: Array<{ label: string; value: number | 'all' }> = [{ label: 'All partitions', value: 'all' }];

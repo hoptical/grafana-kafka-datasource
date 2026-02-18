@@ -8,6 +8,7 @@ import {
   MessageFormat,
   AvroSchemaSource,
   ProtobufSchemaSource,
+  KeyFormat,
   type KafkaQuery,
 } from '../types';
 import { deepFreeze } from '../test-utils/test-helpers';
@@ -485,5 +486,71 @@ describe('QueryEditor', () => {
       avroSchema: '{"type": "record", "name": "Test"}',
     });
     expect(onRunQuery).toHaveBeenCalled();
+  });
+
+  describe('Key Format', () => {
+    // Key Format is the 5th select (index 4) in the rendered editor
+    const getKeyFormatSelect = () => screen.getAllByTestId('select')[4] as HTMLSelectElement;
+
+    it('renders key format select with None as default', () => {
+      renderEditor();
+      const select = getKeyFormatSelect();
+      expect(select).toBeInTheDocument();
+      expect(select.value).toBe(KeyFormat.NONE);
+    });
+
+    it('contains all four key format options', () => {
+      renderEditor();
+      const select = getKeyFormatSelect();
+      const values = Array.from(select.options).map((o) => o.value);
+      expect(values).toContain(KeyFormat.NONE);
+      expect(values).toContain(KeyFormat.STRING);
+      expect(values).toContain(KeyFormat.JSON);
+      expect(values).toContain(KeyFormat.BASE64);
+    });
+
+    it('calls onChange and onRunQuery when key format changes to String', () => {
+      renderEditor();
+      fireEvent.change(getKeyFormatSelect(), { target: { value: KeyFormat.STRING } });
+      expect(onChange).toHaveBeenCalledWith({
+        refId: 'A',
+        ...defaultQuery,
+        keyFormat: KeyFormat.STRING,
+      });
+      expect(onRunQuery).toHaveBeenCalled();
+    });
+
+    it('calls onChange and onRunQuery when key format changes to JSON', () => {
+      renderEditor();
+      fireEvent.change(getKeyFormatSelect(), { target: { value: KeyFormat.JSON } });
+      expect(onChange).toHaveBeenCalledWith({
+        refId: 'A',
+        ...defaultQuery,
+        keyFormat: KeyFormat.JSON,
+      });
+      expect(onRunQuery).toHaveBeenCalled();
+    });
+
+    it('calls onChange and onRunQuery when key format changes to Base64', () => {
+      renderEditor();
+      fireEvent.change(getKeyFormatSelect(), { target: { value: KeyFormat.BASE64 } });
+      expect(onChange).toHaveBeenCalledWith({
+        refId: 'A',
+        ...defaultQuery,
+        keyFormat: KeyFormat.BASE64,
+      });
+      expect(onRunQuery).toHaveBeenCalled();
+    });
+
+    it('calls onChange and onRunQuery when key format changes back to None', () => {
+      renderEditor({ keyFormat: KeyFormat.STRING });
+      fireEvent.change(getKeyFormatSelect(), { target: { value: KeyFormat.NONE } });
+      expect(onChange).toHaveBeenCalledWith({
+        refId: 'A',
+        ...defaultQuery,
+        keyFormat: KeyFormat.NONE,
+      });
+      expect(onRunQuery).toHaveBeenCalled();
+    });
   });
 });

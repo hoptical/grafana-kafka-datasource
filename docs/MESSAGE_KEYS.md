@@ -2,11 +2,12 @@
 
 ## Overview
 
-This datasource supports three modes for processing Kafka message keys:
+This datasource supports four modes for processing Kafka message keys:
 
 1. **None** (default): Keys are ignored. This is the backward-compatible behavior.
 2. **String**: Keys are decoded as UTF-8 strings and added as a single "key" column.
 3. **JSON**: Keys are parsed as JSON objects and flattened with "key." prefix (e.g., key.userId, key.region).
+4. **Base64**: Raw key bytes are base64-encoded (standard encoding) and added as a single "key" column. Use this when keys are binary (e.g., numeric IDs, UUID bytes, hash digests).
 
 ## Configuration
 
@@ -17,6 +18,7 @@ In the Query Editor, select the **Key Format** dropdown:
 - **None**: Ignore message keys (default, backward compatible)
 - **String**: Decode as UTF-8 string
 - **JSON**: Parse and flatten as JSON
+- **Base64**: Encode raw binary bytes as a base64 string
 
 ### API
 
@@ -53,6 +55,16 @@ In the query JSON, add the `keyFormat` field:
   - Raw key: `{"userId": "123", "region": "us-east"}`
   - Result: `key.userId = "123"`, `key.region = "us-east"`
 
+### Base64 Keys
+
+- Raw key bytes encoded using standard base64 (`encoding/base64.StdEncoding`)
+- Added as single field named "key"
+- Null/missing keys: empty string `""`
+- Handles any binary data (non-UTF-8 bytes, numeric IDs, UUID bytes, hash digests)
+- Example:
+  - Raw key: `[0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07]` (8-byte big-endian counter)
+  - Result: `key = "AAAAAAAAAAc="`
+
 ### Field Ordering
 
 Key fields appear before message value fields in the data frame:
@@ -68,6 +80,7 @@ Key fields appear before message value fields in the data frame:
 - **Null/missing keys**: Handled gracefully per format (empty string or no fields)
 - **Invalid JSON keys**: Warning logged, key parsing skipped, message processing continues
 - **Non-object JSON**: Warning logged, key parsing skipped
+- **Base64 empty key**: Returns empty string `""` (consistent with String format)
 - **Key field name collides with value field name**: If a decoded key field has the same name as a flattened value field (e.g. `"key"` in string mode if the message value also contains a top-level `"key"` field, or `"key.region"` in JSON mode if the value flattens to a `"key.region"` field), the key field is dropped and a WARN is logged:
   ```
   Key field name conflicts with value field, skipping key field  field=<name>
@@ -101,6 +114,7 @@ Unit tests:
   - `TestDecodeMessageKeyString`: String key tests
   - `TestDecodeMessageKeyJSON`: JSON key tests (valid, invalid, edge cases)
   - `TestDecodeMessageKeyNone`: None format tests
+  - `TestDecodeMessageKeyBase64`: Base64 key tests (binary bytes, empty key, round-trip)
 - `pkg/plugin/json_utils_test.go`: JSON flattening with "key" prefix
   - `TestFlattenJSONWithKeyPrefix`: Tests key prefix functionality
 
@@ -108,6 +122,7 @@ Run tests:
 
 ```bash
 go test ./pkg/plugin/. -v -run="TestDecodeMessageKey"
+go test ./pkg/plugin/. -v -run="TestDecodeMessageKeyBase64"
 go test ./pkg/plugin/. -v -run="TestFlattenJSONWithKeyPrefix"
 ```
 
@@ -130,7 +145,7 @@ go test ./pkg/plugin/. -v -run="TestFlattenJSONWithKeyPrefix"
 
 **Types:**
 
-- `KeyFormat` enum (`src/types.ts`): NONE, STRING, JSON
+- `KeyFormat` enum (`src/types.ts`): NONE, STRING, JSON, BASE64
 - `KafkaQuery` interface (`src/types.ts`): Added `keyFormat` field
 - `defaultQuery` (`src/types.ts`): Defaults to `KeyFormat.NONE`
 
@@ -203,6 +218,29 @@ time             | offset | key.userId | key.region | total | items
 2024-01-15 10:00 | 2001   | 123        | us-east    | 99.99 | 3
 ```
 
+### Base64 Keys
+
+Query:
+
+```json
+{
+  "topicName": "binary-events",
+  "keyFormat": "base64"
+}
+```
+
+Kafka message:
+
+- Key: `[0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07]` (raw 8-byte binary counter)
+- Value: `{"event": "click", "count": 7}`
+
+Result Data Frame:
+
+```
+time             | offset | key          | count | event
+2024-01-15 10:00 | 4001   | AAAAAAAAAAc= | 7     | click
+```
+
 ### None (Default)
 
 Query:
@@ -229,9 +267,15 @@ time             | offset | level | message
 
 ### Keys not appearing
 
-- Check Key Format is set to "String" or "JSON" (not "None")
+- Check Key Format is set to "String", "JSON", or "Base64" (not "None")
 - Verify messages actually have keys (check with kafka-console-consumer)
 - Check browser console and Grafana logs for errors
+
+### Base64 key shows double-encoded output (e.g. `QUFB...`)
+
+- The producer is already base64-encoding keys before writing to Kafka; the plugin then encodes them again
+- If your producer sends string keys, use "String" format instead of "Base64"
+- "Base64" format is for producers that write raw binary bytes as the Kafka key
 
 ### JSON key parsing fails
 
