@@ -1,7 +1,12 @@
 import { test, expect } from '@grafana/plugin-e2e';
 import { ChildProcess, spawn } from 'child_process';
 import { accessSync, constants } from 'fs';
-import { verifyPanelDataContains, verifyColumnHeadersVisible, SINGLE_PARTITION_COLUMN_HEADERS } from './test-utils';
+import {
+  verifyPanelDataContains,
+  verifyColumnHeadersVisible,
+  setTableVisualization,
+  SINGLE_PARTITION_COLUMN_HEADERS,
+} from './test-utils';
 
 function startKafkaProducer(): { producer: ChildProcess; exitPromise: Promise<void> } {
   const producerPath = './dist/producer';
@@ -226,14 +231,7 @@ test.describe('Kafka Query Editor - JSON Tests', () => {
         .or(page.getByRole('option', { name: /^All partitions$/ }));
       await allPartitionsOption.first().click();
 
-      // Set visualization with minimal timeout to avoid page closure
-      try {
-        await panelEditPage.setVisualization('Table');
-      } catch (error) {
-        console.log('Visualization picker blocked by overlay, trying force click');
-        // Skip visualization setting if it causes issues - focus on data streaming
-        console.log('Skipping visualization setting to avoid timeout');
-      }
+      await setTableVisualization(panelEditPage);
 
       // Wait for the time column to appear first (this indicates data is flowing)
       await verifyColumnHeadersVisible(page);
@@ -271,12 +269,7 @@ test.describe('Kafka Query Editor - JSON Tests', () => {
       // Click the first test-topic option in the autocomplete dropdown (not the legend buttons that appear later)
       await page.getByText('test-topic').first().click();
 
-      // Set visualization to 'Table' (best-effort)
-      try {
-        await panelEditPage.setVisualization('Table');
-      } catch (error) {
-        console.log('Visualization picker blocked by overlay, skipping visualization setting');
-      }
+      await setTableVisualization(panelEditPage);
 
       // Wait for columns to be visible (data flowing)
       await verifyColumnHeadersVisible(page, [
@@ -447,14 +440,7 @@ test.describe('Kafka Query Editor - JSON Tests', () => {
       // Pick single partition 1
       await partition1Option.first().click();
 
-      // Set visualization with minimal timeout to avoid page closure
-      try {
-        await panelEditPage.setVisualization('Table');
-      } catch (error) {
-        console.log('Visualization picker blocked by overlay, trying force click');
-        // Skip visualization setting if it causes issues - focus on data streaming
-        console.log('Skipping visualization setting to avoid timeout');
-      }
+      await setTableVisualization(panelEditPage);
 
       // Wait for the time column to appear first (this indicates data is flowing)
       await verifyColumnHeadersVisible(page, SINGLE_PARTITION_COLUMN_HEADERS);

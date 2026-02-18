@@ -1,7 +1,13 @@
 import { test, expect } from '@grafana/plugin-e2e';
 import { ChildProcess, spawn } from 'child_process';
 import { accessSync, constants } from 'fs';
-import { verifyPanelDataContains, verifyColumnHeadersVisible, TIMESTAMP_REGEX, NUMERIC_REGEX } from './test-utils';
+import {
+  verifyPanelDataContains,
+  verifyColumnHeadersVisible,
+  setTableVisualization,
+  TIMESTAMP_REGEX,
+  NUMERIC_REGEX,
+} from './test-utils';
 
 function startKafkaProducer(extraArgs: string[] = []): { producer: ChildProcess; exitPromise: Promise<void> } {
   const producerPath = './dist/producer';
@@ -69,11 +75,7 @@ async function setupStreamingQuery(page: any, panelEditPage: any, readProvisione
     .or(page.getByRole('option', { name: /^All partitions$/ }));
   await allPartitionsOption.first().click();
 
-  try {
-    await panelEditPage.setVisualization('Table');
-  } catch (error) {
-    console.log('Skipping visualization setting to avoid timeout');
-  }
+  await setTableVisualization(panelEditPage);
 }
 
 async function selectKeyFormat(page: any, formatLabel: 'String' | 'JSON' | 'Base64') {
@@ -176,8 +178,6 @@ test.describe('Kafka Query Editor - Key Column Tests', () => {
 
       // Data should still be flowing
       await verifyPanelDataContains(panelEditPage, [TIMESTAMP_REGEX, NUMERIC_REGEX]);
-
-      // await expect(panelEditPage.panel.data.filter({ hasText: pattern })).not.toHaveCount(0);
     } finally {
       producer.kill();
       await Promise.race([exitPromise.catch(() => {}), new Promise((resolve) => setTimeout(resolve, 2000))]);

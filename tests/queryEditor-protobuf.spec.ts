@@ -3,7 +3,7 @@ import { Page, Locator } from '@playwright/test';
 import { ChildProcess, spawn } from 'child_process';
 import { accessSync, constants, readFileSync } from 'fs';
 import path from 'path';
-import { verifyPanelDataContains, verifyColumnHeadersVisible } from './test-utils';
+import { verifyPanelDataContains, verifyColumnHeadersVisible, setTableVisualization } from './test-utils';
 
 interface ProtobufProducerOptions {
   topic: string;
@@ -174,11 +174,7 @@ test.describe.serial('Kafka Query Editor - Protobuf Tests', () => {
     try {
       await new Promise((resolve) => setTimeout(resolve, 3000));
 
-      try {
-        await panelEditPage.setVisualization('Table');
-      } catch (error) {
-        console.log('Visualization picker blocked by overlay, continuing...');
-      }
+      await setTableVisualization(panelEditPage);
 
       await page.getByRole('textbox', { name: 'Enter topic name' }).fill('test-protobuf-schema-topic');
       await page.getByText('test-protobuf-schema-topic').click();
