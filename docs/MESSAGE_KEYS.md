@@ -68,6 +68,11 @@ Key fields appear before message value fields in the data frame:
 - **Null/missing keys**: Handled gracefully per format (empty string or no fields)
 - **Invalid JSON keys**: Warning logged, key parsing skipped, message processing continues
 - **Non-object JSON**: Warning logged, key parsing skipped
+- **Key field name collides with value field name**: If a decoded key field has the same name as a flattened value field (e.g. `"key"` in string mode if the message value also contains a top-level `"key"` field, or `"key.region"` in JSON mode if the value flattens to a `"key.region"` field), the key field is dropped and a WARN is logged:
+  ```
+  Key field name conflicts with value field, skipping key field  field=<name>
+  ```
+  Value fields always take precedence. To avoid collisions, ensure your message values do not contain fields named `"key"` (string format) or with the `"key."` prefix (JSON format).
 
 ## Implementation Details
 

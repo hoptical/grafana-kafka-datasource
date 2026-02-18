@@ -270,35 +270,7 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 	fields = append(fields, offsetField)
 
 	//Decode and process message key if configured
-	keyFormat := config.KeyFormat
-	if keyFormat == "" {
-		keyFormat = "none" // Default for backward compatibility
-	}
-
-	decodedKey, shouldAddKey, err := decodeMessageKey(msg.RawKey, keyFormat)
-	if err != nil {
-		log.DefaultLogger.Error("Error decoding message key",
-			"keyFormat", keyFormat,
-			"error", err)
-	}
-
-	var keyFields map[string]interface{}
-	if shouldAddKey && decodedKey != nil {
-		keyFields = make(map[string]interface{})
-
-		switch keyFormat {
-		case "string":
-			// Single "key" field
-			keyFields["key"] = decodedKey
-		case "json":
-			// Flatten JSON key with "key." prefix
-			FlattenJSON("key", decodedKey, keyFields, 0, flattenMaxDepth, flattenFieldCap)
-			log.DefaultLogger.Debug("Flattened JSON key",
-				"partition", partition,
-				"offset", msg.Offset,
-				"keyFieldCount", len(keyFields))
-		}
-	}
+	keyFields := buildKeyFields(msg.RawKey, config.KeyFormat, flattenMaxDepth, flattenFieldCap)
 
 	// Unwrap Avro union types before flattening (for Avro messages)
 	// This must happen BEFORE flattening to avoid creating keys like "value1.double"
@@ -332,18 +304,25 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 	}
 	sort.Strings(keys)
 
-	// Combine key fields and value fields
+	// Combine key fields and value fields, deduplicating on name collision (value fields win)
 	var allKeys []string
 	if len(keyFields) > 0 {
-		allKeys = make([]string, 0, len(keyFields)+len(keys))
-		// Add key fields first (sorted)
+		valueFieldSet := make(map[string]struct{}, len(keys))
+		for _, k := range keys {
+			valueFieldSet[k] = struct{}{}
+		}
 		keyFieldNames := make([]string, 0, len(keyFields))
 		for k := range keyFields {
+			if _, conflict := valueFieldSet[k]; conflict {
+				log.DefaultLogger.Warn("Key field name conflicts with value field, skipping key field",
+					"field", k)
+				continue
+			}
 			keyFieldNames = append(keyFieldNames, k)
 		}
 		sort.Strings(keyFieldNames)
+		allKeys = make([]string, 0, len(keyFieldNames)+len(keys))
 		allKeys = append(allKeys, keyFieldNames...)
-		// Add value fields after
 		allKeys = append(allKeys, keys...)
 	} else {
 		allKeys = keys // No key fields, use value fields only
@@ -566,6 +545,32 @@ func decodeProtobufMessage(sm *StreamManager, client KafkaClientAPI, data []byte
 	return decoded, nil
 }
 
+// buildKeyFields decodes the raw message key and returns a map of field name → value
+// to be prepended to the data frame. Returns nil if no key fields should be added.
+func buildKeyFields(rawKey []byte, keyFormat string, flattenMaxDepth, flattenFieldCap int) map[string]interface{} {
+	if keyFormat == "" {
+		keyFormat = "none"
+	}
+	decodedKey, shouldAddKey, err := decodeMessageKey(rawKey, keyFormat)
+	if err != nil {
+		log.DefaultLogger.Error("Error decoding message key",
+			"keyFormat", keyFormat,
+			"error", err)
+	}
+	if !shouldAddKey || decodedKey == nil {
+		return nil
+	}
+	keyFields := make(map[string]interface{})
+	switch keyFormat {
+	case "string":
+		keyFields["key"] = decodedKey
+	case "json":
+		FlattenJSON("key", decodedKey, keyFields, 0, flattenMaxDepth, flattenFieldCap)
+		log.DefaultLogger.Debug("Flattened JSON key", "keyFieldCount", len(keyFields))
+	}
+	return keyFields
+}
+
 // decodeMessageKey decodes the message key based on the specified format.
 // Returns (decodedKey, shouldAddToFrame, error)
 func decodeMessageKey(rawKey []byte, keyFormat string) (interface{}, bool, error) {
@@ -589,22 +594,16 @@ func decodeMessageKey(rawKey []byte, keyFormat string) (interface{}, bool, error
 		dec.UseNumber() // Preserve numeric precision
 		if err := dec.Decode(&v); err != nil {
 			// Log warning but don't fail the message
-			previewLen := 50
-			if len(rawKey) < previewLen {
-				previewLen = len(rawKey)
-			}
 			log.DefaultLogger.Warn("Failed to parse key as JSON, skipping key fields",
 				"error", err,
-				"keyLength", len(rawKey),
-				"keyPreview", string(rawKey[:previewLen]))
+				"keyLength", len(rawKey))
 			return nil, false, nil // Skip key, don't fail message
 		}
 
 		// Validate JSON is object (not array or primitive)
 		if _, ok := v.(map[string]interface{}); !ok {
 			log.DefaultLogger.Warn("JSON key is not an object, skipping key fields",
-				"keyType", fmt.Sprintf("%T", v),
-				"keyValue", fmt.Sprintf("%v", v))
+				"keyType", fmt.Sprintf("%T", v))
 			return nil, false, nil
 		}
 
@@ -887,35 +886,7 @@ func (sm *StreamManager) ProcessMessage(
 	fields = append(fields, offsetField)
 
 	//Decode and process message key if configured
-	keyFormat := config.KeyFormat
-	if keyFormat == "" {
-		keyFormat = "none" // Default for backward compatibility
-	}
-
-	decodedKey, shouldAddKey, err := decodeMessageKey(msg.RawKey, keyFormat)
-	if err != nil {
-		log.DefaultLogger.Error("Error decoding message key",
-			"keyFormat", keyFormat,
-			"error", err)
-	}
-
-	var keyFields map[string]interface{}
-	if shouldAddKey && decodedKey != nil {
-		keyFields = make(map[string]interface{})
-
-		switch keyFormat {
-		case "string":
-			// Single "key" field
-			keyFields["key"] = decodedKey
-		case "json":
-			// Flatten JSON key with "key." prefix
-			FlattenJSON("key", decodedKey, keyFields, 0, sm.flattenMaxDepth, sm.flattenFieldCap)
-			log.DefaultLogger.Debug("Flattened JSON key",
-				"partition", partition,
-				"offset", msg.Offset,
-				"keyFieldCount", len(keyFields))
-		}
-	}
+	keyFields := buildKeyFields(msg.RawKey, config.KeyFormat, sm.flattenMaxDepth, sm.flattenFieldCap)
 
 	// Unwrap Avro union types before flattening (for Avro messages)
 	// This must happen BEFORE flattening to avoid creating keys like "value1.double"
@@ -948,18 +919,25 @@ func (sm *StreamManager) ProcessMessage(
 	}
 	sort.Strings(keys)
 
-	// Combine key fields and value fields
+	// Combine key fields and value fields, deduplicating on name collision (value fields win)
 	var allKeys []string
 	if len(keyFields) > 0 {
-		allKeys = make([]string, 0, len(keyFields)+len(keys))
-		// Add key fields first (sorted)
+		valueFieldSet := make(map[string]struct{}, len(keys))
+		for _, k := range keys {
+			valueFieldSet[k] = struct{}{}
+		}
 		keyFieldNames := make([]string, 0, len(keyFields))
 		for k := range keyFields {
+			if _, conflict := valueFieldSet[k]; conflict {
+				log.DefaultLogger.Warn("Key field name conflicts with value field, skipping key field",
+					"field", k)
+				continue
+			}
 			keyFieldNames = append(keyFieldNames, k)
 		}
 		sort.Strings(keyFieldNames)
+		allKeys = make([]string, 0, len(keyFieldNames)+len(keys))
 		allKeys = append(allKeys, keyFieldNames...)
-		// Add value fields after
 		allKeys = append(allKeys, keys...)
 	} else {
 		allKeys = keys // No key fields, use value fields only
