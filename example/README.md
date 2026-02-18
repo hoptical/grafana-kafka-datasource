@@ -112,7 +112,7 @@ Null reproduction: All shapes periodically set fields like `value1` or `value2` 
 - `-values-offset <float>`: Offset for generated values
 - `-connect-timeout <ms>`: Broker connect timeout
 - `-verbose`: Enable verbose logging for debugging
-- `-schema-registry <url>`: Schema registry URL for Avro schema management (e.g., http://localhost:8081)
+- `-schema-registry <url>`: Schema registry URL for Avro schema management (e.g., <http://localhost:8081>)
 
 See the Go source for more advanced options and sample payloads.
 

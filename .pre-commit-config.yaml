@@ -16,3 +16,9 @@ repos:
         language: golang
         require_serial: true
         pass_filenames: false
+
+  - repo: https://github.com/DavidAnson/markdownlint-cli2
+    rev: v0.21.0
+    hooks:
+      - id: markdownlint-cli2
+        args: ['--fix']

@@ -82,7 +82,7 @@ Key fields appear before message value fields in the data frame:
 - **Non-object JSON**: Warning logged, key parsing skipped
 - **Base64 empty key**: Returns empty string `""` (consistent with String format)
 - **Key field name collides with value field name**: If a decoded key field has the same name as a flattened value field (e.g. `"key"` in string mode if the message value also contains a top-level `"key"` field, or `"key.region"` in JSON mode if the value flattens to a `"key.region"` field), the key field is dropped and a WARN is logged:
-  ```
+  ```text
   Key field name conflicts with value field, skipping key field  field=<name>
   ```
   Value fields always take precedence. To avoid collisions, ensure your message values do not contain fields named `"key"` (string format) or with the `"key."` prefix (JSON format).
@@ -190,7 +190,7 @@ Kafka message:
 
 Result Data Frame:
 
-```
+```text
 time             | offset | key      | event | timestamp
 2024-01-15 10:00 | 1001   | user-123 | login | 1234567890
 ```
@@ -213,7 +213,7 @@ Kafka message:
 
 Result Data Frame:
 
-```
+```text
 time             | offset | key.userId | key.region | total | items
 2024-01-15 10:00 | 2001   | 123        | us-east    | 99.99 | 3
 ```
@@ -236,7 +236,7 @@ Kafka message:
 
 Result Data Frame:
 
-```
+```text
 time             | offset | key          | count | event
 2024-01-15 10:00 | 4001   | AAAAAAAAAAc= | 7     | click
 ```
@@ -258,7 +258,7 @@ Kafka message:
 
 Result Data Frame:
 
-```
+```text
 time             | offset | level | message
 2024-01-15 10:00 | 3001   | info  | Server started
 ```
