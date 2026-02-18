@@ -270,7 +270,7 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 	offsetField.Set(0, msg.Offset)
 	fields = append(fields, offsetField)
 
-	//Decode and process message key if configured
+	// Decode and process message key if configured
 	keyFields := buildKeyFields(msg.RawKey, config.KeyFormat, flattenMaxDepth, flattenFieldCap)
 
 	// Unwrap Avro union types before flattening (for Avro messages)
@@ -890,7 +890,7 @@ func (sm *StreamManager) ProcessMessage(
 	offsetField.Set(0, msg.Offset)
 	fields = append(fields, offsetField)
 
-	//Decode and process message key if configured
+	// Decode and process message key if configured
 	keyFields := buildKeyFields(msg.RawKey, config.KeyFormat, sm.flattenMaxDepth, sm.flattenFieldCap)
 
 	// Unwrap Avro union types before flattening (for Avro messages)
