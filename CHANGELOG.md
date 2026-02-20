@@ -1,5 +1,12 @@
 # Changelog
 
+## [v1.5.0](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.5.0)
+
+[Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v1.4.0...v1.5.0)
+
+- Fix: cleanup Kafka connections, tighten logging, propagate context & use theme spacing in QueryEditor ([#133](https://github.com/hoptical/grafana-kafka-datasource/pull/133))
+- Feat: add support for json, string and binary message keys ([#132](https://github.com/hoptical/grafana-kafka-datasource/pull/132))
+
 ## [v1.4.0](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.4.0)
 
 [Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v1.3.0...v1.4.0)
