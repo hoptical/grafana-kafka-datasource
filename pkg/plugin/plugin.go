@@ -27,12 +27,9 @@ import (
 // yet remains small to keep memory usage low and latency tight.
 const streamMessageBuffer = 100
 
-// Stream management constants
+// Stream read/retry constants
 const (
-	streamCleanupDelay   = 500 * time.Millisecond // Delay to ensure previous stream is fully stopped
-	streamCancelTimeout  = 500 * time.Millisecond // Max time to wait for stream context cancellation
 	messageReadTimeout   = 5 * time.Second        // Timeout for reading individual messages
-	channelDrainTimeout  = 100 * time.Millisecond // Timeout for draining message channels
 	retryDelayAfterError = 100 * time.Millisecond // Brief pause between retries after errors
 )
 
@@ -47,7 +44,7 @@ type KafkaClientAPI interface {
 	NewConnection() error
 	GetTopicPartitions(ctx context.Context, topicName string) ([]int32, error)
 	GetTopics(ctx context.Context, prefix string, limit int) ([]string, error)
-	HealthCheck() error
+	HealthCheck(ctx context.Context) error
 	NewStreamReader(ctx context.Context, topic string, partition int32, autoOffsetReset string, lastN int32) (*kafka.Reader, error)
 	ConsumerPull(ctx context.Context, reader *kafka.Reader, messageFormat string) (kafka_client.KafkaMessage, error)
 	Dispose()
@@ -557,7 +554,7 @@ func isSubjectNotFoundError(err error) bool {
 	return strings.Contains(errStr, "404") || strings.Contains(errStr, "Subject not found")
 }
 
-func (d *KafkaDatasource) CheckHealth(_ context.Context, req *backend.CheckHealthRequest) (*backend.CheckHealthResult, error) {
+func (d *KafkaDatasource) CheckHealth(ctx context.Context, req *backend.CheckHealthRequest) (*backend.CheckHealthResult, error) {
 	var datasourceID int64 = 0
 	if req.PluginContext.DataSourceInstanceSettings != nil {
 		datasourceID = req.PluginContext.DataSourceInstanceSettings.ID
@@ -573,7 +570,7 @@ func (d *KafkaDatasource) CheckHealth(_ context.Context, req *backend.CheckHealt
 		return &backend.CheckHealthResult{Status: status, Message: message}, nil
 	}
 
-	err := d.client.HealthCheck()
+	err := d.client.HealthCheck(ctx)
 	if err != nil {
 		status = backend.HealthStatusError
 		message = err.Error()

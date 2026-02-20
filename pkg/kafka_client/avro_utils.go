@@ -12,6 +12,13 @@ import (
 	"github.com/linkedin/goavro/v2"
 )
 
+func truncatePreview(body []byte, max int) string {
+	if len(body) <= max {
+		return string(body)
+	}
+	return string(body[:max])
+}
+
 // SchemaRegistryClient handles communication with Confluent Schema Registry
 type SchemaRegistryClient struct {
 	BaseURL  string
@@ -60,7 +67,12 @@ func (s *SchemaRegistryClient) GetSchemaByID(schemaID int) (string, error) {
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("schema registry returned status %d: %s", resp.StatusCode, string(body))
+		log.DefaultLogger.Debug("Schema registry returned error for schema ID",
+			"schemaID", schemaID,
+			"statusCode", resp.StatusCode,
+			"responseBodyLength", len(body),
+			"responsePreview", truncatePreview(body, 200))
+		return "", fmt.Errorf("schema registry returned status %d for schema ID %d (body: %d bytes)", resp.StatusCode, schemaID, len(body))
 	}
 
 	var result struct {
@@ -111,10 +123,12 @@ func (s *SchemaRegistryClient) GetLatestSchema(subject string) (string, error) {
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		log.DefaultLogger.Error("Schema registry returned error",
+		log.DefaultLogger.Debug("Schema registry returned error",
+			"subject", subject,
 			"statusCode", resp.StatusCode,
-			"responseBody", string(body))
-		return "", fmt.Errorf("schema registry returned status %d: %s", resp.StatusCode, string(body))
+			"responseBodyLength", len(body),
+			"responsePreview", truncatePreview(body, 200))
+		return "", fmt.Errorf("schema registry returned status %d for subject %q (body: %d bytes)", resp.StatusCode, subject, len(body))
 	}
 
 	var result struct {

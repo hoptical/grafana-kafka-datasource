@@ -55,7 +55,7 @@ func (m *mockKafkaClient) GetTopics(ctx context.Context, prefix string, limit in
 	}
 	return m.topics, nil
 }
-func (m *mockKafkaClient) HealthCheck() error { return m.healthErr }
+func (m *mockKafkaClient) HealthCheck(ctx context.Context) error { return m.healthErr }
 func (m *mockKafkaClient) NewStreamReader(ctx context.Context, topic string, partition int32, autoOffsetReset string, lastN int32) (*kafka.Reader, error) {
 	if m.streamReaderErr != nil {
 		return nil, m.streamReaderErr
@@ -83,12 +83,12 @@ func (m *mockKafkaClient) ConsumerPull(ctx context.Context, reader *kafka.Reader
 func (m *mockKafkaClient) Dispose() {}
 
 // Avro-related methods
-func (m *mockKafkaClient) GetMessageFormat() string             { return m.messageFormat }
-func (m *mockKafkaClient) GetSchemaRegistryUrl() string         { return m.schemaRegistryUrl }
-func (m *mockKafkaClient) GetSchemaRegistryUsername() string    { return m.schemaRegistryUsername }
-func (m *mockKafkaClient) GetSchemaRegistryPassword() string    { return m.schemaRegistryPassword }
-func (m *mockKafkaClient) GetSubjectNamingStrategy() string     { return m.avroSubjectNamingStrategy }
-func (m *mockKafkaClient) GetHTTPClient() *http.Client          { return &http.Client{} }
+func (m *mockKafkaClient) GetMessageFormat() string          { return m.messageFormat }
+func (m *mockKafkaClient) GetSchemaRegistryUrl() string      { return m.schemaRegistryUrl }
+func (m *mockKafkaClient) GetSchemaRegistryUsername() string { return m.schemaRegistryUsername }
+func (m *mockKafkaClient) GetSchemaRegistryPassword() string { return m.schemaRegistryPassword }
+func (m *mockKafkaClient) GetSubjectNamingStrategy() string  { return m.avroSubjectNamingStrategy }
+func (m *mockKafkaClient) GetHTTPClient() *http.Client       { return &http.Client{} }
 
 func TestQueryData(t *testing.T) {
 	ds := plugin.NewWithClient(&mockKafkaClient{})

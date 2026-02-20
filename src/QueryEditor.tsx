@@ -69,16 +69,28 @@ const partitionOptions: Array<{ label: string; value: number | 'all' }> = [{ lab
 
 const getStyles = (theme: GrafanaTheme2) => {
   return {
+    topicField: css({
+      minWidth: theme.spacing(32.5),
+    }),
+    partitionField: css({
+      minWidth: theme.spacing(25),
+    }),
+    offsetField: css({
+      minWidth: theme.spacing(32.5),
+    }),
+    schemaField: css({
+      minWidth: theme.spacing(50),
+    }),
     topicContainer: css({
       display: 'flex',
       alignItems: 'center',
       gap: theme.spacing(1.25),
       position: 'relative',
-      minWidth: 260,
+      minWidth: theme.spacing(32.5),
     }),
     topicInputWrapper: css({
       position: 'relative',
-      minWidth: 180,
+      minWidth: theme.spacing(22.5),
     }),
     suggestionDropdown: css({
       position: 'absolute',
@@ -90,7 +102,7 @@ const getStyles = (theme: GrafanaTheme2) => {
       borderRadius: theme.shape.radius.default,
       boxShadow: theme.shadows.z2,
       zIndex: theme.zIndex.dropdown,
-      maxHeight: '200px',
+      maxHeight: theme.spacing(25),
       overflowY: 'auto',
     }),
     suggestionItem: css({
@@ -107,7 +119,7 @@ const getStyles = (theme: GrafanaTheme2) => {
       },
     }),
     fetchButton: css({
-      minWidth: 60,
+      minWidth: theme.spacing(7.5),
     }),
     successMessage: css({
       color: theme.colors.success.text,
@@ -122,7 +134,7 @@ const getStyles = (theme: GrafanaTheme2) => {
       display: 'flex',
       flexDirection: 'column',
       gap: theme.spacing(1),
-      minWidth: 400,
+      minWidth: theme.spacing(50),
     }),
     fileRow: css({
       display: 'flex',
@@ -665,7 +677,7 @@ class QueryEditorInner extends PureComponent<QueryEditorInnerProps, State> {
             label="Topic"
             labelWidth={12}
             tooltip="Kafka topic name + click Fetch to load partitions"
-            style={{ minWidth: 260 }}
+            className={this.props.styles.topicField}
           >
             <div className={this.props.styles.topicContainer}>
               <div className={this.props.styles.topicInputWrapper}>
@@ -722,7 +734,12 @@ class QueryEditorInner extends PureComponent<QueryEditorInnerProps, State> {
               )}
             </div>
           </InlineField>
-          <InlineField label="Partition" labelWidth={13} tooltip="Kafka partition selection" style={{ minWidth: 200 }}>
+          <InlineField
+            label="Partition"
+            labelWidth={13}
+            tooltip="Kafka partition selection"
+            className={this.props.styles.partitionField}
+          >
             <Select
               id="query-editor-partition"
               value={partition}
@@ -732,7 +749,6 @@ class QueryEditorInner extends PureComponent<QueryEditorInnerProps, State> {
               width={22}
               placeholder="Select partition"
               noOptionsMessage="Fetch topic partitions first"
-              styles={{ container: (base: any) => ({ ...base, minWidth: 140 }) }}
             />
           </InlineField>
         </InlineFieldRow>
@@ -741,7 +757,7 @@ class QueryEditorInner extends PureComponent<QueryEditorInnerProps, State> {
             label="Offset"
             labelWidth={12}
             tooltip="Where to start consuming from for this query"
-            style={{ minWidth: 260 }}
+            className={this.props.styles.offsetField}
           >
             <div className={this.props.styles.offsetContainer}>
               <Select
@@ -874,7 +890,7 @@ class QueryEditorInner extends PureComponent<QueryEditorInnerProps, State> {
                   label="Avro Schema"
                   labelWidth={20}
                   tooltip="Upload or paste your Avro schema (.avsc file)"
-                  style={{ minWidth: 400 }}
+                  className={this.props.styles.schemaField}
                 >
                   <div className={this.props.styles.schemaValidationWrapper}>
                     <div className={this.props.styles.fileRow}>
@@ -976,7 +992,7 @@ class QueryEditorInner extends PureComponent<QueryEditorInnerProps, State> {
                   label="Protobuf Schema"
                   labelWidth={20}
                   tooltip="Upload or paste your Protobuf schema (.proto file)"
-                  style={{ minWidth: 400 }}
+                  className={this.props.styles.schemaField}
                 >
                   <div className={this.props.styles.schemaValidationWrapper}>
                     <div className={this.props.styles.fileRow}>
