@@ -28,8 +28,8 @@ func (m *mockStreamClient) NewConnection() error { return nil }
 func (m *mockStreamClient) GetTopics(ctx context.Context, prefix string, limit int) ([]string, error) {
 	return nil, nil
 }
-func (m *mockStreamClient) HealthCheck() error { return nil }
-func (m *mockStreamClient) Dispose()           {}
+func (m *mockStreamClient) HealthCheck(ctx context.Context) error { return nil }
+func (m *mockStreamClient) Dispose()                              {}
 
 func (m *mockStreamClient) GetTopicPartitions(ctx context.Context, topicName string) ([]int32, error) {
 	if m.partitionsErr != nil {
@@ -64,12 +64,12 @@ func (m *mockStreamClient) ConsumerPull(ctx context.Context, reader *kafka.Reade
 }
 
 // Avro-related methods
-func (m *mockStreamClient) GetMessageFormat() string             { return "json" }
-func (m *mockStreamClient) GetSchemaRegistryUrl() string         { return "" }
-func (m *mockStreamClient) GetSchemaRegistryUsername() string    { return "" }
-func (m *mockStreamClient) GetSchemaRegistryPassword() string    { return "" }
-func (m *mockStreamClient) GetSubjectNamingStrategy() string     { return "recordName" }
-func (m *mockStreamClient) GetHTTPClient() *http.Client          { return &http.Client{} }
+func (m *mockStreamClient) GetMessageFormat() string          { return "json" }
+func (m *mockStreamClient) GetSchemaRegistryUrl() string      { return "" }
+func (m *mockStreamClient) GetSchemaRegistryUsername() string { return "" }
+func (m *mockStreamClient) GetSchemaRegistryPassword() string { return "" }
+func (m *mockStreamClient) GetSubjectNamingStrategy() string  { return "recordName" }
+func (m *mockStreamClient) GetHTTPClient() *http.Client       { return &http.Client{} }
 
 func TestStreamManager_ValidateAndGetPartitions(t *testing.T) {
 	tests := []struct {

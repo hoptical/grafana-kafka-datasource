@@ -33,7 +33,7 @@ func (m *internalMockClient) GetTopics(ctx context.Context, prefix string, limit
 	return []string{"topic-a"}, nil
 }
 
-func (m *internalMockClient) HealthCheck() error { return nil }
+func (m *internalMockClient) HealthCheck(ctx context.Context) error { return nil }
 
 func (m *internalMockClient) NewStreamReader(ctx context.Context, topic string, partition int32, autoOffsetReset string, lastN int32) (*kafka.Reader, error) {
 	return nil, nil

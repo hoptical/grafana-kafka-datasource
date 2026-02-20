@@ -64,6 +64,7 @@ type KafkaClient struct {
 	Dialer           *kafka.Dialer
 	Reader           *kafka.Reader
 	Conn             *kafka.Client
+	Transport        *kafka.Transport
 	BootstrapServers string
 	Brokers          []string
 	ClientId         string
@@ -139,7 +140,8 @@ func (client *KafkaClient) decodeMessageValue(data []byte, format string) (inter
 			grafanalog.DefaultLogger.Error("JSON decoding failed for JSON format message",
 				"error", err,
 				"valueLength", len(data),
-				"errorType", fmt.Sprintf("%T", err),
+				"errorType", fmt.Sprintf("%T", err))
+			grafanalog.DefaultLogger.Debug("JSON decoding failure payload preview",
 				"firstBytes", fmt.Sprintf("%x", data[:previewLen]))
 			return nil, fmt.Errorf("failed to decode message as JSON: %w", err)
 		} else {
@@ -275,6 +277,9 @@ func (client *KafkaClient) NewConnection() error {
 		SASL:     mechanism,
 		ClientID: client.ClientId,
 	}
+	if client.Transport != nil {
+		client.Transport.CloseIdleConnections()
+	}
 
 	if client.SecurityProtocol == "SASL_SSL" || client.SecurityProtocol == "SSL" {
 		tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12, InsecureSkipVerify: client.TLSSkipVerify}
@@ -300,6 +305,7 @@ func (client *KafkaClient) NewConnection() error {
 	}
 
 	client.Dialer = dialer
+	client.Transport = transport
 	client.Conn = &kafka.Client{Addr: kafka.TCP(client.Brokers...), Timeout: effectiveTimeout, Transport: transport}
 	return nil
 }
@@ -474,7 +480,7 @@ func (client *KafkaClient) ConsumerPull(ctx context.Context, reader *kafka.Reade
 	return message, nil
 }
 
-func (client *KafkaClient) HealthCheck() error {
+func (client *KafkaClient) HealthCheck(ctx context.Context) error {
 	if err := client.NewConnection(); err != nil {
 		return fmt.Errorf("unable to initialize Kafka client: %w", err)
 	}
@@ -491,20 +497,26 @@ func (client *KafkaClient) HealthCheck() error {
 
 	grafanalog.DefaultLogger.Debug("Attempting health check connection", "brokers", brokers, "timeoutMs", timeoutMs)
 
-	deadline := time.After(time.Duration(timeoutMs) * time.Millisecond)
+	healthCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMs)*time.Millisecond)
+	defer cancel()
 	ticker := time.NewTicker(200 * time.Millisecond)
 	defer ticker.Stop()
 
 	var lastErr error
 	for {
 		select {
-		case <-deadline:
-			if lastErr != nil {
-				return fmt.Errorf("health check timed out after %d ms. Last error: %w", timeoutMs, lastErr)
+		case <-ctx.Done():
+			return fmt.Errorf("health check cancelled: %w", ctx.Err())
+		case <-healthCtx.Done():
+			if errors.Is(healthCtx.Err(), context.DeadlineExceeded) {
+				if lastErr != nil {
+					return fmt.Errorf("health check timed out after %d ms. Last error: %w", timeoutMs, lastErr)
+				}
+				return fmt.Errorf("health check timed out after %d ms", timeoutMs)
 			}
-			return fmt.Errorf("health check timed out after %d ms", timeoutMs)
+			return fmt.Errorf("health check cancelled: %w", healthCtx.Err())
 		case <-ticker.C:
-			_, err := client.Conn.Metadata(context.Background(), &kafka.MetadataRequest{})
+			_, err := client.Conn.Metadata(healthCtx, &kafka.MetadataRequest{})
 			if err == nil {
 				return nil
 			}
@@ -519,7 +531,14 @@ func (client *KafkaClient) Dispose() {
 		if err := client.Reader.Close(); err != nil {
 			grafanalog.DefaultLogger.Error("failed to close reader", "error", err)
 		}
+		client.Reader = nil
 	}
+	if client.Transport != nil {
+		client.Transport.CloseIdleConnections()
+		client.Transport = nil
+	}
+	client.Conn = nil
+	client.Dialer = nil
 }
 
 func getSASLMechanism(client *KafkaClient) (sasl.Mechanism, error) {
