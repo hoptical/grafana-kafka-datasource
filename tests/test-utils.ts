@@ -3,6 +3,33 @@ import { expect } from '@grafana/plugin-e2e';
 import type { Page } from '@playwright/test';
 import type { PanelEditPage } from '@grafana/plugin-e2e';
 
+/**
+ * Sets the panel visualization to 'Table', retrying once on failure.
+ * Throws a clear, actionable error if both attempts fail so that subsequent
+ * column-header assertions don't produce misleading "header not found" errors.
+ */
+export async function setTableVisualization(panelEditPage: PanelEditPage): Promise<void> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      await panelEditPage.setVisualization('Table');
+      return;
+    } catch (err) {
+      lastError = err;
+      if (attempt < 2) {
+        // Brief pause to let any overlays or animations dismiss before retrying
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+    }
+  }
+  const cause = lastError instanceof Error ? lastError.message : String(lastError);
+  throw new Error(
+    `setVisualization('Table') failed after 2 attempts — Table panel is not active.\n` +
+      `Column header assertions require Table view and will fail without it.\n` +
+      `Cause: ${cause}`
+  );
+}
+
 // Common regex patterns for data validation
 export const TIMESTAMP_REGEX = /\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/;
 export const NUMERIC_REGEX = /^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/;

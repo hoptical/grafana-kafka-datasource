@@ -45,6 +45,8 @@ jobs:
         run: npm run typecheck
       - name: Lint
         run: npm run lint
+      - name: Lint markdown
+        run: npm run lint:md
       - name: Unit tests
         run: npm run test:ci
       - name: Build frontend

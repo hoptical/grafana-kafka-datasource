@@ -3,7 +3,7 @@ import { Page, Locator } from '@playwright/test';
 import { ChildProcess, spawn } from 'child_process';
 import { accessSync, constants, readFileSync } from 'fs';
 import path from 'path';
-import { verifyPanelDataContains, verifyColumnHeadersVisible } from './test-utils';
+import { verifyPanelDataContains, verifyColumnHeadersVisible, setTableVisualization } from './test-utils';
 
 interface AvroProducerOptions {
   topic: string;
@@ -247,12 +247,7 @@ test.describe.serial('Kafka Query Editor - Avro Tests', () => {
     try {
       // Wait for some data to be produced
       await new Promise((resolve) => setTimeout(resolve, 3000));
-      // Set visualization
-      try {
-        await panelEditPage.setVisualization('Table');
-      } catch (error) {
-        console.log('Visualization picker blocked by overlay, continuing...');
-      }
+      await setTableVisualization(panelEditPage);
 
       // Fill in the query editor fields
       await page.getByRole('textbox', { name: 'Enter topic name' }).fill('test-avro-schema-topic');
@@ -318,12 +313,7 @@ test.describe.serial('Kafka Query Editor - Avro Tests', () => {
     try {
       // Wait for some data to be produced
       await new Promise((resolve) => setTimeout(resolve, 3000));
-      // Set visualization
-      try {
-        await panelEditPage.setVisualization('Table');
-      } catch (error) {
-        console.log('Visualization picker blocked by overlay, continuing...');
-      }
+      await setTableVisualization(panelEditPage);
 
       // Select Avro message format
       await selectAvroMessageFormat(page);

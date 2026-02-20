@@ -6,6 +6,7 @@ import {
   MessageFormat,
   AvroSchemaSource,
   ProtobufSchemaSource,
+  KeyFormat,
   type KafkaQuery,
 } from '../types';
 
@@ -81,6 +82,7 @@ describe('DataSource', () => {
         messageFormat: MessageFormat.JSON,
         avroSchemaSource: AvroSchemaSource.SCHEMA_REGISTRY,
         protobufSchemaSource: ProtobufSchemaSource.SCHEMA_REGISTRY,
+        keyFormat: KeyFormat.NONE,
       });
     });
     it('returns query values with Kafka Message Timestamp mode', () => {
@@ -258,7 +260,7 @@ describe('DataSource', () => {
         complete: () => {
           try {
             expect(capturedPath).toBe(
-              'my%20topic-0-latest-json-schemaRegistry-schemaRegistry-now-none-none-A-no-alias'
+              'my%20topic-0-latest-json-schemaRegistry-schemaRegistry-none-now-none-none-A-no-alias'
             );
             // Now with LAST_N
             capturedPath = undefined;
@@ -272,7 +274,7 @@ describe('DataSource', () => {
               complete: () => {
                 try {
                   expect(capturedPath).toBe(
-                    'my%20topic-0-lastN-json-schemaRegistry-schemaRegistry-now-none-none-10-A-no-alias'
+                    'my%20topic-0-lastN-json-schemaRegistry-schemaRegistry-none-now-none-none-10-A-no-alias'
                   );
                   done();
                 } catch (e) {
@@ -298,7 +300,7 @@ describe('DataSource', () => {
         complete: () => {
           // Only one valid query should have been processed
           expect(capturedPath).toBe(
-            'valid-topic-all-latest-json-schemaRegistry-schemaRegistry-message-none-none-B-no-alias'
+            'valid-topic-all-latest-json-schemaRegistry-schemaRegistry-none-message-none-none-B-no-alias'
           );
           done();
         },
@@ -329,7 +331,7 @@ describe('DataSource', () => {
       ds.query({ targets: [target] } as any).subscribe({
         complete: () => {
           expect(capturedPath).toBe(
-            'topic%2Fwith-special%3Achars-all-earliest-json-schemaRegistry-schemaRegistry-now-none-none-A-no-alias'
+            'topic%2Fwith-special%3Achars-all-earliest-json-schemaRegistry-schemaRegistry-none-now-none-none-A-no-alias'
           );
           done();
         },
@@ -351,9 +353,9 @@ describe('DataSource', () => {
         complete: () => {
           // Slug for "My Alias" is "MyAlias"
           // We don't know the exact hash, but we can match the pattern
-          // Path: topic-partition-offset-format-schema-timestamp-lastN-refId-Slug-Hash
+          // Path: topic-partition-offset-format-schema-keyformat-timestamp-lastN-refId-Slug-Hash
           expect(capturedPath).toMatch(
-            /^my-topic-0-latest-json-schemaRegistry-schemaRegistry-now-none-none-A-MyAlias-[a-z0-9]+$/
+            /^my-topic-0-latest-json-schemaRegistry-schemaRegistry-none-now-none-none-A-MyAlias-[a-z0-9]+$/
           );
           done();
         },

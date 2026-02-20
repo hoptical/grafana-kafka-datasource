@@ -99,6 +99,13 @@ export interface KafkaSecureJsonData {
   schemaRegistryPassword?: string;
 }
 
+export enum KeyFormat {
+  NONE = 'none',
+  STRING = 'string',
+  JSON = 'json',
+  BASE64 = 'base64',
+}
+
 export interface KafkaQuery extends DataQuery {
   topicName: string;
   partition: number | 'all';
@@ -113,6 +120,8 @@ export interface KafkaQuery extends DataQuery {
   // Protobuf Configuration
   protobufSchemaSource?: ProtobufSchemaSource;
   protobufSchema?: string;
+  // Key Configuration
+  keyFormat?: KeyFormat;
   // Optional alias for the query
   alias?: string;
 }
@@ -125,4 +134,5 @@ export const defaultQuery: Partial<KafkaQuery> = {
   messageFormat: MessageFormat.JSON,
   avroSchemaSource: AvroSchemaSource.SCHEMA_REGISTRY,
   protobufSchemaSource: ProtobufSchemaSource.SCHEMA_REGISTRY,
+  keyFormat: KeyFormat.NONE,
 };

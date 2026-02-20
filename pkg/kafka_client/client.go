@@ -100,6 +100,8 @@ func (client *KafkaClient) GetHTTPClient() *http.Client {
 type KafkaMessage struct {
 	Value     interface{} `json:"value,omitempty"` // Can be map[string]interface{} or []interface{}
 	RawValue  []byte      `json:"-"`               // Raw message bytes for Avro decoding - not serialized
+	Key       interface{} `json:"key,omitempty"`   // Decoded key (string or map for JSON)
+	RawKey    []byte      `json:"-"`               // Raw key bytes - not serialized
 	Timestamp time.Time   `json:"timestamp"`
 	Offset    int64       `json:"offset"`
 	Error     error       `json:"-"` // Error if decoding failed - not serialized
@@ -434,6 +436,13 @@ func (client *KafkaClient) ConsumerPull(ctx context.Context, reader *kafka.Reade
 
 	// Store raw bytes for potential Avro decoding
 	message.RawValue = msg.Value
+
+	// Capture message key (will be decoded later based on config)
+	message.RawKey = msg.Key
+	if len(msg.Key) > 0 {
+		grafanalog.DefaultLogger.Debug("Message key present",
+			"keyLength", len(msg.Key))
+	}
 
 	// Log first few bytes for debugging
 	if len(msg.Value) > 0 {

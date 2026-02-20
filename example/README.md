@@ -19,7 +19,7 @@ go get github.com/segmentio/kafka-go
 Then, run the producer:
 
 ```bash
-go run producer.go -broker <broker> -topic <topic> -interval <interval ms> -num-partitions <partitions> -shape <flat|nested|list> -format <json|avro|protobuf>
+go run producer.go -broker <broker> -topic <topic> -interval <interval ms> -num-partitions <partitions> -shape <flat|nested|list> -format <json|avro|protobuf> -key-format <none|string|json|binary>
 ```
 
 > Note: The producer will create the topic if it does not exist.
@@ -108,10 +108,11 @@ Null reproduction: All shapes periodically set fields like `value1` or `value2` 
 #### Other options
 
 - `-format <json|avro|protobuf>`: Message format (default: json)
+- `-key-format <none|string|json|binary>`: Message key format (default: string). Use `binary` to send raw 8-byte binary keys that the plugin will encode as base64 for display.
 - `-values-offset <float>`: Offset for generated values
 - `-connect-timeout <ms>`: Broker connect timeout
 - `-verbose`: Enable verbose logging for debugging
-- `-schema-registry <url>`: Schema registry URL for Avro schema management (e.g., http://localhost:8081)
+- `-schema-registry <url>`: Schema registry URL for Avro schema management (e.g., <http://localhost:8081>)
 
 See the Go source for more advanced options and sample payloads.
 

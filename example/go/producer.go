@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -79,12 +80,19 @@ func main() {
 	schemaRegistryURL := flag.String("schema-registry", "", "Schema registry URL (for Avro/Protobuf with schema registry)")
 	schemaRegistryUser := flag.String("schema-registry-user", "", "Schema registry username (optional)")
 	schemaRegistryPass := flag.String("schema-registry-pass", "", "Schema registry password (optional)")
+	keyFormat := flag.String("key-format", "string", "Message key format: none, string, json, or binary (raw bytes, displayed as base64 in Grafana)")
 	verbose := flag.Bool("verbose", false, "Enable verbose logging")
 	flag.Parse()
 
 	// Validate format
 	if *format != "json" && *format != "avro" && *format != "protobuf" {
 		fmt.Printf("Error: Invalid format %q. Valid options: json, avro, protobuf\n", *format)
+		os.Exit(1)
+	}
+
+	// Validate key format
+	if *keyFormat != "none" && *keyFormat != "string" && *keyFormat != "json" && *keyFormat != "binary" {
+		fmt.Printf("Error: Invalid key-format %q. Valid options: none, string, json, binary\n", *keyFormat)
 		os.Exit(1)
 	}
 
@@ -269,10 +277,36 @@ func main() {
 			}
 		}
 
+		// Build message key based on key format
+		var msgKey []byte
+		switch *keyFormat {
+		case "string":
+			msgKey = []byte(fmt.Sprintf("key-%d", counter))
+		case "json":
+			keyObj := map[string]interface{}{
+				"serverId": hostName,
+				"region":   "us-east",
+				"counter":  counter,
+			}
+			msgKey, err = json.Marshal(keyObj)
+			if err != nil {
+				fmt.Printf("Error encoding JSON key: %v\n", err)
+				continue
+			}
+		case "binary":
+			// Send raw 8-byte big-endian binary key (no pre-encoding).
+			// The plugin will base64-encode these bytes for display.
+			binKey := make([]byte, 8)
+			binary.BigEndian.PutUint64(binKey, uint64(counter))
+			msgKey = binKey
+		case "none":
+			msgKey = nil
+		}
+
 		// Produce message
 		err = w.WriteMessages(context.Background(),
 			kafka.Message{
-				Key:   []byte(fmt.Sprintf("key-%d", counter)),
+				Key:   msgKey,
 				Value: messageData,
 			},
 		)
@@ -282,7 +316,7 @@ func main() {
 		}
 
 		if *verbose {
-			fmt.Printf("Sample #%d produced to topic %s (shape=%s, format=%s)!\n", counter, *topic, *shape, *format)
+			fmt.Printf("Sample #%d produced to topic %s (shape=%s, format=%s, key-format=%s)!\n", counter, *topic, *shape, *format, *keyFormat)
 		} else {
 			fmt.Printf("Sample #%d produced to topic %s\n", counter, *topic)
 		}

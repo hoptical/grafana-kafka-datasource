@@ -1,0 +1,4 @@
+ignores:
+  - '.config/**'
+  - 'dist/**'
+  - 'node_modules/**'

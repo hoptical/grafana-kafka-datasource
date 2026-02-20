@@ -214,6 +214,8 @@ type queryModel struct {
 	// Protobuf Configuration
 	ProtobufSchemaSource string `json:"protobufSchemaSource"`
 	ProtobufSchema       string `json:"protobufSchema"`
+	// Key Configuration
+	KeyFormat string `json:"keyFormat"` // "none", "string", or "json"
 	// Metadata
 	RefID string `json:"refId"`
 	Alias string `json:"alias"`
@@ -661,6 +663,7 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 		AutoOffsetReset:      qm.AutoOffsetReset,
 		TimestampMode:        qm.TimestampMode,
 		LastN:                qm.LastN, // Added LastN to stream config
+		KeyFormat:            qm.KeyFormat,
 		RefID:                qm.RefID,
 		Alias:                qm.Alias,
 	}
@@ -680,6 +683,9 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 	}
 	if streamConfig.TimestampMode == "" {
 		streamConfig.TimestampMode = "message"
+	}
+	if streamConfig.KeyFormat == "" {
+		streamConfig.KeyFormat = "none"
 	}
 
 	// Create message channel and start partition readers
