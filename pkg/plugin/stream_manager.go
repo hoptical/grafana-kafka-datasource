@@ -95,7 +95,7 @@ type StreamConfig struct {
 	AutoOffsetReset      string
 	TimestampMode        string
 	LastN                int32  // Added to track lastN changes
-	KeyFormat            string // "none", "string", or "json"
+	KeyFormat            string // "none", "string", "base64", or "json"
 	RefID                string
 	Alias                string
 }
