@@ -14,6 +14,7 @@ import { deepFreeze } from '../test-utils/test-helpers';
 
 // Mock @grafana/runtime pieces used by DataSource
 let capturedPath: string | undefined;
+let capturedAddr: any;
 // Allow tests to override template replacement logic dynamically
 let templateReplaceImpl = (v: string) => v.replace('${var}', '5');
 jest.mock('@grafana/runtime', () => {
@@ -24,11 +25,15 @@ jest.mock('@grafana/runtime', () => {
     getGrafanaLiveSrv: () => ({
       getDataStream: ({ addr }: any) => {
         capturedPath = addr.path;
+        capturedAddr = addr;
         return of({ data: [] });
       },
     }),
     DataSourceWithBackend: class {
-      constructor(public instanceSettings: any) {}
+      uid: string;
+      constructor(public instanceSettings: any) {
+        this.uid = instanceSettings.uid;
+      }
       getResource = jest.fn();
     },
   } as any;
@@ -67,6 +72,7 @@ describe('DataSource', () => {
   beforeEach(() => {
     ds = new DataSource(mockInstanceSettings as any);
     capturedPath = undefined;
+    capturedAddr = undefined;
     jest.clearAllMocks();
   });
 
@@ -464,6 +470,21 @@ describe('DataSource', () => {
       // Actually checking for 64 'a's is good enough proof it didn't use all 100.
       expect(capturedPath).not.toContain('a'.repeat(65));
       expect(capturedPath).not.toContain('!');
+    });
+
+    it('sets both namespace and stream on addr for Grafana cross-version Live compatibility', () => {
+      // namespace: required for Grafana <12.4 (field removed in 12.4+)
+      // stream:    required for Grafana >=12.4 (undocumented breaking change, grafana/grafana#117275)
+      // Both must be present simultaneously so the plugin works across versions.
+      const query = {
+        ...ds.getDefaultQuery({} as any),
+        topicName: 'test-topic',
+        refId: 'A',
+      };
+      ds.query({ targets: [query], scopedVars: {} } as any);
+      expect(capturedAddr).toBeDefined();
+      expect(capturedAddr.namespace).toBe(mockInstanceSettings.uid);
+      expect(capturedAddr.stream).toBe(mockInstanceSettings.uid);
     });
   });
 });
