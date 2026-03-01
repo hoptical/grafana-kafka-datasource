@@ -136,9 +136,11 @@ export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourc
             addr: {
               scope: LiveChannelScope.DataSource,
               namespace: this.uid,
+              // Grafana 12.4+ expects `stream`, while older versions use `namespace`
+              stream: this.uid,
               path,
               data: interpolatedQuery,
-            },
+            } as any,
           })
           .pipe(
             startWith({ data: [] }),
