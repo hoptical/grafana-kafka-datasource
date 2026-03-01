@@ -1,5 +1,12 @@
 # Changelog
 
+## [v1.5.1](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.5.1)
+
+[Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v1.5.0...v1.5.1)
+
+- Chore: bump go, grafana-plugin-sdk and transitive packages to fix security vulnerabilities ([#136](https://github.com/hoptical/grafana-kafka-datasource/pull/136))
+- Feat: add support for the breaking change of the live server in Grafana v12.4 ([#135](https://github.com/hoptical/grafana-kafka-datasource/pull/135))
+
 ## [v1.5.0](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.5.0)
 
 [Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v1.4.0...v1.5.0)
