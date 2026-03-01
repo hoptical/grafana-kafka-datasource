@@ -2,7 +2,7 @@
 
 # Use official Node.js base image
 FROM mcr.microsoft.com/devcontainers/javascript-node:22
-ARG GO_VERSION=1.25.6
+ARG GO_VERSION=1.25.7
 
 RUN set -eux; \
     ARCH=$(uname -m); \
