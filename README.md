@@ -44,6 +44,7 @@ This plugin connects your Grafana instance directly to Kafka brokers, allowing y
 - Advanced JSON support (flat, nested, arrays, mixed types)
 - Avro support with Schema Registry integration (inline schema or Schema Registry)
 - Protobuf support with Schema Registry integration (inline schema or Schema Registry)
+- Transactional topic support (committed messages only; control records are filtered)
 - Message key support (None, String, JSON, Base64 formats)
 - Configurable flattening depth (default: 5)
 - Configurable max fields per message (default: 1000)
@@ -92,6 +93,7 @@ You can automatically configure the Kafka datasource using Grafana's provisionin
      - `latest`: Only new messages
      - `last N messages`: Start from the most recent N messages (set N in the UI)
      - `earliest`: Start from the oldest message
+   - **Transactional Topics**: The datasource reads committed messages and automatically skips Kafka transaction control records (COMMIT/ABORT markers).
    - **Timestamp Mode**: Choose between Kafka event time or dashboard received time.
    - **Alias**: Optional custom name for the query series. Supports template placeholders:
      - `{{topic}}`: The Kafka topic name
