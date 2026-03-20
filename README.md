@@ -28,7 +28,7 @@ This plugin connects your Grafana instance directly to Kafka brokers, allowing y
 
 ## Requirements
 
-- Apache Kafka v0.9+
+- Apache Kafka v0.11+
 - Grafana v10.2+
 
 > Note: This is a backend plugin, so the Grafana server should have access to the Kafka broker.
@@ -44,6 +44,7 @@ This plugin connects your Grafana instance directly to Kafka brokers, allowing y
 - Advanced JSON support (flat, nested, arrays, mixed types)
 - Avro support with Schema Registry integration (inline schema or Schema Registry)
 - Protobuf support with Schema Registry integration (inline schema or Schema Registry)
+- Transactional topic support (committed messages only; control records are filtered)
 - Message key support (None, String, JSON, Base64 formats)
 - Configurable flattening depth (default: 5)
 - Configurable max fields per message (default: 1000)
@@ -92,6 +93,7 @@ You can automatically configure the Kafka datasource using Grafana's provisionin
      - `latest`: Only new messages
      - `last N messages`: Start from the most recent N messages (set N in the UI)
      - `earliest`: Start from the oldest message
+   - **Transactional Topics**: The datasource reads committed messages and automatically skips Kafka transaction control records (COMMIT/ABORT markers).
    - **Timestamp Mode**: Choose between Kafka event time or dashboard received time.
    - **Alias**: Optional custom name for the query series. Supports template placeholders:
      - `{{topic}}`: The Kafka topic name
@@ -212,7 +214,7 @@ Want to test the plugin with realistic Kafka messages? Use the included sample p
 
 ## FAQ & Troubleshooting
 
-- **Can I use this with any Kafka broker?** Yes, supports Apache Kafka v0.9+ and compatible brokers.
+- **Can I use this with any Kafka broker?** Yes, supports Apache Kafka v0.11+ and compatible brokers.
 - **Does it support secure connections?** Yes, SASL and SSL/TLS are supported.
 - **What JSON formats are supported?** Flat, nested, arrays, mixed types.
 - **How do I generate test data?** Use the included Go or Python producers.

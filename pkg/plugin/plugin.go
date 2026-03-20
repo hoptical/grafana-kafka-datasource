@@ -726,6 +726,18 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 				continue
 			}
 
+			if frame == nil {
+				// ProcessMessage should never return (nil, nil): control records are filtered
+				// inside ConsumerPull before reaching this loop, and all other paths in
+				// ProcessMessage return either a data frame or propagate an error.
+				// If this branch is reached it indicates a bug; log it so it is not silent.
+				log.DefaultLogger.Warn("ProcessMessage returned a nil frame without an error — this is unexpected",
+					"messageNumber", messageCount,
+					"partition", msgWithPartition.partition,
+					"offset", msgWithPartition.msg.Offset)
+				continue
+			}
+
 			fieldCount := 0
 			if obj, ok := msgWithPartition.msg.Value.(map[string]interface{}); ok {
 				fieldCount = len(obj)

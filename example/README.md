@@ -1,6 +1,6 @@
 # Sample Producer
 
-In this folder, there are simple producers for different langaues that generate json values in Kafka.
+In this folder, there are simple producers for different languages that generate Kafka messages in JSON, Avro, and Protobuf formats.
 
 ## Go
 
@@ -8,21 +8,43 @@ In this folder, there are simple producers for different langaues that generate 
 
 - Go 1.17 or later
 - [kafka-go](github.com/segmentio/kafka-go) v0.4.47 or later
+- [sarama](https://github.com/IBM/sarama) (used for transactional producer mode)
 
 ### Usage
 
 ```bash
 cd example/go
-go get github.com/segmentio/kafka-go
+go mod tidy
 ```
 
 Then, run the producer:
 
 ```bash
-go run producer.go -broker <broker> -topic <topic> -interval <interval ms> -num-partitions <partitions> -shape <flat|nested|list> -format <json|avro|protobuf> -key-format <none|string|json|binary>
+go run producer.go \
+  -broker <broker> \
+  -topic <topic> \
+  -interval <interval-ms> \
+  -num-partitions <partitions> \
+  -shape <flat|nested|list> \
+  -format <json|avro|protobuf> \
+  -key-format <none|string|json|binary> \
+  -schema-registry <url> \
+  -schema-registry-user <username> \
+  -schema-registry-pass <password> \
+  -transactional-id <transactional-id>
 ```
 
 > Note: The producer will create the topic if it does not exist.
+
+#### Transactional mode
+
+Enable Kafka transactions by setting `-transactional-id`. In this mode, each message is produced in its own transaction.
+
+```bash
+go run producer.go -broker localhost:9094 -topic txn-test -format json -transactional-id txn-producer-1
+```
+
+This is useful for validating transactional topic behavior and control-record handling in the datasource.
 
 ### Message Format Examples
 
@@ -111,8 +133,15 @@ Null reproduction: All shapes periodically set fields like `value1` or `value2` 
 - `-key-format <none|string|json|binary>`: Message key format (default: string). Use `binary` to send raw 8-byte binary keys that the plugin will encode as base64 for display.
 - `-values-offset <float>`: Offset for generated values
 - `-connect-timeout <ms>`: Broker connect timeout
+- `-leader-wait-timeout <ms>`: Timeout waiting for topic leader election after topic creation
+- `-interval <ms>`: Delay between produced messages
+- `-num-partitions <n>`: Number of partitions to create when topic does not exist
+- `-shape <flat|nested|list>`: Payload shape (list is JSON-only)
 - `-verbose`: Enable verbose logging for debugging
 - `-schema-registry <url>`: Schema registry URL for Avro schema management (e.g., <http://localhost:8081>)
+- `-schema-registry-user <user>`: Schema Registry basic-auth username (optional)
+- `-schema-registry-pass <pass>`: Schema Registry basic-auth password (optional)
+- `-transactional-id <id>`: Enable transactional producer mode
 
 See the Go source for more advanced options and sample payloads.
 

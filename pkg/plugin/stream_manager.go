@@ -85,6 +85,23 @@ func createErrorFrame(msg kafka_client.KafkaMessage, partition int32, partitions
 	return frame, nil
 }
 
+func decodeTopLevelJSON(data []byte) (interface{}, error) {
+	var v interface{}
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.UseNumber()
+	if err := dec.Decode(&v); err != nil {
+		return nil, fmt.Errorf("json decoding failed: %w", err)
+	}
+
+	// Accept both objects and arrays at the top level.
+	switch decoded := v.(type) {
+	case map[string]interface{}, []interface{}:
+		return decoded, nil
+	default:
+		return nil, fmt.Errorf("decoded JSON is not a valid object or array: %T", decoded)
+	}
+}
+
 // StreamConfig holds the configuration for streaming that can be updated dynamically.
 type StreamConfig struct {
 	MessageFormat        string
@@ -205,34 +222,21 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 			"offset", msg.Offset,
 			"rawValueLength", len(msg.RawValue))
 
-		// Try to decode as JSON since the consumer didn't parse it
-		var v interface{}
-		dec := json.NewDecoder(bytes.NewReader(msg.RawValue))
-		dec.UseNumber()
-		if err := dec.Decode(&v); err != nil {
+		decoded, err := decodeTopLevelJSON(msg.RawValue)
+		if err != nil {
 			log.DefaultLogger.Error("Failed to decode JSON message",
 				"error", err,
 				"rawValueLength", len(msg.RawValue),
 				"partition", partition,
 				"offset", msg.Offset)
-			return createErrorFrame(msg, partition, partitions, fmt.Errorf("json decoding failed: %w", err), config, topic)
-		} else {
-			// Accept both objects and arrays at the top level
-			switch v := v.(type) {
-			case map[string]interface{}, []interface{}:
-				log.DefaultLogger.Debug("JSON decoding successful",
-					"partition", partition,
-					"offset", msg.Offset,
-					"decodedType", fmt.Sprintf("%T", v))
-				messageValue = v
-			default:
-				log.DefaultLogger.Error("JSON decoded but not object/array",
-					"partition", partition,
-					"offset", msg.Offset,
-					"decodedType", fmt.Sprintf("%T", v))
-				return createErrorFrame(msg, partition, partitions, fmt.Errorf("decoded JSON is not a valid object or array: %T", v), config, topic)
-			}
+			return createErrorFrame(msg, partition, partitions, err, config, topic)
 		}
+
+		log.DefaultLogger.Debug("JSON decoding successful",
+			"partition", partition,
+			"offset", msg.Offset,
+			"decodedType", fmt.Sprintf("%T", decoded))
+		messageValue = decoded
 	} else {
 		messageFormat := config.MessageFormat
 		log.DefaultLogger.Debug("Using pre-decoded message value or non-Avro format",
@@ -824,34 +828,21 @@ func (sm *StreamManager) ProcessMessage(
 			"offset", msg.Offset,
 			"rawValueLength", len(msg.RawValue))
 
-		// Try to decode as JSON since the consumer didn't parse it
-		var v interface{}
-		dec := json.NewDecoder(bytes.NewReader(msg.RawValue))
-		dec.UseNumber()
-		if err := dec.Decode(&v); err != nil {
+		decoded, err := decodeTopLevelJSON(msg.RawValue)
+		if err != nil {
 			log.DefaultLogger.Error("Failed to decode JSON message",
 				"error", err,
 				"rawValueLength", len(msg.RawValue),
 				"partition", partition,
 				"offset", msg.Offset)
-			return createErrorFrame(msg, partition, partitions, fmt.Errorf("json decoding failed: %w", err), config, topic)
-		} else {
-			// Accept both objects and arrays at the top level
-			switch v := v.(type) {
-			case map[string]interface{}, []interface{}:
-				log.DefaultLogger.Debug("JSON decoding successful",
-					"partition", partition,
-					"offset", msg.Offset,
-					"decodedType", fmt.Sprintf("%T", v))
-				messageValue = v
-			default:
-				log.DefaultLogger.Error("JSON decoded but not object/array",
-					"partition", partition,
-					"offset", msg.Offset,
-					"decodedType", fmt.Sprintf("%T", v))
-				return createErrorFrame(msg, partition, partitions, fmt.Errorf("decoded JSON is not a valid object or array: %T", v), config, topic)
-			}
+			return createErrorFrame(msg, partition, partitions, err, config, topic)
 		}
+
+		log.DefaultLogger.Debug("JSON decoding successful",
+			"partition", partition,
+			"offset", msg.Offset,
+			"decodedType", fmt.Sprintf("%T", decoded))
+		messageValue = decoded
 	}
 
 	frame := data.NewFrame("response")

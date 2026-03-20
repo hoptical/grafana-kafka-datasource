@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/segmentio/kafka-go"
 )
 
 func TestNewKafkaClient_Defaults(t *testing.T) {
@@ -454,6 +456,118 @@ func TestKafkaClient_ConsumerPull_AvroMessage(t *testing.T) {
 	}
 	if message.Value != nil {
 		t.Error("Expected Value to be nil for non-JSON message")
+	}
+}
+
+func TestDecodeMessageValue_NullBytesJSON(t *testing.T) {
+	httpClient := &http.Client{}
+	client := NewKafkaClient(Options{BootstrapServers: "localhost:9092"}, httpClient)
+
+	_, err := client.decodeMessageValue([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, "json")
+	if err == nil {
+		t.Fatal("expected JSON decode error for null-byte payload, got nil")
+	}
+	if !strings.Contains(err.Error(), "failed to decode message as JSON") {
+		t.Fatalf("expected wrapped JSON decode error, got: %v", err)
+	}
+}
+
+func TestIsTransactionControlRecord(t *testing.T) {
+	// Kafka transaction control record key layout (4 bytes):
+	// [version int16][controlType int16]  —  ABORT=0, COMMIT=1
+	commitKey := []byte{0x00, 0x00, 0x00, 0x01} // version=0, type=COMMIT
+	abortKey := []byte{0x00, 0x00, 0x00, 0x00}  // version=0, type=ABORT
+
+	tests := []struct {
+		name     string
+		key      []byte
+		value    []byte
+		expected bool
+	}{
+		// Positive cases — well-formed control records
+		{"COMMIT key with epoch 0", commitKey, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, true},
+		{"COMMIT key with epoch 2", commitKey, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x02}, true},
+		{"COMMIT key with epoch 255", commitKey, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0xFF}, true},
+		{"COMMIT key with large epoch", commitKey, []byte{0x00, 0x00, 0x7F, 0xFF, 0xFF, 0xFF}, true},
+		{"ABORT key with epoch 0", abortKey, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, true},
+		{"ABORT key with epoch 5", abortKey, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x05}, true},
+
+		// Negative — wrong key length
+		{"key too short", []byte{0x00, 0x00, 0x01}, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, false},
+		{"key too long", []byte{0x00, 0x00, 0x00, 0x01, 0x00}, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, false},
+
+		// Negative — unknown key version
+		{"unknown key version 1", []byte{0x00, 0x01, 0x00, 0x01}, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, false},
+
+		// Negative — unknown controlType
+		{"unknown controlType 2", []byte{0x00, 0x00, 0x00, 0x02}, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, false},
+
+		// Negative — wrong value length (secondary guard)
+		{"correct key but value 4 bytes", commitKey, []byte{0x00, 0x00, 0x00, 0x00}, false},
+		{"correct key but value 7 bytes", commitKey, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, false},
+		{"correct key but empty value", commitKey, []byte{}, false},
+
+		// Negative — nil key/value
+		{"nil key", nil, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, false},
+		{"nil both", nil, nil, false},
+
+		// Negative — normal application messages
+		{"normal key and JSON value", []byte("my-key"), []byte(`{"hello":"world"}`), false},
+		{"no key and short value", nil, []byte{0x7b, 0x22, 0x61, 0x22}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isTransactionControlRecord(tt.key, tt.value); got != tt.expected {
+				t.Errorf("isTransactionControlRecord(key=%x, value=%x) = %v, want %v", tt.key, tt.value, got, tt.expected)
+			}
+		})
+	}
+}
+
+type stubMessageReader struct {
+	messages []kafka.Message
+	err      error
+	idx      int
+}
+
+func (s *stubMessageReader) ReadMessage(context.Context) (kafka.Message, error) {
+	if s.idx < len(s.messages) {
+		m := s.messages[s.idx]
+		s.idx++
+		return m, nil
+	}
+	if s.err != nil {
+		return kafka.Message{}, s.err
+	}
+	return kafka.Message{}, context.Canceled
+}
+
+func TestConsumerPull_SkipsControlRecord(t *testing.T) {
+	httpClient := &http.Client{}
+	client := NewKafkaClient(Options{BootstrapServers: "localhost:9092"}, httpClient)
+
+	commitKey := []byte{0x00, 0x00, 0x00, 0x01}              // version=0, type=COMMIT
+	controlVal := []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x05} // epoch=5
+	realPayload := []byte(`{"hello":"world"}`)
+	reader := &stubMessageReader{
+		messages: []kafka.Message{
+			{Topic: "t", Partition: 0, Offset: 10, Key: commitKey, Value: controlVal},
+			{Topic: "t", Partition: 0, Offset: 11, Value: realPayload},
+		},
+	}
+
+	msg, err := client.consumerPull(context.Background(), reader, "json")
+	if err != nil {
+		t.Fatalf("consumerPull returned unexpected error: %v", err)
+	}
+	if msg.Offset != 11 {
+		t.Fatalf("expected offset 11 after skipping control record, got %d", msg.Offset)
+	}
+	if string(msg.RawValue) != string(realPayload) {
+		t.Fatalf("expected raw value %q, got %q", string(realPayload), string(msg.RawValue))
+	}
+	if msg.Value == nil {
+		t.Fatal("expected decoded message value, got nil")
 	}
 }
 

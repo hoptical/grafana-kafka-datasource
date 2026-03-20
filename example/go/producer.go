@@ -67,6 +67,39 @@ func createTopicIfNotExists(brokerURL, topic string, partitions int, timeout tim
 	return nil
 }
 
+func waitForTopicLeaders(brokerURL, topic string, partitions int, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for {
+		allReady := true
+		for p := 0; p < partitions; p++ {
+			remaining := time.Until(deadline)
+			if remaining <= 0 {
+				return fmt.Errorf("timed out waiting for leaders for topic %s", topic)
+			}
+			attemptTimeout := 2 * time.Second
+			if remaining < attemptTimeout {
+				attemptTimeout = remaining
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), attemptTimeout)
+			conn, err := kafka.DialLeader(ctx, "tcp", brokerURL, topic, p)
+			cancel()
+			if err != nil {
+				allReady = false
+				break
+			}
+			_ = conn.Close()
+		}
+
+		if allReady {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("timed out waiting for leaders for topic %s", topic)
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+}
+
 func main() {
 	// Define command line flags with default values
 	brokerURL := flag.String("broker", "localhost:9094", "Kafka broker URL")
@@ -75,6 +108,7 @@ func main() {
 	numPartitions := flag.Int("num-partitions", 1, "Number of partitions when creating topic")
 	valuesOffset := flag.Float64("values-offset", 1.0, "Offset for the values")
 	connectTimeout := flag.Int("connect-timeout", 5000, "Broker connect timeout in milliseconds")
+	leaderWaitTimeout := flag.Int("leader-wait-timeout", 30000, "Timeout in milliseconds to wait for topic leader election")
 	shape := flag.String("shape", "nested", "Payload shape: nested, flat, or list")
 	format := flag.String("format", "json", "Message format: json, avro, or protobuf")
 	schemaRegistryURL := flag.String("schema-registry", "", "Schema registry URL (for Avro/Protobuf with schema registry)")
@@ -82,6 +116,7 @@ func main() {
 	schemaRegistryPass := flag.String("schema-registry-pass", "", "Schema registry password (optional)")
 	keyFormat := flag.String("key-format", "string", "Message key format: none, string, json, or binary (raw bytes, displayed as base64 in Grafana)")
 	verbose := flag.Bool("verbose", false, "Enable verbose logging")
+	transactionalID := flag.String("transactional-id", "", "Transactional producer ID; when set, each message is produced in its own transaction")
 	flag.Parse()
 
 	// Validate format
@@ -108,18 +143,40 @@ func main() {
 		fmt.Printf("Error: Failed to create/verify topic: %v\n", err)
 		os.Exit(1)
 	}
-
-	// Configure the writer
-	w := &kafka.Writer{
-		Addr:  kafka.TCP(*brokerURL),
-		Topic: *topic,
+	leaderTimeout := time.Duration(*leaderWaitTimeout) * time.Millisecond
+	if err := waitForTopicLeaders(*brokerURL, *topic, *numPartitions, leaderTimeout); err != nil {
+		fmt.Printf("Error: topic leader not ready: %v\n", err)
+		os.Exit(1)
 	}
 
-	defer func() {
-		if err := w.Close(); err != nil {
-			fmt.Printf("failed to close writer: %v\n", err)
+	// Configure non-transactional writer by default.
+	var w *kafka.Writer
+	var txProducer *transactionalProducer
+	if *transactionalID == "" {
+		w = &kafka.Writer{
+			Addr:  kafka.TCP(*brokerURL),
+			Topic: *topic,
 		}
-	}()
+
+		defer func() {
+			if err := w.Close(); err != nil {
+				fmt.Printf("failed to close writer: %v\n", err)
+			}
+		}()
+	} else {
+		producer, err := newTransactionalProducer([]string{*brokerURL}, *transactionalID)
+		if err != nil {
+			fmt.Printf("Error creating transactional producer: %v\n", err)
+			os.Exit(1)
+		}
+		txProducer = producer
+		defer func() {
+			if err := txProducer.Close(); err != nil {
+				fmt.Printf("failed to close transactional producer: %v\n", err)
+			}
+		}()
+		fmt.Printf("Transactional mode enabled with transactional.id=%s\n", *transactionalID)
+	}
 
 	counter := 1
 	hostName := "srv-01"
@@ -304,14 +361,37 @@ func main() {
 		}
 
 		// Produce message
-		err = w.WriteMessages(context.Background(),
-			kafka.Message{
-				Key:   msgKey,
-				Value: messageData,
-			},
-		)
+		if txProducer != nil {
+			err = txProducer.WriteMessage(context.Background(), *topic, msgKey, messageData)
+		} else {
+			err = w.WriteMessages(context.Background(),
+				kafka.Message{
+					Key:   msgKey,
+					Value: messageData,
+				},
+			)
+		}
 		if err != nil {
 			fmt.Printf("Error writing message: %v\n", err)
+			if txProducer != nil {
+				if isRetryableTransactionalError(err) {
+					fmt.Printf("Transient transactional write error; retrying next loop iteration\n")
+					time.Sleep(300 * time.Millisecond)
+					continue
+				}
+				if requiresTransactionalProducerRecreation(err) {
+					fmt.Printf("Transactional producer state became invalid; recreating producer\n")
+					_ = txProducer.Close()
+					recreated, recreateErr := newTransactionalProducer([]string{*brokerURL}, *transactionalID)
+					if recreateErr != nil {
+						fmt.Printf("Error recreating transactional producer: %v\n", recreateErr)
+						os.Exit(1)
+					}
+					txProducer = recreated
+					time.Sleep(300 * time.Millisecond)
+					continue
+				}
+			}
 			os.Exit(1)
 		}
 

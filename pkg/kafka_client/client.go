@@ -24,6 +24,16 @@ const debugLogLevel = "debug"
 const errorLogLevel = "error"
 const dialerTimeout = 10 * time.Second // Fallback dialer timeout when user timeout not set
 const defaultTimeoutMs = 2000          // Fallback general timeout (health check) in ms if user timeout not provided
+// Kafka transaction end-marker record key layout (4 bytes):
+//
+//	version (int16) + controlType (int16)
+//
+// controlType: 0 = ABORT, 1 = COMMIT.
+const txnControlKeyLen = 4
+const txnControlKeyVersion int16 = 0
+const txnControlTypeAbort int16 = 0
+const txnControlTypeCommit int16 = 1
+
 // note: lastN offset calculation is approximate using kafka.LastOffset - N and clamped to kafka.FirstOffset
 
 // Options holds datasource configuration passed from Grafana.
@@ -191,6 +201,36 @@ func (client *KafkaClient) decodeMessageValue(data []byte, format string) (inter
 	}
 }
 
+// isTransactionControlRecord reports whether a Kafka message is a
+// broker-generated transaction control (end-marker) record.
+//
+// Per the Kafka protocol, a control record's KEY is exactly 4 bytes:
+//
+//	[version (int16)][controlType (int16)]
+//
+// where controlType is 0 (ABORT) or 1 (COMMIT).  This is a deterministic,
+// protocol-defined structure — unlike the value (which contains a variable
+// coordinator epoch), the key layout is fixed and unambiguous.
+//
+// We also require that the value is exactly 6 bytes (version int16 +
+// coordinatorEpoch int32) as a secondary guard against false positives, but
+// the key is the primary signal.
+func isTransactionControlRecord(key, value []byte) bool {
+	if len(key) != txnControlKeyLen {
+		return false
+	}
+	version := int16(key[0])<<8 | int16(key[1])
+	if version != txnControlKeyVersion {
+		return false
+	}
+	controlType := int16(key[2])<<8 | int16(key[3])
+	if controlType != txnControlTypeAbort && controlType != txnControlTypeCommit {
+		return false
+	}
+	// Secondary check: control record value is always version(2) + coordinatorEpoch(4) = 6 bytes.
+	return len(value) == 6
+}
+
 // NewKafkaClient creates a new KafkaClient instance.
 // The httpClient parameter should be created using grafana-plugin-sdk-go/backend/httpclient
 // to support Private Data Source Connect (PDC) with automatic SOCKS proxy handling.
@@ -317,6 +357,7 @@ func (client *KafkaClient) newReader(topic string, partition int) *kafka.Reader 
 		Topic:          topic,
 		Partition:      partition,
 		Dialer:         client.Dialer,
+		IsolationLevel: kafka.ReadCommitted,
 		CommitInterval: 0,
 		Logger:         logger,
 		ErrorLogger:    errorLogger,
@@ -425,59 +466,82 @@ func (client *KafkaClient) NewStreamReader(ctx context.Context, topic string, pa
 	return reader, nil
 }
 
-func (client *KafkaClient) ConsumerPull(ctx context.Context, reader *kafka.Reader, messageFormat string) (KafkaMessage, error) {
-	var message KafkaMessage
-	msg, err := reader.ReadMessage(ctx)
-	if err != nil {
-		return message, fmt.Errorf("error reading message from Kafka: %w", err)
-	}
+type messageReader interface {
+	ReadMessage(ctx context.Context) (kafka.Message, error)
+}
 
-	grafanalog.DefaultLogger.Debug("Received Kafka message",
-		"topic", msg.Topic,
-		"partition", msg.Partition,
-		"offset", msg.Offset,
-		"valueLength", len(msg.Value),
-		"timestamp", msg.Time,
-		"messageFormat", messageFormat)
-
-	// Store raw bytes for potential Avro decoding
-	message.RawValue = msg.Value
-
-	// Capture message key (will be decoded later based on config)
-	message.RawKey = msg.Key
-	if len(msg.Key) > 0 {
-		grafanalog.DefaultLogger.Debug("Message key present",
-			"keyLength", len(msg.Key))
-	}
-
-	// Log first few bytes for debugging
-	if len(msg.Value) > 0 {
-		preview := msg.Value
-		if len(preview) > 20 {
-			preview = preview[:20]
+func (client *KafkaClient) consumerPull(ctx context.Context, reader messageReader, messageFormat string) (KafkaMessage, error) {
+	for {
+		var message KafkaMessage
+		msg, err := reader.ReadMessage(ctx)
+		if err != nil {
+			return message, fmt.Errorf("error reading message from Kafka: %w", err)
 		}
-		grafanalog.DefaultLogger.Debug("Message content preview",
-			"firstBytes", fmt.Sprintf("%x", preview),
-			"firstChars", string(preview))
+
+		// Skip broker-generated transaction control records (COMMIT/ABORT
+		// markers). The kafka-go Reader does not filter these automatically,
+		// so we detect them via their protocol-defined key structure.
+		if isTransactionControlRecord(msg.Key, msg.Value) {
+			grafanalog.DefaultLogger.Debug("Skipping transaction control record",
+				"topic", msg.Topic,
+				"partition", msg.Partition,
+				"offset", msg.Offset,
+				"keyBytes", fmt.Sprintf("%x", msg.Key),
+				"valueLength", len(msg.Value))
+			continue
+		}
+
+		grafanalog.DefaultLogger.Debug("Received Kafka message",
+			"topic", msg.Topic,
+			"partition", msg.Partition,
+			"offset", msg.Offset,
+			"valueLength", len(msg.Value),
+			"timestamp", msg.Time,
+			"messageFormat", messageFormat)
+
+		// Store raw bytes for potential Avro decoding
+		message.RawValue = msg.Value
+
+		// Capture message key (will be decoded later based on config)
+		message.RawKey = msg.Key
+		if len(msg.Key) > 0 {
+			grafanalog.DefaultLogger.Debug("Message key present",
+				"keyLength", len(msg.Key))
+		}
+
+		// Log first few bytes for debugging
+		if len(msg.Value) > 0 {
+			preview := msg.Value
+			if len(preview) > 20 {
+				preview = preview[:20]
+			}
+			grafanalog.DefaultLogger.Debug("Message content preview",
+				"firstBytes", fmt.Sprintf("%x", preview),
+				"firstChars", string(preview))
+		}
+
+		// Decode message value based on format
+		value, err := client.decodeMessageValue(msg.Value, messageFormat)
+		if err != nil {
+			message.Error = err
+			message.Value = nil
+		} else {
+			message.Value = value
+		}
+
+		message.Offset = msg.Offset
+		message.Timestamp = msg.Time
+
+		grafanalog.DefaultLogger.Debug("Message processing complete",
+			"hasParsedValue", message.Value != nil,
+			"rawValueLength", len(message.RawValue))
+
+		return message, nil
 	}
+}
 
-	// Decode message value based on format
-	value, err := client.decodeMessageValue(msg.Value, messageFormat)
-	if err != nil {
-		message.Error = err
-		message.Value = nil
-	} else {
-		message.Value = value
-	}
-
-	message.Offset = msg.Offset
-	message.Timestamp = msg.Time
-
-	grafanalog.DefaultLogger.Debug("Message processing complete",
-		"hasParsedValue", message.Value != nil,
-		"rawValueLength", len(message.RawValue))
-
-	return message, nil
+func (client *KafkaClient) ConsumerPull(ctx context.Context, reader *kafka.Reader, messageFormat string) (KafkaMessage, error) {
+	return client.consumerPull(ctx, reader, messageFormat)
 }
 
 func (client *KafkaClient) HealthCheck(ctx context.Context) error {

@@ -8,9 +8,18 @@ import { verifyPanelDataContains, verifyColumnHeadersVisible, setTableVisualizat
 interface AvroProducerOptions {
   topic: string;
   schemaRegistry?: boolean;
+  transactionalId?: string;
+  numPartitions?: number;
+  intervalMs?: number;
 }
 
-function startAvroKafkaProducer({ topic, schemaRegistry }: AvroProducerOptions): {
+function startAvroKafkaProducer({
+  topic,
+  schemaRegistry,
+  transactionalId,
+  numPartitions,
+  intervalMs,
+}: AvroProducerOptions): {
   producer: ChildProcess;
   exitPromise: Promise<void>;
 } {
@@ -26,14 +35,19 @@ function startAvroKafkaProducer({ topic, schemaRegistry }: AvroProducerOptions):
     '-topic',
     topic,
     '-connect-timeout',
-    '500',
+    '5000',
     '-num-partitions',
-    '3',
+    String(numPartitions ?? 3),
+    '-interval',
+    String(intervalMs ?? 500),
     '-format',
     'avro',
   ];
   if (schemaRegistry) {
     args.push('-schema-registry', 'http://localhost:8081');
+  }
+  if (transactionalId) {
+    args.push('-transactional-id', transactionalId);
   }
   const producer = spawn(producerPath, args, { stdio: ['ignore', 'pipe', 'pipe'] });
 
@@ -55,6 +69,20 @@ function startAvroKafkaProducer({ topic, schemaRegistry }: AvroProducerOptions):
     });
   });
   return { producer, exitPromise };
+}
+
+function startTransactionalAvroKafkaProducer(topic: string): {
+  producer: ChildProcess;
+  exitPromise: Promise<void>;
+} {
+  const transactionalId = `txn-avro-e2e-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+  return startAvroKafkaProducer({
+    topic,
+    schemaRegistry: true,
+    transactionalId,
+    numPartitions: 3,
+    intervalMs: 300,
+  });
 }
 
 async function findMessageFormatSelector(page: Page): Promise<Locator | null> {
@@ -355,6 +383,51 @@ test.describe.serial('Kafka Query Editor - Avro Tests', () => {
         exitPromise.catch(() => {}), // Ignore exit errors during cleanup
         new Promise((resolve) => setTimeout(resolve, 2000)),
       ]);
+    }
+  });
+
+  test('should stream transactional Avro messages without error frames', async ({
+    readProvisionedDataSource,
+    page,
+    panelEditPage,
+  }) => {
+    const ds = await readProvisionedDataSource({ fileName: 'datasource.yaml' });
+    await panelEditPage.datasource.set(ds.name);
+
+    const topic = `txn-test-avro-topic-${Date.now()}`;
+    const { producer, exitPromise } = startTransactionalAvroKafkaProducer(topic);
+
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 4000));
+
+      await page.getByRole('textbox', { name: 'Enter topic name' }).fill(topic);
+      await page.getByText(topic).first().click();
+
+      await selectAvroMessageFormat(page);
+      await page.getByRole('button', { name: 'Fetch' }).click();
+
+      const partitionSelector = page
+        .locator('#query-editor-partition')
+        .or(page.getByText('All partitions').locator('..').locator('.css-1eu65zc'));
+      await expect(partitionSelector.first()).toBeVisible({ timeout: 5000 });
+      await partitionSelector.first().click();
+
+      const allPartitionsOption = page
+        .getByLabel('Select options menu')
+        .getByText('All partitions')
+        .or(page.getByRole('option', { name: /^All partitions$/ }));
+      await allPartitionsOption.first().click();
+
+      await setTableVisualization(panelEditPage);
+      await verifyColumnHeadersVisible(page);
+      await verifyPanelDataContains(panelEditPage);
+
+      // Regression check: transaction control records must not become Avro decode errors.
+      await expect(page.getByRole('columnheader', { name: 'error' })).toHaveCount(0);
+      await expect(panelEditPage.panel.data.filter({ hasText: /avro decoding failed/i })).toHaveCount(0);
+    } finally {
+      producer.kill();
+      await Promise.race([exitPromise.catch(() => {}), new Promise((resolve) => setTimeout(resolve, 2000))]);
     }
   });
 });
