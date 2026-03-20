@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/segmentio/kafka-go"
 )
 
 func TestNewKafkaClient_Defaults(t *testing.T) {
@@ -465,8 +467,8 @@ func TestDecodeMessageValue_NullBytesJSON(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected JSON decode error for null-byte payload, got nil")
 	}
-	if !strings.Contains(err.Error(), "invalid character") {
-		t.Fatalf("expected invalid character error, got: %v", err)
+	if !strings.Contains(err.Error(), "failed to decode message as JSON") {
+		t.Fatalf("expected wrapped JSON decode error, got: %v", err)
 	}
 }
 
@@ -477,7 +479,9 @@ func TestIsTransactionControlRecord(t *testing.T) {
 		expected bool
 	}{
 		{"all-zero 6 bytes", []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, true},
-		{"all-zero 1 byte", []byte{0x00}, true},
+		{"all-zero 5 bytes", []byte{0x00, 0x00, 0x00, 0x00, 0x00}, false},
+		{"all-zero 7 bytes", []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, false},
+		{"all-zero 2 bytes", []byte{0x00, 0x00}, false},
 		{"valid JSON start", []byte{0x7b, 0x22, 0x61, 0x22}, false},
 		{"avro magic byte", []byte{0x00, 0x01, 0x02, 0x03}, false},
 		{"empty slice", []byte{}, false},
@@ -490,6 +494,51 @@ func TestIsTransactionControlRecord(t *testing.T) {
 				t.Errorf("isTransactionControlRecord(%x) = %v, want %v", tt.value, got, tt.expected)
 			}
 		})
+	}
+}
+
+type stubMessageReader struct {
+	messages []kafka.Message
+	err      error
+	idx      int
+}
+
+func (s *stubMessageReader) ReadMessage(context.Context) (kafka.Message, error) {
+	if s.idx < len(s.messages) {
+		m := s.messages[s.idx]
+		s.idx++
+		return m, nil
+	}
+	if s.err != nil {
+		return kafka.Message{}, s.err
+	}
+	return kafka.Message{}, context.Canceled
+}
+
+func TestConsumerPull_SkipsControlRecord(t *testing.T) {
+	httpClient := &http.Client{}
+	client := NewKafkaClient(Options{BootstrapServers: "localhost:9092"}, httpClient)
+
+	realPayload := []byte(`{"hello":"world"}`)
+	reader := &stubMessageReader{
+		messages: []kafka.Message{
+			{Topic: "t", Partition: 0, Offset: 10, Value: []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00}},
+			{Topic: "t", Partition: 0, Offset: 11, Value: realPayload},
+		},
+	}
+
+	msg, err := client.consumerPull(context.Background(), reader, "json")
+	if err != nil {
+		t.Fatalf("consumerPull returned unexpected error: %v", err)
+	}
+	if msg.Offset != 11 {
+		t.Fatalf("expected offset 11 after skipping control record, got %d", msg.Offset)
+	}
+	if string(msg.RawValue) != string(realPayload) {
+		t.Fatalf("expected raw value %q, got %q", string(realPayload), string(msg.RawValue))
+	}
+	if msg.Value == nil {
+		t.Fatal("expected decoded message value, got nil")
 	}
 }
 

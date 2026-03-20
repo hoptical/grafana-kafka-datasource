@@ -24,6 +24,7 @@ const debugLogLevel = "debug"
 const errorLogLevel = "error"
 const dialerTimeout = 10 * time.Second // Fallback dialer timeout when user timeout not set
 const defaultTimeoutMs = 2000          // Fallback general timeout (health check) in ms if user timeout not provided
+const transactionMarkerLength = 6      // Observed Kafka transactional control-record payload size
 // note: lastN offset calculation is approximate using kafka.LastOffset - N and clamped to kafka.FirstOffset
 
 // Options holds datasource configuration passed from Grafana.
@@ -191,14 +192,15 @@ func (client *KafkaClient) decodeMessageValue(data []byte, format string) (inter
 	}
 }
 
-// isTransactionControlRecord reports whether a Kafka message value is a
-// broker-generated transaction end-marker. These records have an all-zero byte
-// payload (typically 6 bytes) and carry no application data. They appear on
-// every partition after a transactional producer commits or aborts.
-// Real application payloads in any format (JSON, Avro, Protobuf, …) always
-// contain at least one non-zero byte.
+// isTransactionControlRecord reports whether a Kafka message value is likely to
+// be a broker-generated transaction end-marker. These records are observed as
+// fixed-size, all-zero byte payloads and carry no application data.
+//
+// NOTE: This is a heuristic and intentionally conservative: only payloads with
+// the expected marker length and all-zero bytes are treated as control records
+// to reduce the risk of dropping legitimate application messages.
 func isTransactionControlRecord(value []byte) bool {
-	if len(value) == 0 {
+	if len(value) != transactionMarkerLength {
 		return false
 	}
 	for _, b := range value {
@@ -444,7 +446,11 @@ func (client *KafkaClient) NewStreamReader(ctx context.Context, topic string, pa
 	return reader, nil
 }
 
-func (client *KafkaClient) ConsumerPull(ctx context.Context, reader *kafka.Reader, messageFormat string) (KafkaMessage, error) {
+type messageReader interface {
+	ReadMessage(ctx context.Context) (kafka.Message, error)
+}
+
+func (client *KafkaClient) consumerPull(ctx context.Context, reader messageReader, messageFormat string) (KafkaMessage, error) {
 	for {
 		var message KafkaMessage
 		msg, err := reader.ReadMessage(ctx)
@@ -452,9 +458,9 @@ func (client *KafkaClient) ConsumerPull(ctx context.Context, reader *kafka.Reade
 			return message, fmt.Errorf("error reading message from Kafka: %w", err)
 		}
 
-		// Skip broker-generated transaction control records. These are all-zero-byte
-		// payloads appended by the broker after every transactional commit/abort.
-		// They carry no application data and are meaningless for any message format.
+		// Skip broker-generated transaction control records. These are fixed-size
+		// all-zero-byte payloads appended by the broker after transactional
+		// commit/abort operations and carry no application data.
 		if isTransactionControlRecord(msg.Value) {
 			grafanalog.DefaultLogger.Debug("Skipping transaction control record",
 				"topic", msg.Topic,
@@ -511,6 +517,10 @@ func (client *KafkaClient) ConsumerPull(ctx context.Context, reader *kafka.Reade
 
 		return message, nil
 	}
+}
+
+func (client *KafkaClient) ConsumerPull(ctx context.Context, reader *kafka.Reader, messageFormat string) (KafkaMessage, error) {
+	return client.consumerPull(ctx, reader, messageFormat)
 }
 
 func (client *KafkaClient) HealthCheck(ctx context.Context) error {
