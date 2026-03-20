@@ -82,6 +82,7 @@ func main() {
 	schemaRegistryPass := flag.String("schema-registry-pass", "", "Schema registry password (optional)")
 	keyFormat := flag.String("key-format", "string", "Message key format: none, string, json, or binary (raw bytes, displayed as base64 in Grafana)")
 	verbose := flag.Bool("verbose", false, "Enable verbose logging")
+	transactionalID := flag.String("transactional-id", "", "Transactional producer ID; when set, each message is produced in its own transaction")
 	flag.Parse()
 
 	// Validate format
@@ -109,17 +110,34 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Configure the writer
-	w := &kafka.Writer{
-		Addr:  kafka.TCP(*brokerURL),
-		Topic: *topic,
-	}
-
-	defer func() {
-		if err := w.Close(); err != nil {
-			fmt.Printf("failed to close writer: %v\n", err)
+	// Configure non-transactional writer by default.
+	var w *kafka.Writer
+	var txProducer *transactionalProducer
+	if *transactionalID == "" {
+		w = &kafka.Writer{
+			Addr:  kafka.TCP(*brokerURL),
+			Topic: *topic,
 		}
-	}()
+
+		defer func() {
+			if err := w.Close(); err != nil {
+				fmt.Printf("failed to close writer: %v\n", err)
+			}
+		}()
+	} else {
+		producer, err := newTransactionalProducer([]string{*brokerURL}, *transactionalID)
+		if err != nil {
+			fmt.Printf("Error creating transactional producer: %v\n", err)
+			os.Exit(1)
+		}
+		txProducer = producer
+		defer func() {
+			if err := txProducer.Close(); err != nil {
+				fmt.Printf("failed to close transactional producer: %v\n", err)
+			}
+		}()
+		fmt.Printf("Transactional mode enabled with transactional.id=%s\n", *transactionalID)
+	}
 
 	counter := 1
 	hostName := "srv-01"
@@ -304,12 +322,16 @@ func main() {
 		}
 
 		// Produce message
-		err = w.WriteMessages(context.Background(),
-			kafka.Message{
-				Key:   msgKey,
-				Value: messageData,
-			},
-		)
+		if txProducer != nil {
+			err = txProducer.WriteMessage(context.Background(), *topic, msgKey, messageData)
+		} else {
+			err = w.WriteMessages(context.Background(),
+				kafka.Message{
+					Key:   msgKey,
+					Value: messageData,
+				},
+			)
+		}
 		if err != nil {
 			fmt.Printf("Error writing message: %v\n", err)
 			os.Exit(1)
