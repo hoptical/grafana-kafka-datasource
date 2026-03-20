@@ -67,6 +67,31 @@ func createTopicIfNotExists(brokerURL, topic string, partitions int, timeout tim
 	return nil
 }
 
+func waitForTopicLeaders(brokerURL, topic string, partitions int, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for {
+		allReady := true
+		for p := 0; p < partitions; p++ {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			conn, err := kafka.DialLeader(ctx, "tcp", brokerURL, topic, p)
+			cancel()
+			if err != nil {
+				allReady = false
+				break
+			}
+			_ = conn.Close()
+		}
+
+		if allReady {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("timed out waiting for leaders for topic %s", topic)
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+}
+
 func main() {
 	// Define command line flags with default values
 	brokerURL := flag.String("broker", "localhost:9094", "Kafka broker URL")
@@ -107,6 +132,10 @@ func main() {
 	timeout := time.Duration(*connectTimeout) * time.Millisecond
 	if err := createTopicIfNotExists(*brokerURL, *topic, *numPartitions, timeout); err != nil {
 		fmt.Printf("Error: Failed to create/verify topic: %v\n", err)
+		os.Exit(1)
+	}
+	if err := waitForTopicLeaders(*brokerURL, *topic, *numPartitions, timeout); err != nil {
+		fmt.Printf("Error: topic leader not ready: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -334,6 +363,25 @@ func main() {
 		}
 		if err != nil {
 			fmt.Printf("Error writing message: %v\n", err)
+			if txProducer != nil {
+				if isRetryableTransactionalError(err) {
+					fmt.Printf("Transient transactional write error; retrying next loop iteration\n")
+					time.Sleep(300 * time.Millisecond)
+					continue
+				}
+				if requiresTransactionalProducerRecreation(err) {
+					fmt.Printf("Transactional producer state became invalid; recreating producer\n")
+					_ = txProducer.Close()
+					recreated, recreateErr := newTransactionalProducer([]string{*brokerURL}, *transactionalID)
+					if recreateErr != nil {
+						fmt.Printf("Error recreating transactional producer: %v\n", recreateErr)
+						os.Exit(1)
+					}
+					txProducer = recreated
+					time.Sleep(300 * time.Millisecond)
+					continue
+				}
+			}
 			os.Exit(1)
 		}
 
