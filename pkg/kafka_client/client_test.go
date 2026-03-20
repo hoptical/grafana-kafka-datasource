@@ -457,6 +457,42 @@ func TestKafkaClient_ConsumerPull_AvroMessage(t *testing.T) {
 	}
 }
 
+func TestDecodeMessageValue_NullBytesJSON(t *testing.T) {
+	httpClient := &http.Client{}
+	client := NewKafkaClient(Options{BootstrapServers: "localhost:9092"}, httpClient)
+
+	_, err := client.decodeMessageValue([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, "json")
+	if err == nil {
+		t.Fatal("expected JSON decode error for null-byte payload, got nil")
+	}
+	if !strings.Contains(err.Error(), "invalid character") {
+		t.Fatalf("expected invalid character error, got: %v", err)
+	}
+}
+
+func TestIsTransactionControlRecord(t *testing.T) {
+	tests := []struct {
+		name     string
+		value    []byte
+		expected bool
+	}{
+		{"all-zero 6 bytes", []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, true},
+		{"all-zero 1 byte", []byte{0x00}, true},
+		{"valid JSON start", []byte{0x7b, 0x22, 0x61, 0x22}, false},
+		{"avro magic byte", []byte{0x00, 0x01, 0x02, 0x03}, false},
+		{"empty slice", []byte{}, false},
+		{"nil slice", nil, false},
+		{"mixed with non-zero", []byte{0x00, 0x00, 0x01}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isTransactionControlRecord(tt.value); got != tt.expected {
+				t.Errorf("isTransactionControlRecord(%x) = %v, want %v", tt.value, got, tt.expected)
+			}
+		})
+	}
+}
+
 func TestKafkaClient_GetTopicPartitions(t *testing.T) {
 	httpClient := &http.Client{}
 	client := NewKafkaClient(Options{BootstrapServers: "localhost:9092"}, httpClient)

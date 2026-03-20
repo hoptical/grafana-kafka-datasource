@@ -726,6 +726,11 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 				continue
 			}
 
+			if frame == nil {
+				// Nil frame means the message was intentionally skipped (e.g. control record).
+				continue
+			}
+
 			fieldCount := 0
 			if obj, ok := msgWithPartition.msg.Value.(map[string]interface{}); ok {
 				fieldCount = len(obj)

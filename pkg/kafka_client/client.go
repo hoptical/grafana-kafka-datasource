@@ -191,6 +191,24 @@ func (client *KafkaClient) decodeMessageValue(data []byte, format string) (inter
 	}
 }
 
+// isTransactionControlRecord reports whether a Kafka message value is a
+// broker-generated transaction end-marker. These records have an all-zero byte
+// payload (typically 6 bytes) and carry no application data. They appear on
+// every partition after a transactional producer commits or aborts.
+// Real application payloads in any format (JSON, Avro, Protobuf, …) always
+// contain at least one non-zero byte.
+func isTransactionControlRecord(value []byte) bool {
+	if len(value) == 0 {
+		return false
+	}
+	for _, b := range value {
+		if b != 0x00 {
+			return false
+		}
+	}
+	return true
+}
+
 // NewKafkaClient creates a new KafkaClient instance.
 // The httpClient parameter should be created using grafana-plugin-sdk-go/backend/httpclient
 // to support Private Data Source Connect (PDC) with automatic SOCKS proxy handling.
@@ -317,6 +335,7 @@ func (client *KafkaClient) newReader(topic string, partition int) *kafka.Reader 
 		Topic:          topic,
 		Partition:      partition,
 		Dialer:         client.Dialer,
+		IsolationLevel: kafka.ReadCommitted,
 		CommitInterval: 0,
 		Logger:         logger,
 		ErrorLogger:    errorLogger,
@@ -426,58 +445,72 @@ func (client *KafkaClient) NewStreamReader(ctx context.Context, topic string, pa
 }
 
 func (client *KafkaClient) ConsumerPull(ctx context.Context, reader *kafka.Reader, messageFormat string) (KafkaMessage, error) {
-	var message KafkaMessage
-	msg, err := reader.ReadMessage(ctx)
-	if err != nil {
-		return message, fmt.Errorf("error reading message from Kafka: %w", err)
-	}
-
-	grafanalog.DefaultLogger.Debug("Received Kafka message",
-		"topic", msg.Topic,
-		"partition", msg.Partition,
-		"offset", msg.Offset,
-		"valueLength", len(msg.Value),
-		"timestamp", msg.Time,
-		"messageFormat", messageFormat)
-
-	// Store raw bytes for potential Avro decoding
-	message.RawValue = msg.Value
-
-	// Capture message key (will be decoded later based on config)
-	message.RawKey = msg.Key
-	if len(msg.Key) > 0 {
-		grafanalog.DefaultLogger.Debug("Message key present",
-			"keyLength", len(msg.Key))
-	}
-
-	// Log first few bytes for debugging
-	if len(msg.Value) > 0 {
-		preview := msg.Value
-		if len(preview) > 20 {
-			preview = preview[:20]
+	for {
+		var message KafkaMessage
+		msg, err := reader.ReadMessage(ctx)
+		if err != nil {
+			return message, fmt.Errorf("error reading message from Kafka: %w", err)
 		}
-		grafanalog.DefaultLogger.Debug("Message content preview",
-			"firstBytes", fmt.Sprintf("%x", preview),
-			"firstChars", string(preview))
+
+		// Skip broker-generated transaction control records. These are all-zero-byte
+		// payloads appended by the broker after every transactional commit/abort.
+		// They carry no application data and are meaningless for any message format.
+		if isTransactionControlRecord(msg.Value) {
+			grafanalog.DefaultLogger.Debug("Skipping transaction control record",
+				"topic", msg.Topic,
+				"partition", msg.Partition,
+				"offset", msg.Offset,
+				"valueLength", len(msg.Value))
+			continue
+		}
+
+		grafanalog.DefaultLogger.Debug("Received Kafka message",
+			"topic", msg.Topic,
+			"partition", msg.Partition,
+			"offset", msg.Offset,
+			"valueLength", len(msg.Value),
+			"timestamp", msg.Time,
+			"messageFormat", messageFormat)
+
+		// Store raw bytes for potential Avro decoding
+		message.RawValue = msg.Value
+
+		// Capture message key (will be decoded later based on config)
+		message.RawKey = msg.Key
+		if len(msg.Key) > 0 {
+			grafanalog.DefaultLogger.Debug("Message key present",
+				"keyLength", len(msg.Key))
+		}
+
+		// Log first few bytes for debugging
+		if len(msg.Value) > 0 {
+			preview := msg.Value
+			if len(preview) > 20 {
+				preview = preview[:20]
+			}
+			grafanalog.DefaultLogger.Debug("Message content preview",
+				"firstBytes", fmt.Sprintf("%x", preview),
+				"firstChars", string(preview))
+		}
+
+		// Decode message value based on format
+		value, err := client.decodeMessageValue(msg.Value, messageFormat)
+		if err != nil {
+			message.Error = err
+			message.Value = nil
+		} else {
+			message.Value = value
+		}
+
+		message.Offset = msg.Offset
+		message.Timestamp = msg.Time
+
+		grafanalog.DefaultLogger.Debug("Message processing complete",
+			"hasParsedValue", message.Value != nil,
+			"rawValueLength", len(message.RawValue))
+
+		return message, nil
 	}
-
-	// Decode message value based on format
-	value, err := client.decodeMessageValue(msg.Value, messageFormat)
-	if err != nil {
-		message.Error = err
-		message.Value = nil
-	} else {
-		message.Value = value
-	}
-
-	message.Offset = msg.Offset
-	message.Timestamp = msg.Time
-
-	grafanalog.DefaultLogger.Debug("Message processing complete",
-		"hasParsedValue", message.Value != nil,
-		"rawValueLength", len(message.RawValue))
-
-	return message, nil
 }
 
 func (client *KafkaClient) HealthCheck(ctx context.Context) error {

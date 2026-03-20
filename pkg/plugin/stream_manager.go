@@ -216,22 +216,22 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 				"partition", partition,
 				"offset", msg.Offset)
 			return createErrorFrame(msg, partition, partitions, fmt.Errorf("json decoding failed: %w", err), config, topic)
-		} else {
-			// Accept both objects and arrays at the top level
-			switch v := v.(type) {
-			case map[string]interface{}, []interface{}:
-				log.DefaultLogger.Debug("JSON decoding successful",
-					"partition", partition,
-					"offset", msg.Offset,
-					"decodedType", fmt.Sprintf("%T", v))
-				messageValue = v
-			default:
-				log.DefaultLogger.Error("JSON decoded but not object/array",
-					"partition", partition,
-					"offset", msg.Offset,
-					"decodedType", fmt.Sprintf("%T", v))
-				return createErrorFrame(msg, partition, partitions, fmt.Errorf("decoded JSON is not a valid object or array: %T", v), config, topic)
-			}
+		}
+
+		// Accept both objects and arrays at the top level
+		switch v := v.(type) {
+		case map[string]interface{}, []interface{}:
+			log.DefaultLogger.Debug("JSON decoding successful",
+				"partition", partition,
+				"offset", msg.Offset,
+				"decodedType", fmt.Sprintf("%T", v))
+			messageValue = v
+		default:
+			log.DefaultLogger.Error("JSON decoded but not object/array",
+				"partition", partition,
+				"offset", msg.Offset,
+				"decodedType", fmt.Sprintf("%T", v))
+			return createErrorFrame(msg, partition, partitions, fmt.Errorf("decoded JSON is not a valid object or array: %T", v), config, topic)
 		}
 	} else {
 		messageFormat := config.MessageFormat
@@ -835,22 +835,22 @@ func (sm *StreamManager) ProcessMessage(
 				"partition", partition,
 				"offset", msg.Offset)
 			return createErrorFrame(msg, partition, partitions, fmt.Errorf("json decoding failed: %w", err), config, topic)
-		} else {
-			// Accept both objects and arrays at the top level
-			switch v := v.(type) {
-			case map[string]interface{}, []interface{}:
-				log.DefaultLogger.Debug("JSON decoding successful",
-					"partition", partition,
-					"offset", msg.Offset,
-					"decodedType", fmt.Sprintf("%T", v))
-				messageValue = v
-			default:
-				log.DefaultLogger.Error("JSON decoded but not object/array",
-					"partition", partition,
-					"offset", msg.Offset,
-					"decodedType", fmt.Sprintf("%T", v))
-				return createErrorFrame(msg, partition, partitions, fmt.Errorf("decoded JSON is not a valid object or array: %T", v), config, topic)
-			}
+		}
+
+		// Accept both objects and arrays at the top level
+		switch v := v.(type) {
+		case map[string]interface{}, []interface{}:
+			log.DefaultLogger.Debug("JSON decoding successful",
+				"partition", partition,
+				"offset", msg.Offset,
+				"decodedType", fmt.Sprintf("%T", v))
+			messageValue = v
+		default:
+			log.DefaultLogger.Error("JSON decoded but not object/array",
+				"partition", partition,
+				"offset", msg.Offset,
+				"decodedType", fmt.Sprintf("%T", v))
+			return createErrorFrame(msg, partition, partitions, fmt.Errorf("decoded JSON is not a valid object or array: %T", v), config, topic)
 		}
 	}
 
