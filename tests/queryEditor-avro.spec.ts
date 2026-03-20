@@ -424,7 +424,7 @@ test.describe.serial('Kafka Query Editor - Avro Tests', () => {
 
       // Regression check: transaction control records must not become Avro decode errors.
       await expect(page.getByRole('columnheader', { name: 'error' })).toHaveCount(0);
-      await expect(panelEditPage.panel.data.filter({ hasText: /failed to decode message as Avro/i })).toHaveCount(0);
+      await expect(panelEditPage.panel.data.filter({ hasText: /avro decoding failed/i })).toHaveCount(0);
     } finally {
       producer.kill();
       await Promise.race([exitPromise.catch(() => {}), new Promise((resolve) => setTimeout(resolve, 2000))]);
