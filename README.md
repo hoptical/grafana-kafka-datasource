@@ -28,7 +28,7 @@ This plugin connects your Grafana instance directly to Kafka brokers, allowing y
 
 ## Requirements
 
-- Apache Kafka v0.9+
+- Apache Kafka v0.11+
 - Grafana v10.2+
 
 > Note: This is a backend plugin, so the Grafana server should have access to the Kafka broker.
@@ -212,7 +212,7 @@ Want to test the plugin with realistic Kafka messages? Use the included sample p
 
 ## FAQ & Troubleshooting
 
-- **Can I use this with any Kafka broker?** Yes, supports Apache Kafka v0.9+ and compatible brokers.
+- **Can I use this with any Kafka broker?** Yes, supports Apache Kafka v0.11+ and compatible brokers.
 - **Does it support secure connections?** Yes, SASL and SSL/TLS are supported.
 - **What JSON formats are supported?** Flat, nested, arrays, mixed types.
 - **How do I generate test data?** Use the included Go or Python producers.
