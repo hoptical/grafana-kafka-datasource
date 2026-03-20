@@ -473,25 +473,52 @@ func TestDecodeMessageValue_NullBytesJSON(t *testing.T) {
 }
 
 func TestIsTransactionControlRecord(t *testing.T) {
+	// Kafka transaction control record key layout (4 bytes):
+	// [version int16][controlType int16]  —  ABORT=0, COMMIT=1
+	commitKey := []byte{0x00, 0x00, 0x00, 0x01} // version=0, type=COMMIT
+	abortKey := []byte{0x00, 0x00, 0x00, 0x00}  // version=0, type=ABORT
+
 	tests := []struct {
 		name     string
+		key      []byte
 		value    []byte
 		expected bool
 	}{
-		{"all-zero 6 bytes", []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, true},
-		{"all-zero 5 bytes", []byte{0x00, 0x00, 0x00, 0x00, 0x00}, false},
-		{"all-zero 7 bytes", []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, false},
-		{"all-zero 2 bytes", []byte{0x00, 0x00}, false},
-		{"valid JSON start", []byte{0x7b, 0x22, 0x61, 0x22}, false},
-		{"avro magic byte", []byte{0x00, 0x01, 0x02, 0x03}, false},
-		{"empty slice", []byte{}, false},
-		{"nil slice", nil, false},
-		{"mixed with non-zero", []byte{0x00, 0x00, 0x01}, false},
+		// Positive cases — well-formed control records
+		{"COMMIT key with epoch 0", commitKey, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, true},
+		{"COMMIT key with epoch 2", commitKey, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x02}, true},
+		{"COMMIT key with epoch 255", commitKey, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0xFF}, true},
+		{"COMMIT key with large epoch", commitKey, []byte{0x00, 0x00, 0x7F, 0xFF, 0xFF, 0xFF}, true},
+		{"ABORT key with epoch 0", abortKey, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, true},
+		{"ABORT key with epoch 5", abortKey, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x05}, true},
+
+		// Negative — wrong key length
+		{"key too short", []byte{0x00, 0x00, 0x01}, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, false},
+		{"key too long", []byte{0x00, 0x00, 0x00, 0x01, 0x00}, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, false},
+
+		// Negative — unknown key version
+		{"unknown key version 1", []byte{0x00, 0x01, 0x00, 0x01}, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, false},
+
+		// Negative — unknown controlType
+		{"unknown controlType 2", []byte{0x00, 0x00, 0x00, 0x02}, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, false},
+
+		// Negative — wrong value length (secondary guard)
+		{"correct key but value 4 bytes", commitKey, []byte{0x00, 0x00, 0x00, 0x00}, false},
+		{"correct key but value 7 bytes", commitKey, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, false},
+		{"correct key but empty value", commitKey, []byte{}, false},
+
+		// Negative — nil key/value
+		{"nil key", nil, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, false},
+		{"nil both", nil, nil, false},
+
+		// Negative — normal application messages
+		{"normal key and JSON value", []byte("my-key"), []byte(`{"hello":"world"}`), false},
+		{"no key and short value", nil, []byte{0x7b, 0x22, 0x61, 0x22}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := isTransactionControlRecord(tt.value); got != tt.expected {
-				t.Errorf("isTransactionControlRecord(%x) = %v, want %v", tt.value, got, tt.expected)
+			if got := isTransactionControlRecord(tt.key, tt.value); got != tt.expected {
+				t.Errorf("isTransactionControlRecord(key=%x, value=%x) = %v, want %v", tt.key, tt.value, got, tt.expected)
 			}
 		})
 	}
@@ -519,10 +546,12 @@ func TestConsumerPull_SkipsControlRecord(t *testing.T) {
 	httpClient := &http.Client{}
 	client := NewKafkaClient(Options{BootstrapServers: "localhost:9092"}, httpClient)
 
+	commitKey := []byte{0x00, 0x00, 0x00, 0x01}              // version=0, type=COMMIT
+	controlVal := []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x05} // epoch=5
 	realPayload := []byte(`{"hello":"world"}`)
 	reader := &stubMessageReader{
 		messages: []kafka.Message{
-			{Topic: "t", Partition: 0, Offset: 10, Value: []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00}},
+			{Topic: "t", Partition: 0, Offset: 10, Key: commitKey, Value: controlVal},
 			{Topic: "t", Partition: 0, Offset: 11, Value: realPayload},
 		},
 	}

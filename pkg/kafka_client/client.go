@@ -24,7 +24,16 @@ const debugLogLevel = "debug"
 const errorLogLevel = "error"
 const dialerTimeout = 10 * time.Second // Fallback dialer timeout when user timeout not set
 const defaultTimeoutMs = 2000          // Fallback general timeout (health check) in ms if user timeout not provided
-const transactionMarkerLength = 6      // Observed Kafka transactional control-record payload size
+// Kafka transaction end-marker record key layout (4 bytes):
+//
+//	version (int16) + controlType (int16)
+//
+// controlType: 0 = ABORT, 1 = COMMIT.
+const txnControlKeyLen = 4
+const txnControlKeyVersion int16 = 0
+const txnControlTypeAbort int16 = 0
+const txnControlTypeCommit int16 = 1
+
 // note: lastN offset calculation is approximate using kafka.LastOffset - N and clamped to kafka.FirstOffset
 
 // Options holds datasource configuration passed from Grafana.
@@ -192,23 +201,34 @@ func (client *KafkaClient) decodeMessageValue(data []byte, format string) (inter
 	}
 }
 
-// isTransactionControlRecord reports whether a Kafka message value is likely to
-// be a broker-generated transaction end-marker. These records are observed as
-// fixed-size, all-zero byte payloads and carry no application data.
+// isTransactionControlRecord reports whether a Kafka message is a
+// broker-generated transaction control (end-marker) record.
 //
-// NOTE: This is a heuristic and intentionally conservative: only payloads with
-// the expected marker length and all-zero bytes are treated as control records
-// to reduce the risk of dropping legitimate application messages.
-func isTransactionControlRecord(value []byte) bool {
-	if len(value) != transactionMarkerLength {
+// Per the Kafka protocol, a control record's KEY is exactly 4 bytes:
+//
+//	[version (int16)][controlType (int16)]
+//
+// where controlType is 0 (ABORT) or 1 (COMMIT).  This is a deterministic,
+// protocol-defined structure — unlike the value (which contains a variable
+// coordinator epoch), the key layout is fixed and unambiguous.
+//
+// We also require that the value is exactly 6 bytes (version int16 +
+// coordinatorEpoch int32) as a secondary guard against false positives, but
+// the key is the primary signal.
+func isTransactionControlRecord(key, value []byte) bool {
+	if len(key) != txnControlKeyLen {
 		return false
 	}
-	for _, b := range value {
-		if b != 0x00 {
-			return false
-		}
+	version := int16(key[0])<<8 | int16(key[1])
+	if version != txnControlKeyVersion {
+		return false
 	}
-	return true
+	controlType := int16(key[2])<<8 | int16(key[3])
+	if controlType != txnControlTypeAbort && controlType != txnControlTypeCommit {
+		return false
+	}
+	// Secondary check: control record value is always version(2) + coordinatorEpoch(4) = 6 bytes.
+	return len(value) == 6
 }
 
 // NewKafkaClient creates a new KafkaClient instance.
@@ -458,14 +478,15 @@ func (client *KafkaClient) consumerPull(ctx context.Context, reader messageReade
 			return message, fmt.Errorf("error reading message from Kafka: %w", err)
 		}
 
-		// Skip broker-generated transaction control records. These are fixed-size
-		// all-zero-byte payloads appended by the broker after transactional
-		// commit/abort operations and carry no application data.
-		if isTransactionControlRecord(msg.Value) {
+		// Skip broker-generated transaction control records (COMMIT/ABORT
+		// markers). The kafka-go Reader does not filter these automatically,
+		// so we detect them via their protocol-defined key structure.
+		if isTransactionControlRecord(msg.Key, msg.Value) {
 			grafanalog.DefaultLogger.Debug("Skipping transaction control record",
 				"topic", msg.Topic,
 				"partition", msg.Partition,
 				"offset", msg.Offset,
+				"keyBytes", fmt.Sprintf("%x", msg.Key),
 				"valueLength", len(msg.Value))
 			continue
 		}
