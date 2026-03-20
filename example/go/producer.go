@@ -72,7 +72,15 @@ func waitForTopicLeaders(brokerURL, topic string, partitions int, timeout time.D
 	for {
 		allReady := true
 		for p := 0; p < partitions; p++ {
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			remaining := time.Until(deadline)
+			if remaining <= 0 {
+				return fmt.Errorf("timed out waiting for leaders for topic %s", topic)
+			}
+			attemptTimeout := 2 * time.Second
+			if remaining < attemptTimeout {
+				attemptTimeout = remaining
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), attemptTimeout)
 			conn, err := kafka.DialLeader(ctx, "tcp", brokerURL, topic, p)
 			cancel()
 			if err != nil {
@@ -100,6 +108,7 @@ func main() {
 	numPartitions := flag.Int("num-partitions", 1, "Number of partitions when creating topic")
 	valuesOffset := flag.Float64("values-offset", 1.0, "Offset for the values")
 	connectTimeout := flag.Int("connect-timeout", 5000, "Broker connect timeout in milliseconds")
+	leaderWaitTimeout := flag.Int("leader-wait-timeout", 30000, "Timeout in milliseconds to wait for topic leader election")
 	shape := flag.String("shape", "nested", "Payload shape: nested, flat, or list")
 	format := flag.String("format", "json", "Message format: json, avro, or protobuf")
 	schemaRegistryURL := flag.String("schema-registry", "", "Schema registry URL (for Avro/Protobuf with schema registry)")
@@ -134,7 +143,8 @@ func main() {
 		fmt.Printf("Error: Failed to create/verify topic: %v\n", err)
 		os.Exit(1)
 	}
-	if err := waitForTopicLeaders(*brokerURL, *topic, *numPartitions, timeout); err != nil {
+	leaderTimeout := time.Duration(*leaderWaitTimeout) * time.Millisecond
+	if err := waitForTopicLeaders(*brokerURL, *topic, *numPartitions, leaderTimeout); err != nil {
 		fmt.Printf("Error: topic leader not ready: %v\n", err)
 		os.Exit(1)
 	}

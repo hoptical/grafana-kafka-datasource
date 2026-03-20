@@ -30,7 +30,7 @@ function startKafkaProducer(options: ProducerOptions = {}): { producer: ChildPro
     '-topic',
     options.topic ?? 'test-topic',
     '-connect-timeout',
-    String(options.connectTimeoutMs ?? 500),
+    String(options.connectTimeoutMs ?? 5000),
     '-num-partitions',
     String(options.numPartitions ?? 3),
     '-interval',
@@ -68,7 +68,7 @@ function startTransactionalKafkaProducer(topic: string): { producer: ChildProces
   const transactionalId = `txn-e2e-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
   return startKafkaProducer({
     topic,
-    connectTimeoutMs: 500,
+    connectTimeoutMs: 5000,
     numPartitions: 1,
     intervalMs: 300,
     transactionalId,

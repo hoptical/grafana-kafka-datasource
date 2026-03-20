@@ -35,7 +35,7 @@ function startAvroKafkaProducer({
     '-topic',
     topic,
     '-connect-timeout',
-    '500',
+    '5000',
     '-num-partitions',
     String(numPartitions ?? 3),
     '-interval',
