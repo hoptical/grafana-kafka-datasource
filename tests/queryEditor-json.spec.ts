@@ -8,7 +8,15 @@ import {
   SINGLE_PARTITION_COLUMN_HEADERS,
 } from './test-utils';
 
-function startKafkaProducer(): { producer: ChildProcess; exitPromise: Promise<void> } {
+type ProducerOptions = {
+  topic?: string;
+  connectTimeoutMs?: number;
+  numPartitions?: number;
+  intervalMs?: number;
+  transactionalId?: string;
+};
+
+function startKafkaProducer(options: ProducerOptions = {}): { producer: ChildProcess; exitPromise: Promise<void> } {
   const producerPath = './dist/producer';
   try {
     accessSync(producerPath, constants.X_OK); // Check if file exists and is executable
@@ -16,7 +24,23 @@ function startKafkaProducer(): { producer: ChildProcess; exitPromise: Promise<vo
     throw new Error(`Kafka producer executable not found or not executable at path: ${producerPath}`);
   }
 
-  const args = ['-broker', 'localhost:9094', '-topic', 'test-topic', '-connect-timeout', '500', '-num-partitions', '3'];
+  const args = [
+    '-broker',
+    'localhost:9094',
+    '-topic',
+    options.topic ?? 'test-topic',
+    '-connect-timeout',
+    String(options.connectTimeoutMs ?? 500),
+    '-num-partitions',
+    String(options.numPartitions ?? 3),
+    '-interval',
+    String(options.intervalMs ?? 500),
+  ];
+
+  if (options.transactionalId) {
+    args.push('-transactional-id', options.transactionalId);
+  }
+
   const producer = spawn(producerPath, args, { stdio: ['ignore', 'pipe', 'pipe'] });
 
   producer.stdout?.on('data', (data) => {
@@ -38,6 +62,17 @@ function startKafkaProducer(): { producer: ChildProcess; exitPromise: Promise<vo
   });
 
   return { producer, exitPromise };
+}
+
+function startTransactionalKafkaProducer(topic: string): { producer: ChildProcess; exitPromise: Promise<void> } {
+  const transactionalId = `txn-e2e-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+  return startKafkaProducer({
+    topic,
+    connectTimeoutMs: 500,
+    numPartitions: 1,
+    intervalMs: 300,
+    transactionalId,
+  });
 }
 
 test.describe('Kafka Query Editor - JSON Tests', () => {
@@ -455,6 +490,48 @@ test.describe('Kafka Query Editor - JSON Tests', () => {
         exitPromise.catch(() => {}), // Ignore exit errors during cleanup
         new Promise((resolve) => setTimeout(resolve, 2000)),
       ]);
+    }
+  });
+
+  test('should stream transactional messages without error frames', async ({
+    readProvisionedDataSource,
+    page,
+    panelEditPage,
+  }) => {
+    const ds = await readProvisionedDataSource({ fileName: 'datasource.yaml' });
+    await panelEditPage.datasource.set(ds.name);
+
+    const topic = `txn-test-topic-${Date.now()}`;
+    const { producer, exitPromise } = startTransactionalKafkaProducer(topic);
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 4000));
+
+      await page.getByRole('textbox', { name: 'Enter topic name' }).fill(topic);
+      await page.getByRole('button', { name: 'Fetch' }).click();
+      await page.getByText(topic).first().click();
+
+      // Pick single partition for deterministic assertions.
+      const partitionSelector = page
+        .locator('#query-editor-partition')
+        .or(page.getByText('All partitions').locator('..').locator('.css-1eu65zc'));
+      await expect(partitionSelector.first()).toBeVisible({ timeout: 5000 });
+      await partitionSelector.first().click();
+      const partition0Option = page
+        .getByRole('option', { name: /Partition 0/ })
+        .or(page.getByText(/Partition 0/, { exact: true }));
+      await expect(partition0Option.first()).toBeVisible();
+      await partition0Option.first().click();
+
+      await setTableVisualization(panelEditPage);
+      await verifyColumnHeadersVisible(page, SINGLE_PARTITION_COLUMN_HEADERS);
+      await verifyPanelDataContains(panelEditPage);
+
+      // Regression check: control records must not become error frames.
+      await expect(page.getByRole('columnheader', { name: 'error' })).toHaveCount(0);
+      await expect(panelEditPage.panel.data.filter({ hasText: /failed to decode message as JSON/i })).toHaveCount(0);
+    } finally {
+      producer.kill();
+      await Promise.race([exitPromise.catch(() => {}), new Promise((resolve) => setTimeout(resolve, 2000))]);
     }
   });
 });
