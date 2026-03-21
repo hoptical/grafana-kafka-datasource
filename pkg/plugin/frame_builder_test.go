@@ -65,6 +65,13 @@ func TestFieldBuilder_AddValueToFrame(t *testing.T) {
 			expectedValue: (*float64)(nil),
 		},
 		{
+			name:          "typed nil string pointer stays nullable string",
+			key:           "message",
+			value:         (*string)(nil),
+			expectedType:  "nullable-string",
+			expectedValue: (*string)(nil),
+		},
+		{
 			name:          "complex unsupported type",
 			key:           "complex",
 			value:         map[string]string{"nested": "object"},

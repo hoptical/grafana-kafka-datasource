@@ -355,6 +355,40 @@ func TestProcessMessageToFrame_Branches(t *testing.T) {
 			t.Fatalf("expected timestampMode=now to use current time")
 		}
 	})
+
+	t.Run("plaintext tombstone maps message field to null", func(t *testing.T) {
+		msg := kafka_client.KafkaMessage{
+			RawValue:  nil,
+			Value:     nil,
+			Timestamp: time.Now(),
+			Offset:    13,
+		}
+		frame, err := ProcessMessageToFrame(client, msg, 0, []int32{0}, &StreamConfig{MessageFormat: "plaintext"}, "topic-a", 5, 100, fieldBuilder)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if !frameHasField(frame, "message") {
+			t.Fatalf("expected message field in frame")
+		}
+
+		for _, field := range frame.Fields {
+			if field.Name != "message" {
+				continue
+			}
+			v := field.At(0)
+			switch typed := v.(type) {
+			case nil:
+				// expected tombstone/null representation
+			case *string:
+				if typed != nil {
+					t.Fatalf("expected nil message for tombstone, got %q", *typed)
+				}
+			default:
+				t.Fatalf("expected tombstone message field to be nil, got %T (%v)", v, v)
+			}
+		}
+	})
 }
 
 func frameHasField(frame *data.Frame, name string) bool {

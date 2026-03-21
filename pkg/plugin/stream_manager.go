@@ -249,8 +249,8 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 		} else if strValue, ok := msg.Value.(string); ok {
 			message = strValue
 		} else {
-			// Preserve tombstones as nil so consumers can distinguish deletes from empty payloads.
-			message = nil
+			// Use typed nil to preserve tombstone semantics while keeping a nullable string column.
+			message = (*string)(nil)
 		}
 
 		messageValue = map[string]interface{}{"message": message}
@@ -805,10 +805,10 @@ func (sm *StreamManager) ProcessMessage(
 	// Check if message needs Avro/Protobuf decoding first to determine if nil Value is expected
 	messageFormat := config.MessageFormat
 
-	// Check if Value is nil - this indicates parsing/decoding failure for non-Avro formats
-	// For Avro/Protobuf format, Value is intentionally nil as decoding is deferred
+	// Check if Value is nil - this indicates parsing/decoding failure for non-deferred formats.
+	// For Avro/Protobuf/Plaintext formats, Value is intentionally nil as decoding is deferred or raw-bytes based.
 	// Also allow nil values if there is raw data available (might be Avro data with wrong format)
-	if msg.Value == nil && messageFormat != "avro" && messageFormat != "protobuf" && len(msg.RawValue) == 0 {
+	if msg.Value == nil && messageFormat != "avro" && messageFormat != "protobuf" && messageFormat != "plaintext" && len(msg.RawValue) == 0 {
 		return createErrorFrame(msg, partition, partitions, fmt.Errorf("message value is nil - possible decoding failure"), config, topic)
 	}
 
@@ -872,8 +872,8 @@ func (sm *StreamManager) ProcessMessage(
 		} else if strValue, ok := msg.Value.(string); ok {
 			message = strValue
 		} else {
-			// Preserve tombstones as nil so consumers can distinguish deletes from empty payloads.
-			message = nil
+			// Use typed nil to preserve tombstone semantics while keeping a nullable string column.
+			message = (*string)(nil)
 		}
 
 		messageValue = map[string]interface{}{"message": message}
