@@ -243,11 +243,14 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 			"offset", msg.Offset,
 			"rawValueLength", len(msg.RawValue))
 
-		message := ""
+		var message interface{}
 		if msg.RawValue != nil {
 			message = string(msg.RawValue)
 		} else if strValue, ok := msg.Value.(string); ok {
 			message = strValue
+		} else {
+			// Preserve tombstones as nil so consumers can distinguish deletes from empty payloads.
+			message = nil
 		}
 
 		messageValue = map[string]interface{}{"message": message}
@@ -863,11 +866,14 @@ func (sm *StreamManager) ProcessMessage(
 			"offset", msg.Offset,
 			"rawValueLength", len(msg.RawValue))
 
-		message := ""
+		var message interface{}
 		if msg.RawValue != nil {
 			message = string(msg.RawValue)
 		} else if strValue, ok := msg.Value.(string); ok {
 			message = strValue
+		} else {
+			// Preserve tombstones as nil so consumers can distinguish deletes from empty payloads.
+			message = nil
 		}
 
 		messageValue = map[string]interface{}{"message": message}
