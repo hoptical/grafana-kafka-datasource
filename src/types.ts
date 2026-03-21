@@ -23,6 +23,7 @@ export enum MessageFormat {
   JSON = 'json',
   AVRO = 'avro',
   PROTOBUF = 'protobuf',
+  PLAINTEXT = 'plaintext',
 }
 
 export enum AvroSchemaSource {

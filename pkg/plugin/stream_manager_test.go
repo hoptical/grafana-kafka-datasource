@@ -367,6 +367,55 @@ message TestMessage {
 	}
 }
 
+func TestStreamManager_ProcessMessage_Plaintext(t *testing.T) {
+	client := &mockStreamClient{}
+	sm := NewStreamManager(client, 5, 1000)
+
+	raw := []byte(`$GPGGA,172814.0,3723.46587704,N,12202.26957864,W,2,6,1.2,18.893,M,-25.669,M,2.0 0031*4F`)
+	config := &StreamConfig{
+		MessageFormat:   "plaintext",
+		AutoOffsetReset: "latest",
+		TimestampMode:   "message",
+	}
+
+	frame, err := sm.ProcessMessage(
+		kafka_client.KafkaMessage{RawValue: raw, Timestamp: time.Now(), Offset: 10},
+		0,
+		[]int32{0},
+		config,
+		"test-topic",
+	)
+	if err != nil {
+		t.Fatalf("failed to process plaintext message: %v", err)
+	}
+
+	var messageFieldFound bool
+	for _, field := range frame.Fields {
+		if field.Name == "message" {
+			messageFieldFound = true
+			var got string
+			switch v := field.At(0).(type) {
+			case string:
+				got = v
+			case *string:
+				if v == nil {
+					t.Fatalf("expected message field to be non-nil")
+				}
+				got = *v
+			default:
+				t.Fatalf("expected message field to be string, got %T", field.At(0))
+			}
+			if got != string(raw) {
+				t.Fatalf("unexpected plaintext value: got %q want %q", got, string(raw))
+			}
+		}
+	}
+
+	if !messageFieldFound {
+		t.Fatalf("expected message field in frame")
+	}
+}
+
 func TestNewStreamManager(t *testing.T) {
 	client := &mockStreamClient{}
 	sm := NewStreamManager(client, 5, 1000)

@@ -237,6 +237,20 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 			"offset", msg.Offset,
 			"decodedType", fmt.Sprintf("%T", decoded))
 		messageValue = decoded
+	} else if messageFormat == "plaintext" {
+		log.DefaultLogger.Debug("Using plaintext message format",
+			"partition", partition,
+			"offset", msg.Offset,
+			"rawValueLength", len(msg.RawValue))
+
+		message := ""
+		if msg.RawValue != nil {
+			message = string(msg.RawValue)
+		} else if strValue, ok := msg.Value.(string); ok {
+			message = strValue
+		}
+
+		messageValue = map[string]interface{}{"message": message}
 	} else {
 		messageFormat := config.MessageFormat
 		log.DefaultLogger.Debug("Using pre-decoded message value or non-Avro format",
@@ -843,6 +857,20 @@ func (sm *StreamManager) ProcessMessage(
 			"offset", msg.Offset,
 			"decodedType", fmt.Sprintf("%T", decoded))
 		messageValue = decoded
+	} else if messageFormat == "plaintext" {
+		log.DefaultLogger.Debug("Using plaintext message format",
+			"partition", partition,
+			"offset", msg.Offset,
+			"rawValueLength", len(msg.RawValue))
+
+		message := ""
+		if msg.RawValue != nil {
+			message = string(msg.RawValue)
+		} else if strValue, ok := msg.Value.(string); ok {
+			message = strValue
+		}
+
+		messageValue = map[string]interface{}{"message": message}
 	}
 
 	frame := data.NewFrame("response")

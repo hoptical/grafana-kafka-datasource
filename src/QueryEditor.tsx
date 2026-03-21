@@ -56,6 +56,7 @@ const messageFormats: Array<{ label: string; value: MessageFormat }> = [
   { label: 'JSON', value: MessageFormat.JSON },
   { label: 'Avro', value: MessageFormat.AVRO },
   { label: 'Protobuf', value: MessageFormat.PROTOBUF },
+  { label: 'Plaintext', value: MessageFormat.PLAINTEXT },
 ];
 
 const keyFormats: Array<{ label: string; value: KeyFormat }> = [
@@ -804,7 +805,7 @@ class QueryEditorInner extends PureComponent<QueryEditorInnerProps, State> {
           <InlineField
             label="Message Format"
             labelWidth={25}
-            tooltip="Format of the Kafka messages (JSON, Avro, or Protobuf)"
+            tooltip="Format of the Kafka messages (JSON, Avro, Protobuf, or Plaintext)"
           >
             <Select
               width={25}

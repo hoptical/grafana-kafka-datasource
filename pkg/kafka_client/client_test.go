@@ -676,6 +676,13 @@ func TestKafkaClient_decodeMessageValue_JSON(t *testing.T) {
 			hasError: false,
 		},
 		{
+			name:     "plaintext format",
+			data:     []byte(`$GPGGA,172814.0,3723.4,N`),
+			format:   "plaintext",
+			expected: nil,
+			hasError: false,
+		},
+		{
 			name:     "empty format with valid JSON",
 			data:     []byte(`{"key": "value"}`),
 			format:   "",
