@@ -65,6 +65,12 @@ func (fb *FieldBuilder) AddValueToFrame(frame *data.Frame, key string, value int
 		fb.typeRegistry[key] = data.FieldTypeNullableString
 		frame.Fields[fieldIndex] = data.NewField(key, nil, make([]*string, 1))
 		frame.Fields[fieldIndex].SetConcrete(0, v)
+	case *string:
+		fb.typeRegistry[key] = data.FieldTypeNullableString
+		frame.Fields[fieldIndex] = data.NewField(key, nil, make([]*string, 1))
+		if v != nil {
+			frame.Fields[fieldIndex].SetConcrete(0, *v)
+		}
 	case nil:
 		// Use type registry to maintain schema consistency across messages
 		fieldType, exists := fb.typeRegistry[key]

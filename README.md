@@ -19,6 +19,7 @@
 - **Flexible queries:** Select topics, partitions, offsets, and timestamp modes.
 - **Rich JSON support:** Handles flat, nested, and array data.
 - **Avro support:** Integrates with Schema Registry for Avro messages.
+- **Plaintext support:** Reads raw Kafka payload bytes without schema decoding.
 - **Secure:** SASL authentication & SSL/TLS encryption.
 - **Easy setup:** Install and configure in minutes.
 
@@ -44,6 +45,7 @@ This plugin connects your Grafana instance directly to Kafka brokers, allowing y
 - Advanced JSON support (flat, nested, arrays, mixed types)
 - Avro support with Schema Registry integration (inline schema or Schema Registry)
 - Protobuf support with Schema Registry integration (inline schema or Schema Registry)
+- Plaintext support for raw byte payloads (no schema required)
 - Transactional topic support (committed messages only; control records are filtered)
 - Message key support (None, String, JSON, Base64 formats)
 - Configurable flattening depth (default: 5)
@@ -89,6 +91,7 @@ You can automatically configure the Kafka datasource using Grafana's provisionin
      - `JSON`: For JSON messages
      - `Avro`: For Avro messages (requires schema registry or inline schema)
      - `Protobuf`: For Protobuf messages (requires schema registry or inline schema)
+     - `Plaintext`: For raw payload bytes (no schema required)
    - **Offset Reset**:
      - `latest`: Only new messages
      - `last N messages`: Start from the most recent N messages (set N in the UI)
@@ -210,13 +213,14 @@ If you encounter issues with complex Protobuf schemas, open an issue so we can p
 
 ## Sample Data Generator
 
-Want to test the plugin with realistic Kafka messages? Use the included sample producers to generate JSON, Avro, or Protobuf messages with various structures and schema configurations. For detailed usage, see the [example README](https://github.com/hoptical/grafana-kafka-datasource/blob/main/example/README.md). The producers support flexible options for message format, structure, intervals, and schema registry integration.
+Want to test the plugin with realistic Kafka messages? Use the included sample producers to generate JSON, Avro, or Protobuf messages with various structures and schema configurations. For detailed usage, see the [example README](https://github.com/hoptical/grafana-kafka-datasource/blob/main/example/README.md). To test Plaintext mode, produce any bytes (for example JSON bytes) and select `Plaintext` in the query editor to view raw payload text.
 
 ## FAQ & Troubleshooting
 
 - **Can I use this with any Kafka broker?** Yes, supports Apache Kafka v0.11+ and compatible brokers.
 - **Does it support secure connections?** Yes, SASL and SSL/TLS are supported.
 - **What JSON formats are supported?** Flat, nested, arrays, mixed types.
+- **What is Plaintext format?** It bypasses schema decoding and renders raw payload bytes in a single `message` field.
 - **How do I generate test data?** Use the included Go or Python producers.
 - **Where do I find more help?** See this README or open an issue.
 

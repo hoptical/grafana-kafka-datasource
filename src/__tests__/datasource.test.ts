@@ -344,6 +344,26 @@ describe('DataSource', () => {
       });
     });
 
+    it('uses plaintext message format in stream path', (done) => {
+      const target: KafkaQuery = {
+        refId: 'A',
+        topicName: 'nmea-topic',
+        partition: 'all',
+        autoOffsetReset: AutoOffsetReset.LATEST,
+        timestampMode: TimestampMode.Message,
+        messageFormat: MessageFormat.PLAINTEXT,
+      } as any;
+
+      ds.query({ targets: [target] } as any).subscribe({
+        complete: () => {
+          expect(capturedPath).toBe(
+            'nmea-topic-all-latest-plaintext-schemaRegistry-schemaRegistry-none-message-none-none-A-no-alias'
+          );
+          done();
+        },
+      });
+    });
+
     it('generates path with Alias using Slug+Hash strategy', (done) => {
       const target: KafkaQuery = {
         refId: 'A',

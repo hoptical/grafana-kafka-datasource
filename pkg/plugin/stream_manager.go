@@ -102,6 +102,21 @@ func decodeTopLevelJSON(data []byte) (interface{}, error) {
 	}
 }
 
+// buildPlaintextMessageValue maps a Kafka message to the plaintext frame payload.
+// Tombstones are represented as typed nil strings to keep a nullable string column.
+func buildPlaintextMessageValue(msg kafka_client.KafkaMessage) map[string]interface{} {
+	var message interface{}
+	if msg.RawValue != nil {
+		message = string(msg.RawValue)
+	} else if strValue, ok := msg.Value.(string); ok {
+		message = strValue
+	} else {
+		message = (*string)(nil)
+	}
+
+	return map[string]interface{}{"message": message}
+}
+
 // StreamConfig holds the configuration for streaming that can be updated dynamically.
 type StreamConfig struct {
 	MessageFormat        string
@@ -237,6 +252,12 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 			"offset", msg.Offset,
 			"decodedType", fmt.Sprintf("%T", decoded))
 		messageValue = decoded
+	} else if messageFormat == "plaintext" {
+		log.DefaultLogger.Debug("Using plaintext message format",
+			"partition", partition,
+			"offset", msg.Offset,
+			"rawValueLength", len(msg.RawValue))
+		messageValue = buildPlaintextMessageValue(msg)
 	} else {
 		messageFormat := config.MessageFormat
 		log.DefaultLogger.Debug("Using pre-decoded message value or non-Avro format",
@@ -788,10 +809,10 @@ func (sm *StreamManager) ProcessMessage(
 	// Check if message needs Avro/Protobuf decoding first to determine if nil Value is expected
 	messageFormat := config.MessageFormat
 
-	// Check if Value is nil - this indicates parsing/decoding failure for non-Avro formats
-	// For Avro/Protobuf format, Value is intentionally nil as decoding is deferred
+	// Check if Value is nil - this indicates parsing/decoding failure for non-deferred formats.
+	// For Avro/Protobuf/Plaintext formats, Value is intentionally nil as decoding is deferred or raw-bytes based.
 	// Also allow nil values if there is raw data available (might be Avro data with wrong format)
-	if msg.Value == nil && messageFormat != "avro" && messageFormat != "protobuf" && len(msg.RawValue) == 0 {
+	if msg.Value == nil && messageFormat != "avro" && messageFormat != "protobuf" && messageFormat != "plaintext" && len(msg.RawValue) == 0 {
 		return createErrorFrame(msg, partition, partitions, fmt.Errorf("message value is nil - possible decoding failure"), config, topic)
 	}
 
@@ -843,6 +864,12 @@ func (sm *StreamManager) ProcessMessage(
 			"offset", msg.Offset,
 			"decodedType", fmt.Sprintf("%T", decoded))
 		messageValue = decoded
+	} else if messageFormat == "plaintext" {
+		log.DefaultLogger.Debug("Using plaintext message format",
+			"partition", partition,
+			"offset", msg.Offset,
+			"rawValueLength", len(msg.RawValue))
+		messageValue = buildPlaintextMessageValue(msg)
 	}
 
 	frame := data.NewFrame("response")

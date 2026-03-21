@@ -416,6 +416,26 @@ describe('QueryEditor', () => {
     expect(screen.getByText('Protobuf Schema Source')).toBeInTheDocument();
   });
 
+  it('calls onChange and onRunQuery when message format changes to Plaintext', () => {
+    renderEditor({ messageFormat: MessageFormat.JSON });
+    const messageFormatSelect = screen.getAllByTestId('select')[3];
+
+    fireEvent.change(messageFormatSelect, { target: { value: MessageFormat.PLAINTEXT } });
+
+    expect(onChange).toHaveBeenCalledWith({
+      refId: 'A',
+      ...defaultQuery,
+      messageFormat: MessageFormat.PLAINTEXT,
+    });
+    expect(onRunQuery).toHaveBeenCalled();
+  });
+
+  it('does not show Avro and Protobuf configuration when message format is Plaintext', () => {
+    renderEditor({ messageFormat: MessageFormat.PLAINTEXT });
+    expect(screen.queryByText('Avro Schema Source')).not.toBeInTheDocument();
+    expect(screen.queryByText('Protobuf Schema Source')).not.toBeInTheDocument();
+  });
+
   it('does not show Avro configuration when message format is JSON', () => {
     renderEditor({ messageFormat: MessageFormat.JSON });
     expect(screen.queryByText('Avro Schema Source')).not.toBeInTheDocument();

@@ -122,7 +122,7 @@ type KafkaMessage struct {
 var ErrTopicNotFound = errors.New("topic not found")
 
 // decodeMessageValue decodes the message value based on the specified format.
-// For "avro", it returns nil (decoding deferred).
+// For "avro", "protobuf", and "plaintext", it returns nil (decoding deferred).
 // For "json", it attempts JSON decoding and returns an error if it fails.
 // For other formats, it attempts JSON decoding but doesn't return an error on failure.
 func (client *KafkaClient) decodeMessageValue(data []byte, format string) (interface{}, error) {
@@ -136,6 +136,11 @@ func (client *KafkaClient) decodeMessageValue(data []byte, format string) (inter
 		grafanalog.DefaultLogger.Debug("Skipping JSON decoding for Protobuf format message",
 			"valueLength", len(data))
 		// For Protobuf format, don't attempt JSON parsing
+		return nil, nil
+	case "plaintext":
+		grafanalog.DefaultLogger.Debug("Skipping JSON decoding for Plaintext format message",
+			"valueLength", len(data))
+		// For Plaintext format, payload is handled as raw bytes downstream
 		return nil, nil
 	case "json":
 		// For JSON format, require successful JSON decoding

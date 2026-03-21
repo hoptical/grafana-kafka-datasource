@@ -676,6 +676,13 @@ func TestKafkaClient_decodeMessageValue_JSON(t *testing.T) {
 			hasError: false,
 		},
 		{
+			name:     "plaintext format",
+			data:     []byte(`$GPGGA,172814.0,3723.4,N`),
+			format:   "plaintext",
+			expected: nil,
+			hasError: false,
+		},
+		{
 			name:     "empty format with valid JSON",
 			data:     []byte(`{"key": "value"}`),
 			format:   "",
@@ -702,23 +709,28 @@ func TestKafkaClient_decodeMessageValue_JSON(t *testing.T) {
 				t.Errorf("Expected no error but got: %v", err)
 			}
 
-			if tt.expected != nil {
-				if result == nil {
-					t.Error("Expected non-nil result")
-					return
+			if tt.expected == nil {
+				if result != nil {
+					t.Errorf("Expected nil result, got %T: %v", result, result)
 				}
+				return
+			}
 
-				// For JSON objects, compare structure
-				if expectedMap, ok := tt.expected.(map[string]interface{}); ok {
-					if resultMap, ok := result.(map[string]interface{}); ok {
-						for k, v := range expectedMap {
-							if resultMap[k] != v {
-								t.Errorf("Expected %s=%v, got %s=%v", k, v, k, resultMap[k])
-							}
+			if result == nil {
+				t.Error("Expected non-nil result")
+				return
+			}
+
+			// For JSON objects, compare structure
+			if expectedMap, ok := tt.expected.(map[string]interface{}); ok {
+				if resultMap, ok := result.(map[string]interface{}); ok {
+					for k, v := range expectedMap {
+						if resultMap[k] != v {
+							t.Errorf("Expected %s=%v, got %s=%v", k, v, k, resultMap[k])
 						}
-					} else {
-						t.Errorf("Expected map[string]interface{}, got %T", result)
 					}
+				} else {
+					t.Errorf("Expected map[string]interface{}, got %T", result)
 				}
 			}
 		})
