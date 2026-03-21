@@ -102,6 +102,21 @@ func decodeTopLevelJSON(data []byte) (interface{}, error) {
 	}
 }
 
+// buildPlaintextMessageValue maps a Kafka message to the plaintext frame payload.
+// Tombstones are represented as typed nil strings to keep a nullable string column.
+func buildPlaintextMessageValue(msg kafka_client.KafkaMessage) map[string]interface{} {
+	var message interface{}
+	if msg.RawValue != nil {
+		message = string(msg.RawValue)
+	} else if strValue, ok := msg.Value.(string); ok {
+		message = strValue
+	} else {
+		message = (*string)(nil)
+	}
+
+	return map[string]interface{}{"message": message}
+}
+
 // StreamConfig holds the configuration for streaming that can be updated dynamically.
 type StreamConfig struct {
 	MessageFormat        string
@@ -242,18 +257,7 @@ func ProcessMessageToFrame(client KafkaClientAPI, msg kafka_client.KafkaMessage,
 			"partition", partition,
 			"offset", msg.Offset,
 			"rawValueLength", len(msg.RawValue))
-
-		var message interface{}
-		if msg.RawValue != nil {
-			message = string(msg.RawValue)
-		} else if strValue, ok := msg.Value.(string); ok {
-			message = strValue
-		} else {
-			// Use typed nil to preserve tombstone semantics while keeping a nullable string column.
-			message = (*string)(nil)
-		}
-
-		messageValue = map[string]interface{}{"message": message}
+		messageValue = buildPlaintextMessageValue(msg)
 	} else {
 		messageFormat := config.MessageFormat
 		log.DefaultLogger.Debug("Using pre-decoded message value or non-Avro format",
@@ -865,18 +869,7 @@ func (sm *StreamManager) ProcessMessage(
 			"partition", partition,
 			"offset", msg.Offset,
 			"rawValueLength", len(msg.RawValue))
-
-		var message interface{}
-		if msg.RawValue != nil {
-			message = string(msg.RawValue)
-		} else if strValue, ok := msg.Value.(string); ok {
-			message = strValue
-		} else {
-			// Use typed nil to preserve tombstone semantics while keeping a nullable string column.
-			message = (*string)(nil)
-		}
-
-		messageValue = map[string]interface{}{"message": message}
+		messageValue = buildPlaintextMessageValue(msg)
 	}
 
 	frame := data.NewFrame("response")
