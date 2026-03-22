@@ -16,5 +16,5 @@
     }
   },
   "runArgs": ["--network=host"],
-  "postCreateCommand": "go mod tidy && npm install && npx playwright install chromium"
+  "postCreateCommand": "go mod tidy && pnpm install && pnpm exec playwright install chromium"
 }
