@@ -18,19 +18,19 @@ How to use:
 
 1. Open the project in VS Code with the Remote - Containers / Dev Containers extension.
 2. Choose "Reopen in Container" when prompted; the container will build and install tools.
-3. Use the integrated terminal to run `npm`, `go`, and `mage` commands inside the container.
+3. Use the integrated terminal to run `pnpm`, `go`, and `mage` commands inside the container.
 
 Important notes:
 
-- Docker access: the Dev Container typically does not include Docker daemon access. If you need to run Docker Compose (for example to start Grafana/Kafka during E2E), run `npm run server` on your host machine rather than inside the container.
+- Docker access: the Dev Container typically does not include Docker daemon access. If you need to run Docker Compose (for example to start Grafana/Kafka during E2E), run `pnpm run server` on your host machine rather than inside the container.
 - Networking: On Linux the container can often use `--network=host` to allow services to bind to the host network. On macOS and Windows Docker Desktop ignores `--network=host`; when running E2E tests from inside the container set `GRAFANA_URL=http://host.docker.internal:3000` so the container can reach Grafana running on the host.
-- Playwright: Playwright browsers are pre-installed for the non-root user in the Dev Container so E2E tests should work out-of-the-box; if you run tests locally you may need to run `npx playwright install` or `npm exec playwright install chromium --with-deps` depending on your environment.
+- Playwright: Playwright browsers are pre-installed for the non-root user in the Dev Container so E2E tests should work out-of-the-box; if you run tests locally you may need to run `pnpm exec playwright install` or `pnpm exec playwright install chromium --with-deps` depending on your environment.
 - Rebuild: If you change devcontainer toolchain or dependencies in the `Dockerfile` or devcontainer configuration, rebuild the container from VS Code: `Dev Containers: Rebuild Container`.
 
 Recommended workflow:
 
-1. On host: `npm run server` (if you need Grafana/Kafka via Docker Compose).
-2. Inside container: run development, build, tests, and linting commands (`npm run dev`, `npm run build`, `npm run test`, `mage`, etc.).
+1. On host: `pnpm run server` (if you need Grafana/Kafka via Docker Compose).
+2. Inside container: run development, build, tests, and linting commands (`pnpm run dev`, `pnpm run build`, `pnpm run test`, `mage`, etc.).
 
 ### Prerequisites
 
@@ -52,7 +52,7 @@ cd grafana-kafka-datasource
 2. Install frontend dependencies:
 
 ```bash
-npm install
+pnpm install
 ```
 
 3. Install pre-commit and enable hooks:
@@ -64,13 +64,13 @@ pre-commit install
 
 ## Frontend (React)
 
-- Install dependencies: `npm install`
-- Run in development mode: `npm run dev`
-- Build for production: `npm run build`
-- Unit tests: `npm run test` or `npm run test:ci`
+- Install dependencies: `pnpm install`
+- Run in development mode: `pnpm run dev`
+- Build for production: `pnpm run build`
+- Unit tests: `pnpm run test` or `pnpm run test:ci`
 - E2E tests (Playwright):
-  - On host (starts Grafana/Kafka): `npm run server`
-  - Inside container or locally: `npm run e2e`
+  - On host (starts Grafana/Kafka): `pnpm run server`
+  - Inside container or locally: `pnpm run e2e`
 
 ## Backend (Golang)
 
@@ -81,21 +81,21 @@ go get -u github.com/grafana/grafana-plugin-sdk-go
 go mod tidy
 ```
 
-- Build backend plugin: `npm run build:backend`
+- Build backend plugin: `pnpm run build:backend`
 - Run backend tests: `mage test` (see mage targets for more options)
 
 ## Building & Testing (summary)
 
-- Build frontend: `npm run build`
+- Build frontend: `pnpm run build`
 - Build backend: `mage buildAll`
-- Frontend tests: `npm run test:ci`
+- Frontend tests: `pnpm run test:ci`
 - Backend tests: `mage testRace`
-- E2E tests: `npm run e2e -- --retries=3`
+- E2E tests: `pnpm run e2e -- --retries=3`
 
 ## Linting
 
-- Frontend: `npm run lint` (ESLint)
-- Frontend formatting: `npm run lint:fix` (calls Prettier)
+- Frontend: `pnpm run lint` (ESLint)
+- Frontend formatting: `pnpm run lint:fix` (calls Prettier)
 - Backend: `golangci-lint`
 - We provide pre-commit hooks that run ESLint, Prettier and `golangci-lint` on commits — ensure `pre-commit install` is run once after cloning.
 

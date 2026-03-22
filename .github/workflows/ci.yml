@@ -32,25 +32,28 @@ jobs:
       GRAFANA_ACCESS_POLICY_TOKEN: ${{ secrets.GRAFANA_ACCESS_POLICY_TOKEN }}
     steps:
       - uses: actions/checkout@v4
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
       - name: Setup Node.js environment
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'npm'
+          cache: 'pnpm'
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Check types
-        run: npm run typecheck
+        run: pnpm run typecheck
       - name: Lint
-        run: npm run lint
+        run: pnpm run lint
       - name: Lint markdown
-        run: npm run lint:md
+        run: pnpm run lint:md
       - name: Unit tests
-        run: npm run test:ci
+        run: pnpm run test:ci
       - name: Build frontend
-        run: npm run build
+        run: pnpm run build
 
       - name: Check for backend
         id: check-for-backend
@@ -109,7 +112,7 @@ jobs:
           fi
 
       - name: Sign plugin
-        run: npm run sign
+        run: pnpm run sign
         if: ${{ env.GRAFANA_ACCESS_POLICY_TOKEN != '' }}
 
       - name: Get plugin metadata
@@ -185,14 +188,17 @@ jobs:
           chmod +x ./dist/gpx_*
           chmod +x ./dist/producer
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
       - name: Setup Node.js environment
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'npm'
+          cache: 'pnpm'
 
       - name: Install dev dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Start Grafana
         run: |
@@ -213,11 +219,11 @@ jobs:
           interval: 1
 
       - name: Install Playwright Browsers
-        run: npm exec playwright install chromium --with-deps
+        run: pnpm exec playwright install chromium --with-deps
 
       - name: Run Playwright tests
         id: run-tests
-        run: GRAFANA_VERSION=${{ matrix.GRAFANA_IMAGE.VERSION }} npm run e2e
+        run: GRAFANA_VERSION=${{ matrix.GRAFANA_IMAGE.VERSION }} pnpm run e2e
 
       - name: Upload e2e test summary
         uses: grafana/plugin-actions/playwright-gh-pages/upload-report-artifacts@main

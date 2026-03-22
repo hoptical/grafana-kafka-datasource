@@ -8,10 +8,10 @@
     "dev": "webpack -w -c ./.config/webpack/webpack.config.ts --env development",
     "e2e": "playwright test",
     "lint": "eslint --cache .",
-    "lint:fix": "npm run lint -- --fix && prettier --write --list-different .",
+    "lint:fix": "pnpm run lint -- --fix && prettier --write --list-different .",
     "lint:md": "markdownlint-cli2 \"**/*.md\"",
     "server": "docker compose up --build",
-    "sign": "npx --yes @grafana/sign-plugin@latest",
+    "sign": "pnpm dlx @grafana/sign-plugin@latest",
     "test": "jest --watch --onlyChanged",
     "test:ci": "jest --passWithNoTests --maxWorkers 4",
     "typecheck": "tsc --noEmit"
@@ -70,12 +70,14 @@
     "webpack-subresource-integrity": "5.1.0",
     "webpack-virtual-modules": "0.6.2"
   },
-  "overrides": {
-    "qs": ">=6.14.1",
-    "@remix-run/router": ">=1.23.2",
-    "react-router": ">=6.30.2",
-    "lodash": ">=4.17.23",
-    "serialize-javascript": ">=7.0.3"
+  "pnpm": {
+    "overrides": {
+      "qs": ">=6.14.1",
+      "@remix-run/router": ">=1.23.2",
+      "react-router": ">=6.30.2",
+      "lodash": ">=4.17.23",
+      "serialize-javascript": ">=7.0.3"
+    }
   },
   "engines": {
     "node": ">=22.15.0"
@@ -92,5 +94,5 @@
     "react-dom": "18.3.1",
     "tslib": "2.8.1"
   },
-  "packageManager": "npm@11.10.0"
+  "packageManager": "pnpm@10.32.1"
 }
