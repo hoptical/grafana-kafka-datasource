@@ -1,5 +1,14 @@
 # Changelog
 
+## [v1.6.0](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.6.0)
+
+[Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v1.5.1...v1.6.0)
+
+- Fix: update dependencies to address security vulnerabilities ([#142](https://github.com/hoptical/grafana-kafka-datasource/pull/142))
+- Chore: refactor npm to pnpm ([#141](https://github.com/hoptical/grafana-kafka-datasource/pull/141))
+- Feat: add support for the plaintext values (#140) ([#140](https://github.com/hoptical/grafana-kafka-datasource/pull/140))
+- Feat: add support for the transactional topics (#139) ([#139](https://github.com/hoptical/grafana-kafka-datasource/pull/139))
+
 ## [v1.5.1](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.5.1)
 
 [Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v1.5.0...v1.5.1)
