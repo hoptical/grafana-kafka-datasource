@@ -10,6 +10,13 @@ overrides:
   react-router: '>=6.30.2'
   lodash: '>=4.17.23'
   serialize-javascript: '>=7.0.3'
+  dompurify@>=3.1.3 <=3.3.1: '>=3.3.2'
+  immutable@>=5.0.0 <5.1.5: '>=5.1.5'
+  picomatch@<2.3.2: 2.3.2
+  picomatch@>=4.0.0 <4.0.4: 4.0.4
+  brace-expansion@<1.1.13: 1.1.13
+  brace-expansion@>=2.0.0 <2.0.3: 2.0.3
+  brace-expansion@>=4.0.0 <5.0.5: 5.0.5
 
 importers:
   .:
@@ -2367,17 +2374,17 @@ packages:
     resolution:
       { integrity: sha512-chUsBxGRtuElD6fmw1gHLpvnKdVLK302peeFa9ZqAEk8TyzZ3fygLyUEDDPTJvL9+Bor0dIwn6ePOsRM2y0zQQ== }
 
-  brace-expansion@1.1.12:
+  brace-expansion@1.1.13:
     resolution:
-      { integrity: sha512-9T9UjW3r0UW5c1Q7GTwllptXwhvYmEzFhzMfZ9H7FQWt+uZePjZPjBP/W1ZEyZ1twGWom5/56TF4lPcqjnDHcg== }
+      { integrity: sha512-9ZLprWS6EENmhEOpjCYW2c8VkmOvckIJZfkr7rBW6dObmfgJ/L1GpSYW5Hpo9lDz4D1+n0Ckz8rU7FwHDQiG/w== }
 
-  brace-expansion@2.0.2:
+  brace-expansion@2.0.3:
     resolution:
-      { integrity: sha512-Jt0vHyM+jmUBqojB7E1NIYadt0vI0Qxjxd2TErW94wDz+E2LAm5vKMXXwg6ZZBTHPuUlDgQHKXvjGBdfcF1ZDQ== }
+      { integrity: sha512-MCV/fYJEbqx68aE58kv2cA/kiky1G8vux3OR6/jbS+jIMe/6fJWa0DTzJU7dqijOWYwHi1t29FlfYI9uytqlpA== }
 
-  brace-expansion@5.0.4:
+  brace-expansion@5.0.5:
     resolution:
-      { integrity: sha512-h+DEnpVvxmfVefa4jFbCf5HdH5YMDXRsmKflpf1pILZWRFlTbJpxeU55nJl4Smt5HQaGzg1o6RHFPJaOqnmBDg== }
+      { integrity: sha512-VZznLgtwhn+Mact9tfiwx64fA9erHH/MCXEUfB/0bX/6Fz6ny5EGTXYltMocqg4xFAQZtnO3DHWWXi8RiuN7cQ== }
     engines: { node: 18 || 20 || >=22 }
 
   braces@3.0.3:
@@ -2966,9 +2973,9 @@ packages:
     resolution:
       { integrity: sha512-nRCa7CK3VTrM2NmGkIy4cbK7IZlgBE/PYMn55rrXefr5xXDP0LdtfPnblFDoVdcAfslJ7or6iqAUnx0CCGIWQA== }
 
-  dompurify@3.3.0:
+  dompurify@3.3.3:
     resolution:
-      { integrity: sha512-r+f6MYR1gGN1eJv0TVQbhA7if/U7P87cdPl3HN5rikqaBSBxLiCb/b9O+2eG0cxz0ghyU+mU1QkbsOwERMYlWQ== }
+      { integrity: sha512-Oj6pzI2+RqBfFG+qOaOLbFXLQ90ARpcGG6UePL82bJLtdsa6CYJD7nmiU8MW9nQNOtCHV3lZ/Bzq1X0QYbBZCA== }
 
   downshift@9.3.2:
     resolution:
@@ -3301,7 +3308,7 @@ packages:
       { integrity: sha512-tIbYtZbucOs0BRGqPJkshJUYdL+SDH7dVM8gjy+ERp3WAUjLEFJE+02kanyHtwjWOnwrKYBiwAmM0p4kLJAnXg== }
     engines: { node: '>=12.0.0' }
     peerDependencies:
-      picomatch: ^3 || ^4
+      picomatch: 4.0.4
     peerDependenciesMeta:
       picomatch:
         optional: true
@@ -3682,10 +3689,6 @@ packages:
   immutable@4.3.8:
     resolution:
       { integrity: sha512-d/Ld9aLbKpNwyl0KiM2CT1WYvkitQ1TSvmRtkcV8FKStiDoA7Slzgjmb/1G2yhKM1p0XeNOieaTbFZmU1d3Xuw== }
-
-  immutable@5.1.4:
-    resolution:
-      { integrity: sha512-p6u1bG3YSnINT5RQmx/yRZBpenIl30kVxkTLDyHLIMk0gict704Q9n+thfDI7lTRm9vXdDYutVzXhzcThxTnXA== }
 
   immutable@5.1.5:
     resolution:
@@ -4897,14 +4900,14 @@ packages:
     resolution:
       { integrity: sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA== }
 
-  picomatch@2.3.1:
+  picomatch@2.3.2:
     resolution:
-      { integrity: sha512-JU3teHTNjmE2VCGFzuY8EXzCDVwEqB2a8fsIvwaStHhAWJEeVd1o1QD80CU6+ZdEXXSLbSsuLwJjkCBWqRQUVA== }
+      { integrity: sha512-V7+vQEJ06Z+c5tSye8S+nHUfI51xoXIXjHQ99cQtKUkQqqO1kO/KCJUfZXuB47h/YBlDhah2H3hdUGXn8ie0oA== }
     engines: { node: '>=8.6' }
 
-  picomatch@4.0.3:
+  picomatch@4.0.4:
     resolution:
-      { integrity: sha512-5gTmgEY/sqK6gFXLIsQNH19lWb4ebPDLA4SdLP7dsWkIXHWlG66oPuVvXSGFPppYZz8ZDZq0dYYrbHfBCVUb1Q== }
+      { integrity: sha512-QP88BAKvMam/3NxH6vj2o21R6MjxZUAd6nlwAS/pnGvN9IVLocLHxGYIzFhg6fUQ+5th6P4dv4eW9jX3DSIj7A== }
     engines: { node: '>=12' }
 
   pirates@4.0.7:
@@ -5282,7 +5285,7 @@ packages:
     resolution:
       { integrity: sha512-Vf4gBsePlwdGvSZoLSBfd4HAP93HDauMY4fDjXhreg/vg6F3Fj/MXDNyTbltPC/xZKmZc+cjLu3598DdYK6sgQ== }
     peerDependencies:
-      immutable: '>=3.6.2'
+      immutable: '>=5.1.5'
 
   react-inlinesvg@4.2.0:
     resolution:
@@ -5757,14 +5760,14 @@ packages:
     resolution:
       { integrity: sha512-TtrlaslxQBEMV0LYdf3s7VAbTxRPe1xaW10WNNGAzGA855/0RhkaHjKkQiRjHv5rvbRleVf7Nxr9fH+4uErfxQ== }
     peerDependencies:
-      immutable: '>=3.8.1'
+      immutable: '>=5.1.5'
       slate: '>=0.46.0 <0.50.0'
 
   slate-prop-types@0.5.44:
     resolution:
       { integrity: sha512-JS0iW7uaciE/W3ADuzeN1HOnSjncQhHPXJ65nZNQzB0DF7mXVmbwQKI6cmCo/xKni7XRJT0JbWSpXFhEdPiBUA== }
     peerDependencies:
-      immutable: '>=3.8.1'
+      immutable: '>=5.1.5'
       slate: '>=0.32.0 <0.50.0'
 
   slate-react-placeholder@0.2.9:
@@ -5779,7 +5782,7 @@ packages:
     resolution:
       { integrity: sha512-B2Ms1u/REbdd8yKkOItKgrw/tX8klgz5l5x6PP86+oh/yqmB6EHe0QyrYlQ9fc3WBlJUVTOL+nyAP1KmlKj2/w== }
     peerDependencies:
-      immutable: '>=3.8.1 || >4.0.0-rc'
+      immutable: '>=5.1.5'
       react: '>=16.6.0'
       react-dom: '>=16.6.0'
       slate: '>=0.47.0'
@@ -5788,7 +5791,7 @@ packages:
     resolution:
       { integrity: sha512-EK4O6b7lGt+g5H9PGw9O5KCM4RrOvOgE9mPi3rzQ0zDRlgAb2ga4TdpS6XNQbrsJWsc8I1fjaSsUeCqCUhhi9A== }
     peerDependencies:
-      immutable: '>=3.8.1 || >4.0.0-rc'
+      immutable: '>=5.1.5'
 
   source-map-js@1.2.1:
     resolution:
@@ -7041,7 +7044,7 @@ snapshots:
       '@types/systemjs': 6.15.3
       d3-interpolate: 3.0.1
       date-fns: 4.1.0
-      dompurify: 3.3.0
+      dompurify: 3.3.3
       eventemitter3: 5.0.1
       fast_array_intersect: 1.1.0
       history: 4.10.1
@@ -7226,7 +7229,7 @@ snapshots:
       hoist-non-react-statics: 3.3.2
       i18next: 25.10.4(typescript@5.9.3)
       i18next-browser-languagedetector: 8.2.1
-      immutable: 5.1.4
+      immutable: 5.1.5
       is-hotkey: 0.2.0
       jquery: 3.7.1
       lodash: 4.17.23
@@ -7260,9 +7263,9 @@ snapshots:
       react-use: 17.6.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       react-window: 1.8.11(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       rxjs: 7.8.2
-      slate: 0.47.9(immutable@5.1.4)
-      slate-plain-serializer: 0.7.13(immutable@5.1.4)(slate@0.47.9(immutable@5.1.4))
-      slate-react: 0.22.10(immutable@5.1.4)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(slate@0.47.9(immutable@5.1.4))
+      slate: 0.47.9(immutable@5.1.5)
+      slate-plain-serializer: 0.7.13(immutable@5.1.5)(slate@0.47.9(immutable@5.1.5))
+      slate-react: 0.22.10(immutable@5.1.5)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(slate@0.47.9(immutable@5.1.5))
       tinycolor2: 1.6.0
       tslib: 2.8.1
       uplot: 1.6.32
@@ -7745,7 +7748,7 @@ snapshots:
       detect-libc: 2.1.2
       is-glob: 4.0.3
       node-addon-api: 7.1.1
-      picomatch: 4.0.3
+      picomatch: 4.0.4
     optionalDependencies:
       '@parcel/watcher-android-arm64': 2.5.6
       '@parcel/watcher-darwin-arm64': 2.5.6
@@ -8012,7 +8015,7 @@ snapshots:
       eslint-visitor-keys: 4.2.1
       espree: 10.4.0
       estraverse: 5.3.0
-      picomatch: 4.0.3
+      picomatch: 4.0.4
     transitivePeerDependencies:
       - supports-color
       - typescript
@@ -8658,7 +8661,7 @@ snapshots:
   anymatch@3.1.3:
     dependencies:
       normalize-path: 3.0.0
-      picomatch: 2.3.1
+      picomatch: 2.3.2
 
   are-docs-informative@0.0.2: {}
 
@@ -8816,16 +8819,16 @@ snapshots:
       raw-body: 1.1.7
       safe-json-parse: 1.0.1
 
-  brace-expansion@1.1.12:
+  brace-expansion@1.1.13:
     dependencies:
       balanced-match: 1.0.2
       concat-map: 0.0.1
 
-  brace-expansion@2.0.2:
+  brace-expansion@2.0.3:
     dependencies:
       balanced-match: 1.0.2
 
-  brace-expansion@5.0.4:
+  brace-expansion@5.0.5:
     dependencies:
       balanced-match: 4.0.4
 
@@ -9283,7 +9286,7 @@ snapshots:
       '@babel/runtime': 7.29.2
       csstype: 3.2.3
 
-  dompurify@3.3.0:
+  dompurify@3.3.3:
     optionalDependencies:
       '@types/trusted-types': 2.0.7
 
@@ -9672,9 +9675,9 @@ snapshots:
     dependencies:
       bser: 2.1.1
 
-  fdir@6.5.0(picomatch@4.0.3):
+  fdir@6.5.0(picomatch@4.0.4):
     optionalDependencies:
-      picomatch: 4.0.3
+      picomatch: 4.0.4
 
   file-entry-cache@8.0.0:
     dependencies:
@@ -9999,8 +10002,6 @@ snapshots:
   ignore@7.0.5: {}
 
   immutable@4.3.8: {}
-
-  immutable@5.1.4: {}
 
   immutable@5.1.5: {}
 
@@ -10438,7 +10439,7 @@ snapshots:
       '@types/stack-utils': 2.0.3
       chalk: 4.1.2
       graceful-fs: 4.2.11
-      picomatch: 4.0.3
+      picomatch: 4.0.4
       pretty-format: 30.3.0
       slash: 3.0.0
       stack-utils: 2.0.6
@@ -10566,7 +10567,7 @@ snapshots:
       chalk: 4.1.2
       ci-info: 3.9.0
       graceful-fs: 4.2.11
-      picomatch: 2.3.1
+      picomatch: 2.3.2
 
   jest-util@30.2.0:
     dependencies:
@@ -10575,7 +10576,7 @@ snapshots:
       chalk: 4.1.2
       ci-info: 4.4.0
       graceful-fs: 4.2.11
-      picomatch: 4.0.3
+      picomatch: 4.0.4
 
   jest-util@30.3.0:
     dependencies:
@@ -10584,7 +10585,7 @@ snapshots:
       chalk: 4.1.2
       ci-info: 4.4.0
       graceful-fs: 4.2.11
-      picomatch: 4.0.3
+      picomatch: 4.0.4
 
   jest-validate@30.2.0:
     dependencies:
@@ -11037,7 +11038,7 @@ snapshots:
   micromatch@4.0.8:
     dependencies:
       braces: 3.0.3
-      picomatch: 2.3.1
+      picomatch: 2.3.2
 
   mime-db@1.52.0: {}
 
@@ -11055,15 +11056,15 @@ snapshots:
 
   minimatch@10.2.4:
     dependencies:
-      brace-expansion: 5.0.4
+      brace-expansion: 5.0.5
 
   minimatch@3.1.5:
     dependencies:
-      brace-expansion: 1.1.12
+      brace-expansion: 1.1.13
 
   minimatch@9.0.9:
     dependencies:
-      brace-expansion: 2.0.2
+      brace-expansion: 2.0.3
 
   minimist@1.2.8: {}
 
@@ -11280,9 +11281,9 @@ snapshots:
 
   picocolors@1.1.1: {}
 
-  picomatch@2.3.1: {}
+  picomatch@2.3.2: {}
 
-  picomatch@4.0.3: {}
+  picomatch@4.0.4: {}
 
   pirates@4.0.7: {}
 
@@ -11617,9 +11618,9 @@ snapshots:
       react-dom: 18.3.1(react@18.3.1)
       typescript: 5.9.3
 
-  react-immutable-proptypes@2.2.0(immutable@5.1.4):
+  react-immutable-proptypes@2.2.0(immutable@5.1.5):
     dependencies:
-      immutable: 5.1.4
+      immutable: 5.1.5
       invariant: 2.2.4
 
   react-inlinesvg@4.2.0(react@18.3.1):
@@ -12018,10 +12019,10 @@ snapshots:
 
   slash@5.1.0: {}
 
-  slate-base64-serializer@0.2.115(slate@0.47.9(immutable@5.1.4)):
+  slate-base64-serializer@0.2.115(slate@0.47.9(immutable@5.1.5)):
     dependencies:
       isomorphic-base64: 1.0.2
-      slate: 0.47.9(immutable@5.1.4)
+      slate: 0.47.9(immutable@5.1.5)
 
   slate-dev-environment@0.2.5:
     dependencies:
@@ -12032,53 +12033,53 @@ snapshots:
       is-hotkey: 0.1.4
       slate-dev-environment: 0.2.5
 
-  slate-plain-serializer@0.7.13(immutable@5.1.4)(slate@0.47.9(immutable@5.1.4)):
+  slate-plain-serializer@0.7.13(immutable@5.1.5)(slate@0.47.9(immutable@5.1.5)):
     dependencies:
-      immutable: 5.1.4
-      slate: 0.47.9(immutable@5.1.4)
+      immutable: 5.1.5
+      slate: 0.47.9(immutable@5.1.5)
 
-  slate-prop-types@0.5.44(immutable@5.1.4)(slate@0.47.9(immutable@5.1.4)):
+  slate-prop-types@0.5.44(immutable@5.1.5)(slate@0.47.9(immutable@5.1.5)):
     dependencies:
-      immutable: 5.1.4
-      slate: 0.47.9(immutable@5.1.4)
+      immutable: 5.1.5
+      slate: 0.47.9(immutable@5.1.5)
 
-  slate-react-placeholder@0.2.9(react@18.3.1)(slate-react@0.22.10(immutable@5.1.4)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(slate@0.47.9(immutable@5.1.4)))(slate@0.47.9(immutable@5.1.4)):
+  slate-react-placeholder@0.2.9(react@18.3.1)(slate-react@0.22.10(immutable@5.1.5)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(slate@0.47.9(immutable@5.1.5)))(slate@0.47.9(immutable@5.1.5)):
     dependencies:
       react: 18.3.1
-      slate: 0.47.9(immutable@5.1.4)
-      slate-react: 0.22.10(immutable@5.1.4)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(slate@0.47.9(immutable@5.1.4))
+      slate: 0.47.9(immutable@5.1.5)
+      slate-react: 0.22.10(immutable@5.1.5)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(slate@0.47.9(immutable@5.1.5))
 
-  slate-react@0.22.10(immutable@5.1.4)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(slate@0.47.9(immutable@5.1.4)):
+  slate-react@0.22.10(immutable@5.1.5)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(slate@0.47.9(immutable@5.1.5)):
     dependencies:
       debug: 3.2.7
       get-window: 1.1.2
-      immutable: 5.1.4
+      immutable: 5.1.5
       is-window: 1.0.2
       lodash: 4.17.23
       memoize-one: 4.0.3
       prop-types: 15.8.1
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
-      react-immutable-proptypes: 2.2.0(immutable@5.1.4)
+      react-immutable-proptypes: 2.2.0(immutable@5.1.5)
       selection-is-backward: 1.0.0
-      slate: 0.47.9(immutable@5.1.4)
-      slate-base64-serializer: 0.2.115(slate@0.47.9(immutable@5.1.4))
+      slate: 0.47.9(immutable@5.1.5)
+      slate-base64-serializer: 0.2.115(slate@0.47.9(immutable@5.1.5))
       slate-dev-environment: 0.2.5
       slate-hotkeys: 0.2.11
-      slate-plain-serializer: 0.7.13(immutable@5.1.4)(slate@0.47.9(immutable@5.1.4))
-      slate-prop-types: 0.5.44(immutable@5.1.4)(slate@0.47.9(immutable@5.1.4))
-      slate-react-placeholder: 0.2.9(react@18.3.1)(slate-react@0.22.10(immutable@5.1.4)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(slate@0.47.9(immutable@5.1.4)))(slate@0.47.9(immutable@5.1.4))
+      slate-plain-serializer: 0.7.13(immutable@5.1.5)(slate@0.47.9(immutable@5.1.5))
+      slate-prop-types: 0.5.44(immutable@5.1.5)(slate@0.47.9(immutable@5.1.5))
+      slate-react-placeholder: 0.2.9(react@18.3.1)(slate-react@0.22.10(immutable@5.1.5)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(slate@0.47.9(immutable@5.1.5)))(slate@0.47.9(immutable@5.1.5))
       tiny-invariant: 1.3.3
       tiny-warning: 0.0.3
     transitivePeerDependencies:
       - supports-color
 
-  slate@0.47.9(immutable@5.1.4):
+  slate@0.47.9(immutable@5.1.5):
     dependencies:
       debug: 3.2.7
       direction: 0.1.5
       esrever: 0.2.0
-      immutable: 5.1.4
+      immutable: 5.1.5
       is-plain-object: 2.0.4
       lodash: 4.17.23
       tiny-invariant: 1.3.3
@@ -12328,8 +12329,8 @@ snapshots:
 
   tinyglobby@0.2.15:
     dependencies:
-      fdir: 6.5.0(picomatch@4.0.3)
-      picomatch: 4.0.3
+      fdir: 6.5.0(picomatch@4.0.4)
+      picomatch: 4.0.4
 
   tldts-core@6.1.86: {}
 
