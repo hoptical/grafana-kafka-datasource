@@ -35,17 +35,17 @@ Recommended workflow:
 ### Prerequisites
 
 - Node.js >= 22
-- pnpm >= 10 — the project pins `pnpm@10.32.1` via the `packageManager` field in `package.json`. The recommended way to install and activate the exact pinned version is via [Corepack](https://nodejs.org/api/corepack.html), which ships with Node.js >= 16:
+- pnpm >= 10 — the project pins `pnpm@10.33.0` via the `packageManager` field in `package.json`. The recommended way to install and activate the exact pinned version is via [Corepack](https://nodejs.org/api/corepack.html), which ships with Node.js >= 16:
 
   ```bash
   corepack enable
-  corepack install   # reads packageManager field and installs pnpm@10.32.1
+  corepack install   # reads packageManager field and installs pnpm@10.33.0
   ```
 
   Alternatively, install pnpm globally:
 
   ```bash
-  npm install -g pnpm@10.32.1
+  npm install -g pnpm@10.33.0
   ```
 
 - Go >= 1.25.8
