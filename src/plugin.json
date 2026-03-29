@@ -33,8 +33,24 @@
     ],
     "screenshots": [
       {
-        "name": "Streaming Data",
-        "path": "img/graph.gif"
+        "name": "Live Streaming Dashboard",
+        "path": "img/graph-new.gif"
+      },
+      {
+        "name": "Datasource Configuration",
+        "path": "img/config-basic.png"
+      },
+      {
+        "name": "JSON Query Builder",
+        "path": "img/query-json.png"
+      },
+      {
+        "name": "Avro Inline Schema",
+        "path": "img/query-avro-inline-schema.png"
+      },
+      {
+        "name": "SASL and TLS Authentication",
+        "path": "img/config-authentication.png"
       }
     ],
     "version": "1.6.0",
