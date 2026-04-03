@@ -1081,6 +1081,14 @@ func (sm *StreamManager) readFromPartition(
 					continue
 				}
 
+				// Stream shutdown and query stop are expected and should not emit
+				// frontend error frames.
+				if errors.Is(err, context.Canceled) {
+					log.DefaultLogger.Debug("Partition reader canceled",
+						"partition", partition)
+					return
+				}
+
 				log.DefaultLogger.Error("Error reading from partition",
 					"partition", partition,
 					"error", err)
