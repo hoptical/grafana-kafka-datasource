@@ -638,6 +638,50 @@ func TestStreamManager_readFromPartition_PullError(t *testing.T) {
 	}
 }
 
+func TestStreamManager_readFromPartition_PullContextCanceled(t *testing.T) {
+	mockClient := &mockStreamClient{
+		pullErr: context.Canceled,
+	}
+
+	sm := NewStreamManager(mockClient, 5, 1000)
+	qm := queryModel{
+		Topic:           "test-topic",
+		AutoOffsetReset: "earliest",
+		LastN:           10,
+		MessageFormat:   "json",
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	messagesCh := make(chan messageWithPartition, 10)
+
+	config := &StreamConfig{
+		MessageFormat:   qm.MessageFormat,
+		AutoOffsetReset: qm.AutoOffsetReset,
+	}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		sm.readFromPartition(ctx, 0, qm, config, messagesCh)
+	}()
+
+	select {
+	case <-done:
+		// expected
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("expected partition reader to stop promptly on context cancellation")
+	}
+
+	select {
+	case msg := <-messagesCh:
+		t.Fatalf("expected no error frame for context cancellation, got: %v", msg.msg.Error)
+	default:
+		// expected
+	}
+}
+
 func TestStreamManager_readFromPartition_ContextCancellation(t *testing.T) {
 	mockClient := &mockStreamClient{
 		pullMessages: []kafka_client.KafkaMessage{

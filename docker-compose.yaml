@@ -61,7 +61,6 @@ services:
   console:
     container_name: redpanda-console
     image: docker.redpanda.com/redpandadata/console:v2.8.5
-    restart: always
     entrypoint: /bin/sh
     command: -c 'echo "$$CONSOLE_CONFIG_FILE" > /tmp/config.yml && echo "$$CONSOLE_ROLEBINDINGS_CONFIG_FILE" > /tmp/role-bindings.yml && /app/console'
     volumes:

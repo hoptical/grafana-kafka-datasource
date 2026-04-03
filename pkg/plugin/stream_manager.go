@@ -1067,14 +1067,10 @@ func (sm *StreamManager) readFromPartition(
 			msgCancel() // Cancel immediately after use to avoid resource leaks in long-running loop
 
 			if err != nil {
-				log.DefaultLogger.Error("Error reading from partition",
-					"partition", partition,
-					"error", err)
-
 				// Check if it's a timeout error - if so, continue to next iteration
 				// to prevent stream from freezing
 				if errors.Is(err, context.DeadlineExceeded) {
-					log.DefaultLogger.Debug("Read timeout on partition, continuing to next iteration",
+					log.DefaultLogger.Debug("No new messages on partition, continuing to next iteration",
 						"partition", partition)
 					// Brief pause before retrying
 					select {
@@ -1084,6 +1080,18 @@ func (sm *StreamManager) readFromPartition(
 					}
 					continue
 				}
+
+				// Stream shutdown and query stop are expected and should not emit
+				// frontend error frames.
+				if errors.Is(err, context.Canceled) {
+					log.DefaultLogger.Debug("Partition reader canceled",
+						"partition", partition)
+					return
+				}
+
+				log.DefaultLogger.Error("Error reading from partition",
+					"partition", partition,
+					"error", err)
 
 				// Create an error message to send to the frontend
 				errorMsg := kafka_client.KafkaMessage{
