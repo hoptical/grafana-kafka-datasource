@@ -215,6 +215,21 @@ If you encounter issues with complex Protobuf schemas, open an issue so we can p
 
 Want to test the plugin with realistic Kafka messages? Use the included sample producers to generate JSON, Avro, or Protobuf messages with various structures and schema configurations. For detailed usage, see the [example README](https://github.com/hoptical/grafana-kafka-datasource/blob/main/example/README.md). To test Plaintext mode, produce any bytes (for example JSON bytes) and select `Plaintext` in the query editor to view raw payload text.
 
+For a provisioned end-to-end showcase, run the repository with the `demo` compose profile. This starts four dedicated producer containers in parallel and populates separate topics for `JSON`, `Avro`, `Protobuf`, and `Plaintext` so the provisioned dashboard can compare formats side by side:
+
+```bash
+docker compose --profile demo up -d
+```
+
+The showcase profile writes to these topics:
+
+- `showcase-json`
+- `showcase-avro`
+- `showcase-protobuf`
+- `showcase-plaintext`
+
+Grafana will load both the baseline server monitoring dashboard and the new multi-format showcase dashboard from the `provisioning/dashboards` folder.
+
 ## FAQ & Troubleshooting
 
 - **Can I use this with any Kafka broker?** Yes, supports Apache Kafka v0.11+ and compatible brokers.

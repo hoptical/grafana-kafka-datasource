@@ -1,6 +1,6 @@
 # Sample Producer
 
-In this folder, there are simple producers for different languages that generate Kafka messages in JSON, Avro, and Protobuf formats.
+In this folder, there are simple producers for different languages that generate Kafka messages in JSON, Avro, Protobuf, and Plaintext formats.
 
 ## Go
 
@@ -26,7 +26,7 @@ go run producer.go \
   -interval <interval-ms> \
   -num-partitions <partitions> \
   -shape <flat|nested|list> \
-  -format <json|avro|protobuf> \
+  -format <json|avro|protobuf|plaintext> \
   -key-format <none|string|json|binary> \
   -schema-registry <url> \
   -schema-registry-user <username> \
@@ -97,6 +97,31 @@ go run producer.go -broker localhost:9094 -topic test -interval 1000 -format jso
 
 > **Schema Registry Note**: When using Schema Registry, messages are encoded in Confluent wire format with a schema ID prefix for efficient deserialization and schema evolution. Behavior on registry failures differs by format: the Avro encoder will automatically fall back to inline schema encoding when registration or retrieval fails (see `pkg/kafka_client/avro_utils.go` fallback logic); the Protobuf encoder does **not** fall back on registration failure and will return an error — Protobuf only uses inline schema when no Schema Registry URL is provided at startup (see `pkg/kafka_client/protobuf_utils.go`).
 
+#### Plaintext Format
+
+Plaintext mode emits a human-readable line per message. This is useful for demonstrating the datasource's raw-byte mode side by side with structured formats.
+
+```bash
+go run producer.go -broker localhost:9094 -topic test-plaintext -interval 1000 -shape nested -format plaintext -key-format binary
+```
+
+#### Dockerized Multi-Format Demo
+
+The root `docker-compose.yaml` now includes a `demo` profile that runs four producer containers concurrently against the same Kafka stack:
+
+- `showcase-json`
+- `showcase-avro`
+- `showcase-protobuf`
+- `showcase-plaintext`
+
+Start the showcase stack from the repository root:
+
+```bash
+docker compose --profile demo up -d
+```
+
+This profile is designed to power the provisioned multi-format dashboard in Grafana.
+
 ### Supported Shapes
 
 - `flat`: Flat key-value structure (supported in JSON, Avro, and Protobuf)
@@ -129,7 +154,7 @@ Null reproduction: All shapes periodically set fields like `value1` or `value2` 
 
 #### Other options
 
-- `-format <json|avro|protobuf>`: Message format (default: json)
+- `-format <json|avro|protobuf|plaintext>`: Message format (default: json)
 - `-key-format <none|string|json|binary>`: Message key format (default: string). Use `binary` to send raw 8-byte binary keys that the plugin will encode as base64 for display.
 - `-values-offset <float>`: Offset for generated values
 - `-connect-timeout <ms>`: Broker connect timeout

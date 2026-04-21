@@ -21,6 +21,28 @@ type Data struct {
 	Value2 float64 `json:"value2"`
 }
 
+type payloadMeta struct {
+	Region        string
+	Service       string
+	TxStatus      string
+	ServiceHealth string
+	Currency      string
+	PaymentMethod string
+	UserID        string
+	UserTier      string
+	EventTimeMs   int64
+	PaymentAmount float64
+	CPUValue      float64
+	MemoryUsed    int
+	MemoryFree    int
+}
+
+type builtPayload struct {
+	Payload   interface{}
+	PlainText string
+	Meta      payloadMeta
+}
+
 func createTopicIfNotExists(brokerURL, topic string, partitions int, timeout time.Duration) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -110,7 +132,7 @@ func main() {
 	connectTimeout := flag.Int("connect-timeout", 5000, "Broker connect timeout in milliseconds")
 	leaderWaitTimeout := flag.Int("leader-wait-timeout", 30000, "Timeout in milliseconds to wait for topic leader election")
 	shape := flag.String("shape", "nested", "Payload shape: nested, flat, or list")
-	format := flag.String("format", "json", "Message format: json, avro, or protobuf")
+	format := flag.String("format", "json", "Message format: json, avro, protobuf, or plaintext")
 	schemaRegistryURL := flag.String("schema-registry", "", "Schema registry URL (for Avro/Protobuf with schema registry)")
 	schemaRegistryUser := flag.String("schema-registry-user", "", "Schema registry username (optional)")
 	schemaRegistryPass := flag.String("schema-registry-pass", "", "Schema registry password (optional)")
@@ -120,8 +142,8 @@ func main() {
 	flag.Parse()
 
 	// Validate format
-	if *format != "json" && *format != "avro" && *format != "protobuf" {
-		fmt.Printf("Error: Invalid format %q. Valid options: json, avro, protobuf\n", *format)
+	if *format != "json" && *format != "avro" && *format != "protobuf" && *format != "plaintext" {
+		fmt.Printf("Error: Invalid format %q. Valid options: json, avro, protobuf, plaintext\n", *format)
 		os.Exit(1)
 	}
 
@@ -183,141 +205,31 @@ func main() {
 	hostIP := "127.0.0.1"
 
 	for {
-		// Create sample data (flat, nested, or list)
-		// Periodically set value1/value2 to null to reproduce the bug.
-		rawValue1 := *valuesOffset - rand.Float64()
-		rawValue2 := *valuesOffset + rand.Float64()
-		var value1 interface{} = rawValue1
-		var value2 interface{} = rawValue2
-		if counter%7 == 0 {
-			value1 = nil
-		}
-		if counter%11 == 0 {
-			value2 = nil
+		built, buildErr := buildPayload(*shape, *format, counter, hostName, hostIP, *valuesOffset)
+		if buildErr != nil {
+			fmt.Printf("Error building payload: %v\n", buildErr)
+			os.Exit(1)
 		}
 
 		var messageData []byte
 		var err error
 
-		// Create payload based on shape
-		var payload interface{}
-		switch *shape {
-		case "flat":
-			// Use appropriate field names based on format
-			if *format == "avro" || *format == "protobuf" {
-				// Avro requires valid field names (no dots)
-				payload = map[string]interface{}{
-					"host_name":        hostName,
-					"host_ip":          hostIP,
-					"metrics_cpu_load": value1,
-					"metrics_cpu_temp": 60.0 + rand.Float64()*10.0,
-					"metrics_mem_used": 1000 + rand.Intn(2000),
-					"metrics_mem_free": 8000 + rand.Intn(2000),
-					"value1":           value1,
-					"value2":           value2,
-					"tags":             []string{"prod", "edge"},
-				}
-			} else {
-				// JSON can use dotted field names
-				payload = map[string]interface{}{
-					"host.name":        hostName,
-					"host.ip":          hostIP,
-					"metrics.cpu.load": value1,
-					"metrics.cpu.temp": 60.0 + rand.Float64()*10.0,
-					"metrics.mem.used": 1000 + rand.Intn(2000),
-					"metrics.mem.free": 8000 + rand.Intn(2000),
-					"value1":           value1,
-					"value2":           value2,
-					"tags":             []string{"prod", "edge"},
-				}
-			}
-		case "nested":
-			payload = map[string]interface{}{
-				"host": map[string]interface{}{
-					"name": hostName,
-					"ip":   hostIP,
-				},
-				"metrics": map[string]interface{}{
-					"cpu": map[string]interface{}{
-						"load": value1,
-						"temp": 60.0 + rand.Float64()*10.0,
-					},
-					"mem": map[string]interface{}{
-						"used": 1000 + rand.Intn(2000),
-						"free": 8000 + rand.Intn(2000),
-					},
-				},
-				"value1": value1,
-				"value2": value2,
-				"tags":   []string{"prod", "edge"},
-				"alerts": []interface{}{
-					map[string]interface{}{
-						"type":     "cpu_high",
-						"severity": "warning",
-						"value":    rawValue1 * 100,
-					},
-					map[string]interface{}{
-						"type":     "mem_low",
-						"severity": "info",
-						"value":    rawValue2 * 50,
-					},
-				},
-				"processes": []string{"nginx", "mysql", "redis"},
-			}
-		case "list":
-			// Top-level array of records
-			payload = []interface{}{
-				map[string]interface{}{
-					"id":   counter,
-					"type": "metric",
-					"host": map[string]interface{}{
-						"name": hostName,
-						"ip":   hostIP,
-					},
-					"value":     value1,
-					"timestamp": time.Now().Unix(),
-				},
-				map[string]interface{}{
-					"id":   counter + 1,
-					"type": "metric",
-					"host": map[string]interface{}{
-						"name": hostName,
-						"ip":   hostIP,
-					},
-					"value":     value2,
-					"timestamp": time.Now().Unix(),
-				},
-				map[string]interface{}{
-					"id":   counter + 1000,
-					"type": "event",
-					"host": map[string]interface{}{
-						"name": hostName,
-						"ip":   hostIP,
-					},
-					"message":   "Sample log entry",
-					"timestamp": time.Now().Unix(),
-				},
-			}
-		default:
-			// Handle unknown shape
-			fmt.Printf("Error: Unknown shape %q. Valid options: nested, flat, list\n", *shape)
-			os.Exit(1)
-		}
-
 		// Encode based on format
 		switch *format {
 		case "json":
-			messageData, err = json.Marshal(payload)
+			messageData, err = json.Marshal(built.Payload)
 		case "avro":
 			if *verbose {
 				fmt.Printf("[PRODUCER DEBUG] Using Avro format for message #%d\n", counter)
 			}
-			messageData, err = EncodeAvroMessage(*shape, payload, *schemaRegistryURL, *schemaRegistryUser, *schemaRegistryPass, *topic, *verbose)
+			messageData, err = EncodeAvroMessage(*shape, built.Payload, *schemaRegistryURL, *schemaRegistryUser, *schemaRegistryPass, *topic, *verbose)
 		case "protobuf":
 			if *verbose {
 				fmt.Printf("[PRODUCER DEBUG] Using Protobuf format for message #%d\n", counter)
 			}
-			messageData, err = EncodeProtobufMessage(*shape, payload, *schemaRegistryURL, *schemaRegistryUser, *schemaRegistryPass, *topic, *verbose)
+			messageData, err = EncodeProtobufMessage(*shape, built.Payload, *schemaRegistryURL, *schemaRegistryUser, *schemaRegistryPass, *topic, *verbose)
+		case "plaintext":
+			messageData = []byte(built.PlainText)
 		}
 
 		if err != nil {
@@ -338,11 +250,13 @@ func main() {
 		var msgKey []byte
 		switch *keyFormat {
 		case "string":
-			msgKey = []byte(fmt.Sprintf("key-%d", counter))
+			msgKey = []byte(fmt.Sprintf("%s-%06d", built.Meta.Service, counter))
 		case "json":
 			keyObj := map[string]interface{}{
 				"serverId": hostName,
-				"region":   "us-east",
+				"region":   built.Meta.Region,
+				"service":  built.Meta.Service,
+				"txStatus": built.Meta.TxStatus,
 				"counter":  counter,
 			}
 			msgKey, err = json.Marshal(keyObj)
@@ -403,4 +317,219 @@ func main() {
 		counter++
 		time.Sleep(time.Duration(*sleepTime) * time.Millisecond)
 	}
+}
+
+func buildPayload(shape, format string, counter int, hostName, hostIP string, valuesOffset float64) (*builtPayload, error) {
+	rawValue1 := valuesOffset - rand.Float64()
+	rawValue2 := valuesOffset + rand.Float64()
+	var value1 interface{} = rawValue1
+	var value2 interface{} = rawValue2
+	if counter%7 == 0 {
+		value1 = nil
+	}
+	if counter%11 == 0 {
+		value2 = nil
+	}
+
+	regions := []string{"us-east", "eu-west", "ap-south"}
+	services := []string{"checkout", "inventory", "fraud", "shipping"}
+	txStatuses := []string{"AUTHORIZED", "PENDING", "FAILED"}
+	healthStatuses := []string{"ONLINE", "DEGRADED", "INCIDENT"}
+	methods := []string{"card", "wallet", "bank"}
+	tiers := []string{"free", "pro", "enterprise"}
+	currencies := []string{"USD", "EUR", "GBP"}
+	region := pickValue(regions, counter)
+	service := pickValue(services, counter+1)
+	txStatus := pickValue(txStatuses, counter+2)
+	serviceHealth := pickValue(healthStatuses, counter+5)
+	method := pickValue(methods, counter+3)
+	tier := pickValue(tiers, counter+4)
+	currency := pickValue(currencies, counter+6)
+	eventTimeMs := time.Now().UnixMilli()
+	cpuTemp := 60.0 + rand.Float64()*10.0
+	memUsed := 1000 + rand.Intn(2000)
+	memFree := 8000 + rand.Intn(2000)
+	paymentAmount := 20.0 + rand.Float64()*180.0
+	userID := fmt.Sprintf("user-%04d", 1000+(counter%500))
+
+	meta := payloadMeta{
+		Region:        region,
+		Service:       service,
+		TxStatus:      txStatus,
+		ServiceHealth: serviceHealth,
+		Currency:      currency,
+		PaymentMethod: method,
+		UserID:        userID,
+		UserTier:      tier,
+		EventTimeMs:   eventTimeMs,
+		PaymentAmount: paymentAmount,
+		CPUValue:      rawValue1,
+		MemoryUsed:    memUsed,
+		MemoryFree:    memFree,
+	}
+
+	plainText := fmt.Sprintf(
+		"counter=%d ts=%d format=%s host=%s ip=%s region=%s service=%s tx_status=%s service_status=%s cpu_load=%.3f mem_used=%d mem_free=%d amount=%.2f currency=%s method=%s user_id=%s user_tier=%s",
+		counter,
+		eventTimeMs,
+		format,
+		hostName,
+		hostIP,
+		region,
+		service,
+		txStatus,
+		serviceHealth,
+		rawValue1,
+		memUsed,
+		memFree,
+		paymentAmount,
+		meta.Currency,
+		method,
+		userID,
+		tier,
+	)
+
+	var payload interface{}
+	switch shape {
+	case "flat":
+		if format == "avro" || format == "protobuf" {
+			payload = map[string]interface{}{
+				"host_name":                 hostName,
+				"host_ip":                   hostIP,
+				"host_region":               region,
+				"service_name":              service,
+				"service_status":            serviceHealth,
+				"commerce_payment_status":   txStatus,
+				"commerce_payment_amount":   paymentAmount,
+				"commerce_payment_currency": meta.Currency,
+				"commerce_payment_method":   method,
+				"commerce_user_id":          userID,
+				"commerce_user_tier":        tier,
+				"event_time_ms":             eventTimeMs,
+				"metrics_cpu_load":          value1,
+				"metrics_cpu_temp":          cpuTemp,
+				"metrics_mem_used":          memUsed,
+				"metrics_mem_free":          memFree,
+				"value1":                    value1,
+				"value2":                    value2,
+				"tags":                      []string{"prod", "edge", service},
+			}
+		} else {
+			payload = map[string]interface{}{
+				"host.name":                 hostName,
+				"host.ip":                   hostIP,
+				"host.region":               region,
+				"service.name":              service,
+				"service.status":            serviceHealth,
+				"commerce.payment.status":   txStatus,
+				"commerce.payment.amount":   paymentAmount,
+				"commerce.payment.currency": meta.Currency,
+				"commerce.payment.method":   method,
+				"commerce.user.id":          userID,
+				"commerce.user.tier":        tier,
+				"event_time_ms":             eventTimeMs,
+				"metrics.cpu.load":          value1,
+				"metrics.cpu.temp":          cpuTemp,
+				"metrics.mem.used":          memUsed,
+				"metrics.mem.free":          memFree,
+				"value1":                    value1,
+				"value2":                    value2,
+				"tags":                      []string{"prod", "edge", service},
+			}
+		}
+	case "nested":
+		payload = map[string]interface{}{
+			"host": map[string]interface{}{
+				"name":   hostName,
+				"ip":     hostIP,
+				"region": region,
+			},
+			"service": map[string]interface{}{
+				"name":   service,
+				"status": serviceHealth,
+			},
+			"commerce": map[string]interface{}{
+				"payment": map[string]interface{}{
+					"status":   txStatus,
+					"amount":   paymentAmount,
+					"currency": meta.Currency,
+					"method":   method,
+				},
+				"user": map[string]interface{}{
+					"id":   userID,
+					"tier": tier,
+				},
+			},
+			"event_time_ms": eventTimeMs,
+			"metrics": map[string]interface{}{
+				"cpu": map[string]interface{}{
+					"load": value1,
+					"temp": cpuTemp,
+				},
+				"mem": map[string]interface{}{
+					"used": memUsed,
+					"free": memFree,
+				},
+			},
+			"value1": value1,
+			"value2": value2,
+			"tags":   []string{"prod", "edge", service},
+			"alerts": []interface{}{
+				map[string]interface{}{
+					"type":     "cpu_high",
+					"severity": "warning",
+					"value":    rawValue1 * 100,
+				},
+				map[string]interface{}{
+					"type":     "payment_flow",
+					"severity": "info",
+					"value":    paymentAmount,
+				},
+			},
+			"processes": []string{"nginx", "mysql", service},
+		}
+	case "list":
+		payload = []interface{}{
+			map[string]interface{}{
+				"id":      counter,
+				"type":    "metric",
+				"service": service,
+				"status":  txStatus,
+				"host": map[string]interface{}{
+					"name": hostName,
+					"ip":   hostIP,
+				},
+				"value":     value1,
+				"timestamp": eventTimeMs,
+			},
+			map[string]interface{}{
+				"id":        counter + 1,
+				"type":      "payment",
+				"service":   service,
+				"status":    txStatus,
+				"amount":    paymentAmount,
+				"user_id":   userID,
+				"timestamp": eventTimeMs,
+			},
+			map[string]interface{}{
+				"id":        counter + 1000,
+				"type":      "event",
+				"service":   service,
+				"status":    txStatus,
+				"message":   "Sample log entry",
+				"timestamp": eventTimeMs,
+			},
+		}
+	default:
+		return nil, fmt.Errorf("unknown shape %q. Valid options: nested, flat, list", shape)
+	}
+
+	return &builtPayload{Payload: payload, PlainText: plainText, Meta: meta}, nil
+}
+
+func pickValue(values []string, index int) string {
+	if len(values) == 0 {
+		return ""
+	}
+	return values[index%len(values)]
 }

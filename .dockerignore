@@ -1,0 +1,10 @@
+.git
+.github
+coverage
+dist
+node_modules
+playwright
+test-results
+tests
+example/go/producer
+.DS_Store

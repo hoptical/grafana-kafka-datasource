@@ -27,13 +27,23 @@ package samples;
 message FlatMessage {
   string host_name = 1;
   string host_ip = 2;
-  optional double metrics_cpu_load = 3;
-  double metrics_cpu_temp = 4;
-  int64 metrics_mem_used = 5;
-  int64 metrics_mem_free = 6;
-  optional double value1 = 7;
-  optional double value2 = 8;
-  repeated string tags = 9;
+	string host_region = 3;
+	string service_name = 4;
+	string service_status = 5;
+	string commerce_payment_status = 6;
+	double commerce_payment_amount = 7;
+	string commerce_payment_currency = 8;
+	string commerce_payment_method = 9;
+	string commerce_user_id = 10;
+	string commerce_user_tier = 11;
+	int64 event_time_ms = 12;
+	optional double metrics_cpu_load = 13;
+	double metrics_cpu_temp = 14;
+	int64 metrics_mem_used = 15;
+	int64 metrics_mem_free = 16;
+	optional double value1 = 17;
+	optional double value2 = 18;
+	repeated string tags = 19;
 }
 `
 	protobufNestedSchema = `syntax = "proto3";
@@ -43,6 +53,29 @@ package samples;
 message Host {
   string name = 1;
   string ip = 2;
+	string region = 3;
+}
+
+message Service {
+	string name = 1;
+	string status = 2;
+}
+
+message Payment {
+	string status = 1;
+	double amount = 2;
+	string currency = 3;
+	string method = 4;
+}
+
+message CommerceUser {
+	string id = 1;
+	string tier = 2;
+}
+
+message Commerce {
+	Payment payment = 1;
+	CommerceUser user = 2;
 }
 
 message Cpu {
@@ -68,12 +101,15 @@ message Alert {
 
 message NestedMessage {
   Host host = 1;
-  Metrics metrics = 2;
-  optional double value1 = 3;
-  optional double value2 = 4;
-  repeated string tags = 5;
-  repeated Alert alerts = 6;
-  repeated string processes = 7;
+	Service service = 2;
+	Commerce commerce = 3;
+	int64 event_time_ms = 4;
+	Metrics metrics = 5;
+	optional double value1 = 6;
+	optional double value2 = 7;
+	repeated string tags = 8;
+	repeated Alert alerts = 9;
+	repeated string processes = 10;
 }
 `
 )

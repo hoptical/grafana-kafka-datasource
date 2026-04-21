@@ -155,6 +155,16 @@ const (
 		"fields": [
 			{"name": "host_name", "type": "string"},
 			{"name": "host_ip", "type": "string"},
+			{"name": "host_region", "type": "string"},
+			{"name": "service_name", "type": "string"},
+			{"name": "service_status", "type": "string"},
+			{"name": "commerce_payment_status", "type": "string"},
+			{"name": "commerce_payment_amount", "type": "double"},
+			{"name": "commerce_payment_currency", "type": "string"},
+			{"name": "commerce_payment_method", "type": "string"},
+			{"name": "commerce_user_id", "type": "string"},
+			{"name": "commerce_user_tier", "type": "string"},
+			{"name": "event_time_ms", "type": "long"},
 			{"name": "metrics_cpu_load", "type": ["null", "double"], "default": null},
 			{"name": "metrics_cpu_temp", "type": "double"},
 			{"name": "metrics_mem_used", "type": "int"},
@@ -174,9 +184,43 @@ const (
 				"name": "Host",
 				"fields": [
 					{"name": "name", "type": "string"},
-					{"name": "ip", "type": "string"}
+					{"name": "ip", "type": "string"},
+					{"name": "region", "type": "string"}
 				]
 			}},
+			{"name": "service", "type": {
+				"type": "record",
+				"name": "Service",
+				"fields": [
+					{"name": "name", "type": "string"},
+					{"name": "status", "type": "string"}
+				]
+			}},
+			{"name": "commerce", "type": {
+				"type": "record",
+				"name": "Commerce",
+				"fields": [
+					{"name": "payment", "type": {
+						"type": "record",
+						"name": "Payment",
+						"fields": [
+							{"name": "status", "type": "string"},
+							{"name": "amount", "type": "double"},
+							{"name": "currency", "type": "string"},
+							{"name": "method", "type": "string"}
+						]
+					}},
+					{"name": "user", "type": {
+						"type": "record",
+						"name": "CommerceUser",
+						"fields": [
+							{"name": "id", "type": "string"},
+							{"name": "tier", "type": "string"}
+						]
+					}}
+				]
+			}},
+			{"name": "event_time_ms", "type": "long"},
 			{"name": "metrics", "type": {
 				"type": "record",
 				"name": "Metrics",
@@ -268,6 +312,26 @@ func ConvertToAvroData(shape string, data interface{}, verbose bool) (interface{
 					avroKey = "host_name"
 				case "host.ip":
 					avroKey = "host_ip"
+				case "host.region":
+					avroKey = "host_region"
+				case "service.name":
+					avroKey = "service_name"
+				case "service.status":
+					avroKey = "service_status"
+				case "commerce.payment.status":
+					avroKey = "commerce_payment_status"
+				case "commerce.payment.amount":
+					avroKey = "commerce_payment_amount"
+				case "commerce.payment.currency":
+					avroKey = "commerce_payment_currency"
+				case "commerce.payment.method":
+					avroKey = "commerce_payment_method"
+				case "commerce.user.id":
+					avroKey = "commerce_user_id"
+				case "commerce.user.tier":
+					avroKey = "commerce_user_tier"
+				case "event_time_ms":
+					avroKey = "event_time_ms"
 				case "metrics.cpu.load", "metrics_cpu_load":
 					avroKey = "metrics_cpu_load"
 					v = wrapUnionValue(v) // Nullable field

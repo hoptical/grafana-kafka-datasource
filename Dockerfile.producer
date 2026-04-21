@@ -1,0 +1,14 @@
+FROM golang:1.25.8-alpine AS builder
+
+WORKDIR /src
+COPY . .
+
+WORKDIR /src/example/go
+RUN go build -o /out/kafka-producer .
+
+FROM alpine:3.22
+
+RUN apk add --no-cache ca-certificates
+COPY --from=builder /out/kafka-producer /usr/local/bin/kafka-producer
+
+ENTRYPOINT ["/usr/local/bin/kafka-producer"]

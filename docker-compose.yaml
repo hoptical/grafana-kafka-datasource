@@ -55,6 +55,114 @@ services:
     depends_on:
       - kafka
 
+  producer-json:
+    profiles: ['demo']
+    build:
+      context: .
+      dockerfile: Dockerfile.producer
+    container_name: producer-json
+    restart: on-failure
+    depends_on:
+      - kafka
+    command:
+      - -broker
+      - kafka:9092
+      - -topic
+      - showcase-json
+      - -interval
+      - '1000'
+      - -num-partitions
+      - '3'
+      - -shape
+      - nested
+      - -format
+      - json
+      - -key-format
+      - json
+
+  producer-avro:
+    profiles: ['demo']
+    build:
+      context: .
+      dockerfile: Dockerfile.producer
+    container_name: producer-avro
+    entrypoint: []
+    restart: on-failure
+    depends_on:
+      - kafka
+      - schema-registry
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        until wget -q -O /dev/null http://schema-registry:8081/subjects; do
+          echo "waiting for schema registry"
+          sleep 2
+        done
+        exec kafka-producer \
+          -broker kafka:9092 \
+          -topic showcase-avro \
+          -interval 1200 \
+          -num-partitions 3 \
+          -shape nested \
+          -format avro \
+          -schema-registry http://schema-registry:8081 \
+          -key-format string
+
+  producer-protobuf:
+    profiles: ['demo']
+    build:
+      context: .
+      dockerfile: Dockerfile.producer
+    container_name: producer-protobuf
+    entrypoint: []
+    restart: on-failure
+    depends_on:
+      - kafka
+      - schema-registry
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        until wget -q -O /dev/null http://schema-registry:8081/subjects; do
+          echo "waiting for schema registry"
+          sleep 2
+        done
+        exec kafka-producer \
+          -broker kafka:9092 \
+          -topic showcase-protobuf \
+          -interval 1400 \
+          -num-partitions 3 \
+          -shape nested \
+          -format protobuf \
+          -schema-registry http://schema-registry:8081 \
+          -key-format string
+
+  producer-plaintext:
+    profiles: ['demo']
+    build:
+      context: .
+      dockerfile: Dockerfile.producer
+    container_name: producer-plaintext
+    restart: on-failure
+    depends_on:
+      - kafka
+    command:
+      - -broker
+      - kafka:9092
+      - -topic
+      - showcase-plaintext
+      - -interval
+      - '1600'
+      - -num-partitions
+      - '3'
+      - -shape
+      - nested
+      - -format
+      - plaintext
+      - -key-format
+      - binary
+
   # Redpanda Console to have a UI for Kafka topics and messages
   # Uncomment the following section to enable Redpanda Console
   # Note: This is not required for the Kafka datasource to work, but can be useful for development and testing.
