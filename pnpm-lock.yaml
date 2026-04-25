@@ -33,7 +33,7 @@ importers:
         version: 12.3.3(eslint@9.39.2)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3)
       '@grafana/plugin-ui':
         specifier: 0.13.1
-        version: 0.13.1(@grafana/data@12.3.3(eslint@9.39.2)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3))(@grafana/e2e-selectors@12.4.0-21983999378)(@grafana/runtime@12.3.3(@types/react@18.3.1)(eslint@9.39.2)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3))(@grafana/ui@12.3.3(@types/react@18.3.1)(eslint@9.39.2)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3))(@testing-library/jest-dom@6.9.1)(@testing-library/react@16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@18.3.1)(@types/react@18.3.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(@testing-library/user-event@14.6.1(@testing-library/dom@10.4.1))(@types/react-dom@18.3.1)(@types/react@18.3.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(rxjs@7.8.2)
+        version: 0.13.1(@grafana/data@12.3.3(eslint@9.39.2)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3))(@grafana/e2e-selectors@13.1.0-24448182242)(@grafana/runtime@12.3.3(@types/react@18.3.1)(eslint@9.39.2)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3))(@grafana/ui@12.3.3(@types/react@18.3.1)(eslint@9.39.2)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3))(@testing-library/jest-dom@6.9.1)(@testing-library/react@16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@18.3.1)(@types/react@18.3.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(@testing-library/user-event@14.6.1(@testing-library/dom@10.4.1))(@types/react-dom@18.3.1)(@types/react@18.3.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(rxjs@7.8.2)
       '@grafana/runtime':
         specifier: 12.3.3
         version: 12.3.3(@types/react@18.3.1)(eslint@9.39.2)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3)
@@ -63,8 +63,8 @@ importers:
         specifier: 9.0.0
         version: 9.0.0(@stylistic/eslint-plugin-ts@4.4.1(eslint@9.39.2)(typescript@5.9.3))(@typescript-eslint/eslint-plugin@8.55.0(@typescript-eslint/parser@8.55.0(eslint@9.39.2)(typescript@5.9.3))(eslint@9.39.2)(typescript@5.9.3))(@typescript-eslint/parser@8.55.0(eslint@9.39.2)(typescript@5.9.3))(eslint-config-prettier@10.1.8(eslint@9.39.2))(eslint-plugin-jsdoc@62.5.4(eslint@9.39.2))(eslint-plugin-react-hooks@7.0.1(eslint@9.39.2))(eslint-plugin-react@7.37.5(eslint@9.39.2))(eslint@9.39.2)(typescript@5.9.3)
       '@grafana/plugin-e2e':
-        specifier: 3.4.0
-        version: 3.4.0(@axe-core/playwright@4.11.1(playwright-core@1.58.2))(@playwright/test@1.58.2)(axe-core@4.11.1)
+        specifier: 3.6.1
+        version: 3.6.1(@axe-core/playwright@4.11.1(playwright-core@1.58.2))(@playwright/test@1.58.2)
       '@grafana/tsconfig':
         specifier: 2.0.1
         version: 2.0.1
@@ -665,9 +665,9 @@ packages:
     resolution:
       { integrity: sha512-A83VWOosQXYTLzrsFk7e4KVAP050BKm0DALny9LKL5j8I8xjJJP7dDUbE85KGG+2Z4KN6AT0upo71Z+R6M3tCg== }
 
-  '@grafana/e2e-selectors@12.4.0-21983999378':
+  '@grafana/e2e-selectors@13.1.0-24448182242':
     resolution:
-      { integrity: sha512-Y0rZOywbGlcITX40Xp5SsydvX7qbNiDuUJwtsniL9ToHIZrBQsS24hHrKtHUpv1JJvQoH15MaqM+HPVevdPf7w== }
+      { integrity: sha512-C8VxaFh4PGWhPBOwol3Fo0UBp1//7XNnjg7WG+t3p0P8Q2cw5HZ2NgQt1OFq9radjmWEc3DJQZvxoelI4TIOJA== }
 
   '@grafana/eslint-config@9.0.0':
     resolution:
@@ -697,14 +697,16 @@ packages:
     peerDependencies:
       react: '>=18'
 
-  '@grafana/plugin-e2e@3.4.0':
+  '@grafana/plugin-e2e@3.6.1':
     resolution:
-      { integrity: sha512-UmYu0Xwlajkghcjddb5Ip7mFC3m2TlnuXtlfUUS7dBxEJMuSwm2Iq0XjvN0vihMbdlVnkRx4BL7kQ0MbkTVYBQ== }
+      { integrity: sha512-BQAEMk2yVymYA2cKbHEuGDqXwZ5MwWnCD+293QJgMey3G6ao4PbiZTaZ/c5BVyfWxLOZ3izqay0F7eU0Ncty9Q== }
     engines: { node: '>=20 <=24' }
     peerDependencies:
       '@axe-core/playwright': ^4.11.1
       '@playwright/test': ^1.52.0
-      axe-core: ^4.11.1
+    peerDependenciesMeta:
+      '@axe-core/playwright':
+        optional: true
 
   '@grafana/plugin-ui@0.13.1':
     resolution:
@@ -6606,6 +6608,7 @@ snapshots:
     dependencies:
       axe-core: 4.11.1
       playwright-core: 1.58.2
+    optional: true
 
   '@babel/code-frame@7.29.0':
     dependencies:
@@ -7077,7 +7080,7 @@ snapshots:
       tslib: 2.8.1
       typescript: 5.9.2
 
-  '@grafana/e2e-selectors@12.4.0-21983999378':
+  '@grafana/e2e-selectors@13.1.0-24448182242':
     dependencies:
       semver: 7.7.4
       tslib: 2.8.1
@@ -7124,21 +7127,21 @@ snapshots:
       - supports-color
       - typescript
 
-  '@grafana/plugin-e2e@3.4.0(@axe-core/playwright@4.11.1(playwright-core@1.58.2))(@playwright/test@1.58.2)(axe-core@4.11.1)':
+  '@grafana/plugin-e2e@3.6.1(@axe-core/playwright@4.11.1(playwright-core@1.58.2))(@playwright/test@1.58.2)':
     dependencies:
-      '@axe-core/playwright': 4.11.1(playwright-core@1.58.2)
-      '@grafana/e2e-selectors': 12.4.0-21983999378
+      '@grafana/e2e-selectors': 13.1.0-24448182242
       '@playwright/test': 1.58.2
-      axe-core: 4.11.1
       semver: 7.7.4
       uuid: 13.0.0
       yaml: 2.8.3
+    optionalDependencies:
+      '@axe-core/playwright': 4.11.1(playwright-core@1.58.2)
 
-  '@grafana/plugin-ui@0.13.1(@grafana/data@12.3.3(eslint@9.39.2)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3))(@grafana/e2e-selectors@12.4.0-21983999378)(@grafana/runtime@12.3.3(@types/react@18.3.1)(eslint@9.39.2)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3))(@grafana/ui@12.3.3(@types/react@18.3.1)(eslint@9.39.2)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3))(@testing-library/jest-dom@6.9.1)(@testing-library/react@16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@18.3.1)(@types/react@18.3.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(@testing-library/user-event@14.6.1(@testing-library/dom@10.4.1))(@types/react-dom@18.3.1)(@types/react@18.3.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(rxjs@7.8.2)':
+  '@grafana/plugin-ui@0.13.1(@grafana/data@12.3.3(eslint@9.39.2)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3))(@grafana/e2e-selectors@13.1.0-24448182242)(@grafana/runtime@12.3.3(@types/react@18.3.1)(eslint@9.39.2)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3))(@grafana/ui@12.3.3(@types/react@18.3.1)(eslint@9.39.2)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3))(@testing-library/jest-dom@6.9.1)(@testing-library/react@16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@18.3.1)(@types/react@18.3.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(@testing-library/user-event@14.6.1(@testing-library/dom@10.4.1))(@types/react-dom@18.3.1)(@types/react@18.3.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(rxjs@7.8.2)':
     dependencies:
       '@emotion/css': 11.13.5
       '@grafana/data': 12.3.3(eslint@9.39.2)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3)
-      '@grafana/e2e-selectors': 12.4.0-21983999378
+      '@grafana/e2e-selectors': 13.1.0-24448182242
       '@grafana/runtime': 12.3.3(@types/react@18.3.1)(eslint@9.39.2)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3)
       '@grafana/ui': 12.3.3(@types/react@18.3.1)(eslint@9.39.2)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3)
       '@hello-pangea/dnd': 17.0.0(@types/react@18.3.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -8747,7 +8750,8 @@ snapshots:
     dependencies:
       possible-typed-array-names: 1.1.0
 
-  axe-core@4.11.1: {}
+  axe-core@4.11.1:
+    optional: true
 
   babel-jest@30.2.0(@babel/core@7.29.0):
     dependencies:
