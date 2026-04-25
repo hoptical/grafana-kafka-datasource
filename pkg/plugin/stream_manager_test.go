@@ -398,10 +398,11 @@ func TestStreamManager_ProcessMessage_Plaintext(t *testing.T) {
 			case string:
 				got = v
 			case *string:
-				if v == nil {
+				if v != nil {
+					got = *v
+				} else {
 					t.Fatalf("expected message field to be non-nil")
 				}
-				got = *v
 			default:
 				t.Fatalf("expected message field to be string, got %T", field.At(0))
 			}
@@ -490,10 +491,11 @@ func TestStreamManager_ProcessMessage_Plaintext_EmptyPayloadProducesEmptyString(
 			case string:
 				got = v
 			case *string:
-				if v == nil {
+				if v != nil {
+					got = *v
+				} else {
 					t.Fatalf("expected message field to be non-nil empty string")
 				}
-				got = *v
 			default:
 				t.Fatalf("expected message field to be string, got %T", field.At(0))
 			}

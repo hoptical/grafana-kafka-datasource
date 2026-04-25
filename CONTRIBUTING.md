@@ -48,7 +48,7 @@ Recommended workflow:
   npm install -g pnpm@10.33.0
   ```
 
-- Go >= 1.25.8
+- Go >= 1.25.9
 - Mage >= 1.15.0 (for backend builds)
 - Docker (for running Grafana/Kafka locally)
 - Python 3 (for `pre-commit` hooks)
