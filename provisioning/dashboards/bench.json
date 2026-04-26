@@ -1,0 +1,693 @@
+{
+  "__inputs": [
+    {
+      "name": "kafka-provisioned",
+      "label": "kafka-provisioned",
+      "description": "",
+      "type": "datasource",
+      "pluginId": "hamedkarbasi93-kafka-datasource",
+      "pluginName": "Kafka"
+    }
+  ],
+  "__elements": {},
+  "__requires": [
+    {
+      "type": "panel",
+      "id": "stat",
+      "name": "Stat",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "text",
+      "name": "Text",
+      "version": ""
+    },
+    {
+      "type": "grafana",
+      "id": "grafana",
+      "name": "Grafana",
+      "version": "11.5.3"
+    },
+    {
+      "type": "datasource",
+      "id": "hamedkarbasi93-kafka-datasource",
+      "name": "Kafka",
+      "version": "1.0.1"
+    },
+    {
+      "type": "panel",
+      "id": "timeseries",
+      "name": "Time series",
+      "version": ""
+    }
+  ],
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "Benchmark dashboard for grafana-kafka-datasource. Covers Scenarios A-D from BENCHMARK.md.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 100,
+      "title": "Scenario A — Throughput Ceiling  |  topic: bench-p1  |  run: bench-producer -topic bench-p1 -rate <N> -msg-size 1024 -duration 180 -shape flat",
+      "type": "row"
+    },
+
+    {
+      "datasource": { "type": "hamedkarbasi93-kafka-datasource", "uid": "kafka-provisioned" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 5,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 4,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 80 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 10, "w": 16, "x": 0, "y": 1 },
+      "id": 1,
+      "options": {
+        "legend": {
+          "calcs": ["last", "max", "min"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": { "hideZeros": false, "mode": "multi", "sort": "none" }
+      },
+      "pluginVersion": "11.5.3",
+      "targets": [
+        {
+          "autoOffsetReset": "lastN",
+          "datasource": { "type": "hamedkarbasi93-kafka-datasource", "uid": "kafka-provisioned" },
+          "lastN": 500,
+          "partition": "all",
+          "refId": "A",
+          "timestampMode": "message",
+          "topicName": "bench-p1"
+        }
+      ],
+      "title": "Scenario A — Live Stream (bench-p1)",
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": { "pattern": "^(time|value1|value2|ts_ms)$" }
+          }
+        }
+      ],
+      "type": "timeseries"
+    },
+
+    {
+      "datasource": { "type": "hamedkarbasi93-kafka-datasource", "uid": "kafka-provisioned" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 500 },
+              { "color": "orange", "value": 1000 },
+              { "color": "red", "value": 2000 }
+            ]
+          },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 8, "x": 16, "y": 1 },
+      "id": 2,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "/^latency_ms$/", "values": false },
+        "textMode": "auto"
+      },
+      "pluginVersion": "11.5.3",
+      "targets": [
+        {
+          "autoOffsetReset": "latest",
+          "datasource": { "type": "hamedkarbasi93-kafka-datasource", "uid": "kafka-provisioned" },
+          "lastN": 10,
+          "partition": "all",
+          "refId": "A",
+          "timestampMode": "now",
+          "topicName": "bench-p1"
+        }
+      ],
+      "title": "E2E Latency — last message (ms)",
+      "description": "Time from Kafka produce (ts_ms in payload) to Grafana frame render. Green < 500 ms, yellow < 1 s, red > 2 s.",
+      "transformations": [
+        {
+          "id": "calculateField",
+          "options": {
+            "alias": "latency_ms",
+            "mode": "reduceRow",
+            "reduce": { "reducer": "last" },
+            "binary": {
+              "left": "__time",
+              "right": "ts_ms",
+              "operator": "-"
+            }
+          }
+        }
+      ],
+      "type": "stat"
+    },
+
+    {
+      "datasource": { "type": "hamedkarbasi93-kafka-datasource", "uid": "kafka-provisioned" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "blue", "value": null }]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 8, "x": 16, "y": 6 },
+      "id": 3,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "/^offset$/", "values": false },
+        "textMode": "auto"
+      },
+      "pluginVersion": "11.5.3",
+      "targets": [
+        {
+          "autoOffsetReset": "latest",
+          "datasource": { "type": "hamedkarbasi93-kafka-datasource", "uid": "kafka-provisioned" },
+          "lastN": 1,
+          "partition": "all",
+          "refId": "A",
+          "timestampMode": "message",
+          "topicName": "bench-p1"
+        }
+      ],
+      "title": "Latest Offset (bench-p1)",
+      "description": "Current Kafka offset — watch this increase; compare to producer output rate.",
+      "transformations": [],
+      "type": "stat"
+    },
+
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 11 },
+      "id": 101,
+      "title": "Scenario B — Partition Scaling  |  fixed total: 500 msg/s  |  run N producers at rate=500/N each",
+      "type": "row"
+    },
+
+    {
+      "datasource": { "type": "hamedkarbasi93-kafka-datasource", "uid": "kafka-provisioned" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 5,
+            "lineWidth": 1,
+            "pointSize": 3,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 12 },
+      "id": 10,
+      "options": {
+        "legend": { "calcs": ["last"], "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "hideZeros": false, "mode": "single", "sort": "none" }
+      },
+      "pluginVersion": "11.5.3",
+      "targets": [
+        {
+          "autoOffsetReset": "latest",
+          "datasource": { "type": "hamedkarbasi93-kafka-datasource", "uid": "kafka-provisioned" },
+          "lastN": 200,
+          "partition": "all",
+          "refId": "A",
+          "timestampMode": "message",
+          "topicName": "bench-p1"
+        }
+      ],
+      "title": "1 Partition (bench-p1)",
+      "transformations": [{ "id": "filterFieldsByName", "options": { "include": { "pattern": "^(time|value1)$" } } }],
+      "type": "timeseries"
+    },
+
+    {
+      "datasource": { "type": "hamedkarbasi93-kafka-datasource", "uid": "kafka-provisioned" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 5,
+            "lineWidth": 1,
+            "pointSize": 3,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 12 },
+      "id": 11,
+      "options": {
+        "legend": { "calcs": ["last"], "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "hideZeros": false, "mode": "single", "sort": "none" }
+      },
+      "pluginVersion": "11.5.3",
+      "targets": [
+        {
+          "autoOffsetReset": "latest",
+          "datasource": { "type": "hamedkarbasi93-kafka-datasource", "uid": "kafka-provisioned" },
+          "lastN": 200,
+          "partition": "all",
+          "refId": "A",
+          "timestampMode": "message",
+          "topicName": "bench-p4"
+        }
+      ],
+      "title": "4 Partitions (bench-p4)",
+      "transformations": [{ "id": "filterFieldsByName", "options": { "include": { "pattern": "^(time|value1)$" } } }],
+      "type": "timeseries"
+    },
+
+    {
+      "datasource": { "type": "hamedkarbasi93-kafka-datasource", "uid": "kafka-provisioned" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 5,
+            "lineWidth": 1,
+            "pointSize": 3,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 12 },
+      "id": 12,
+      "options": {
+        "legend": { "calcs": ["last"], "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "hideZeros": false, "mode": "single", "sort": "none" }
+      },
+      "pluginVersion": "11.5.3",
+      "targets": [
+        {
+          "autoOffsetReset": "latest",
+          "datasource": { "type": "hamedkarbasi93-kafka-datasource", "uid": "kafka-provisioned" },
+          "lastN": 200,
+          "partition": "all",
+          "refId": "A",
+          "timestampMode": "message",
+          "topicName": "bench-p16"
+        }
+      ],
+      "title": "16 Partitions (bench-p16)",
+      "transformations": [{ "id": "filterFieldsByName", "options": { "include": { "pattern": "^(time|value1)$" } } }],
+      "type": "timeseries"
+    },
+
+    {
+      "datasource": { "type": "hamedkarbasi93-kafka-datasource", "uid": "kafka-provisioned" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 5,
+            "lineWidth": 1,
+            "pointSize": 3,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 20 },
+      "id": 13,
+      "options": {
+        "legend": { "calcs": ["last"], "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "hideZeros": false, "mode": "single", "sort": "none" }
+      },
+      "pluginVersion": "11.5.3",
+      "targets": [
+        {
+          "autoOffsetReset": "latest",
+          "datasource": { "type": "hamedkarbasi93-kafka-datasource", "uid": "kafka-provisioned" },
+          "lastN": 200,
+          "partition": "all",
+          "refId": "A",
+          "timestampMode": "message",
+          "topicName": "bench-p2"
+        }
+      ],
+      "title": "2 Partitions (bench-p2)",
+      "transformations": [{ "id": "filterFieldsByName", "options": { "include": { "pattern": "^(time|value1)$" } } }],
+      "type": "timeseries"
+    },
+
+    {
+      "datasource": { "type": "hamedkarbasi93-kafka-datasource", "uid": "kafka-provisioned" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 5,
+            "lineWidth": 1,
+            "pointSize": 3,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 20 },
+      "id": 14,
+      "options": {
+        "legend": { "calcs": ["last"], "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "hideZeros": false, "mode": "single", "sort": "none" }
+      },
+      "pluginVersion": "11.5.3",
+      "targets": [
+        {
+          "autoOffsetReset": "latest",
+          "datasource": { "type": "hamedkarbasi93-kafka-datasource", "uid": "kafka-provisioned" },
+          "lastN": 200,
+          "partition": "all",
+          "refId": "A",
+          "timestampMode": "message",
+          "topicName": "bench-p8"
+        }
+      ],
+      "title": "8 Partitions (bench-p8)",
+      "transformations": [{ "id": "filterFieldsByName", "options": { "include": { "pattern": "^(time|value1)$" } } }],
+      "type": "timeseries"
+    },
+
+    {
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 20 },
+      "id": 15,
+      "options": {
+        "code": {
+          "language": "plaintext",
+          "showLineNumbers": false,
+          "showMiniMap": false
+        },
+        "content": "## Scenario B: What to Watch\n\nWith **total rate = 500 msg/s** split equally across N partitions:\n\n- **Throughput** should stay ~500 msg/s regardless of partition count (single drain goroutine)\n- **Latency** will increase with partition count as more goroutines compete for the 100-message channel\n- **Goroutines** = `partitions + 3` (verify via pprof: `curl http://localhost:6060/debug/pprof/goroutine?debug=1`)\n\n### Run commands\n```bash\n# 4 partitions at 125 msg/s each\nfor i in 1 2 3 4; do\n  ./bench-producer -topic bench-p4 -rate 125 -msg-size 1024 -duration 180 &\ndone\n```\n\n### Expected finding\nAdding more partitions does **not** increase throughput — it only increases burst tolerance via the 100-message buffer.",
+        "mode": "markdown"
+      },
+      "pluginVersion": "11.5.3",
+      "title": "Scenario B Instructions",
+      "type": "text"
+    },
+
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 28 },
+      "id": 102,
+      "title": "Scenario C — Format Comparison  |  fixed: 100 msg/s  |  run with -format json/avro/protobuf/plaintext",
+      "type": "row"
+    },
+
+    {
+      "datasource": { "type": "hamedkarbasi93-kafka-datasource", "uid": "kafka-provisioned" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 5,
+            "lineWidth": 1,
+            "pointSize": 3,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 29 },
+      "id": 20,
+      "options": {
+        "legend": { "calcs": ["last"], "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "hideZeros": false, "mode": "single", "sort": "none" }
+      },
+      "pluginVersion": "11.5.3",
+      "targets": [
+        {
+          "autoOffsetReset": "latest",
+          "datasource": { "type": "hamedkarbasi93-kafka-datasource", "uid": "kafka-provisioned" },
+          "lastN": 300,
+          "partition": "all",
+          "refId": "A",
+          "timestampMode": "message",
+          "topicName": "bench-json",
+          "messageFormat": "json"
+        }
+      ],
+      "title": "JSON Format (bench-json)",
+      "transformations": [
+        { "id": "filterFieldsByName", "options": { "include": { "pattern": "^(time|value1|value2)$" } } }
+      ],
+      "type": "timeseries"
+    },
+
+    {
+      "datasource": { "type": "hamedkarbasi93-kafka-datasource", "uid": "kafka-provisioned" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 5,
+            "lineWidth": 1,
+            "pointSize": 3,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 29 },
+      "id": 21,
+      "options": {
+        "legend": { "calcs": ["last"], "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "hideZeros": false, "mode": "single", "sort": "none" }
+      },
+      "pluginVersion": "11.5.3",
+      "targets": [
+        {
+          "autoOffsetReset": "latest",
+          "datasource": { "type": "hamedkarbasi93-kafka-datasource", "uid": "kafka-provisioned" },
+          "lastN": 300,
+          "partition": "all",
+          "refId": "A",
+          "timestampMode": "message",
+          "topicName": "bench-plain",
+          "messageFormat": "plaintext"
+        }
+      ],
+      "title": "Plaintext Format (bench-plain)",
+      "transformations": [],
+      "type": "timeseries"
+    },
+
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 37 },
+      "id": 103,
+      "title": "Scenario D — Message Size Scaling  |  fixed: 100 msg/s, 1 partition  |  run with -msg-size 100 / 1024 / 10240 / 102400",
+      "type": "row"
+    },
+
+    {
+      "datasource": { "type": "hamedkarbasi93-kafka-datasource", "uid": "kafka-provisioned" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1,
+            "pointSize": 3,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 16, "x": 0, "y": 38 },
+      "id": 30,
+      "options": {
+        "legend": { "calcs": ["last", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "hideZeros": false, "mode": "multi", "sort": "none" }
+      },
+      "pluginVersion": "11.5.3",
+      "targets": [
+        {
+          "autoOffsetReset": "latest",
+          "datasource": { "type": "hamedkarbasi93-kafka-datasource", "uid": "kafka-provisioned" },
+          "lastN": 300,
+          "partition": "all",
+          "refId": "A",
+          "timestampMode": "message",
+          "topicName": "bench-p1"
+        }
+      ],
+      "title": "Scenario D — Stream During Size Test (bench-p1)",
+      "description": "Re-point this panel at bench-p1 while running the producer at different -msg-size values. The panel shows value1 and value2 — watch for dropped frames at large sizes.",
+      "transformations": [
+        { "id": "filterFieldsByName", "options": { "include": { "pattern": "^(time|value1|value2)$" } } }
+      ],
+      "type": "timeseries"
+    },
+
+    {
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 38 },
+      "id": 31,
+      "options": {
+        "code": {
+          "language": "plaintext",
+          "showLineNumbers": false,
+          "showMiniMap": false
+        },
+        "content": "## Scenario D: Size Scaling\n\nRun these commands in sequence, each for 3 minutes:\n\n```bash\n# 100 B\n./bench-producer -topic bench-p1 -rate 100 -msg-size 100 -duration 180 -shape flat\n\n# 1 KB\n./bench-producer -topic bench-p1 -rate 100 -msg-size 1024 -duration 180 -shape flat\n\n# 10 KB\n./bench-producer -topic bench-p1 -rate 100 -msg-size 10240 -duration 180 -shape flat\n\n# 100 KB\n./bench-producer -topic bench-p1 -rate 100 -msg-size 102400 -duration 180 -shape flat\n```\n\n### What to measure\n- Throughput from `bench-lag-monitor.sh` (offset delta/s)\n- Plugin RSS from `bench-resource-monitor.sh`\n- Panel update smoothness (does it stutter at 100 KB?)\n\n### Expected finding\nJSON decode throughput is 194–279 MB/s — not a bottleneck. Plugin RSS grows proportionally to in-flight message size.",
+        "mode": "markdown"
+      },
+      "pluginVersion": "11.5.3",
+      "title": "Scenario D Instructions",
+      "type": "text"
+    },
+
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 46 },
+      "id": 104,
+      "title": "Quick Reference — All Benchmark Topics",
+      "type": "row"
+    },
+
+    {
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 47 },
+      "id": 40,
+      "options": {
+        "code": {
+          "language": "plaintext",
+          "showLineNumbers": false,
+          "showMiniMap": false
+        },
+        "content": "## Benchmark Topic Reference\n\n| Topic | Partitions | Used in | Panel |\n|---|---|---|---|\n| `bench-p1` | 1 | Scenario A (throughput), D (size) | Row 1, Row 4 |\n| `bench-p2` | 2 | Scenario B (partition scaling) | Row 2 |\n| `bench-p4` | 4 | Scenario B | Row 2 |\n| `bench-p8` | 8 | Scenario B | Row 2 |\n| `bench-p16` | 16 | Scenario B | Row 2 |\n| `bench-json` | 1 | Scenario C (format comparison) | Row 3 |\n| `bench-plain` | 1 | Scenario C | Row 3 |\n\n## Create all topics (run once after stack starts)\n\n```bash\nfor P in 1 2 4 8 16; do\n  docker exec kafka /opt/bitnami/kafka/bin/kafka-topics.sh \\\n    --bootstrap-server localhost:9092 \\\n    --create --topic bench-p$P --partitions $P --replication-factor 1\ndone\nfor FMT in json avro proto plain; do\n  docker exec kafka /opt/bitnami/kafka/bin/kafka-topics.sh \\\n    --bootstrap-server localhost:9092 \\\n    --create --topic bench-$FMT --partitions 1 --replication-factor 1\ndone\n```\n\n## Start monitors before every scenario\n\n```bash\n# Terminal A\n./bench-lag-monitor.sh bench-p1 5\n\n# Terminal B  \n./bench-resource-monitor.sh 5\n```\n\n## pprof during peak load\n\n```bash\ngo tool pprof -http :8888 http://localhost:6060/debug/pprof/profile?seconds=30   # CPU\ngo tool pprof -http :8889 http://localhost:6060/debug/pprof/heap                  # heap\ngo tool pprof -http :8890 http://localhost:6060/debug/pprof/mutex                 # lock overhead\n```",
+        "mode": "markdown"
+      },
+      "pluginVersion": "11.5.3",
+      "title": "Setup & Quick Reference",
+      "type": "text"
+    }
+  ],
+  "refresh": "",
+  "schemaVersion": 39,
+  "tags": ["kafka", "benchmark", "performance"],
+  "templating": { "list": [] },
+  "time": { "from": "now-10m", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Kafka Datasource — Benchmark",
+  "uid": "kafka-bench-2025",
+  "version": 1,
+  "weekStart": ""
+}

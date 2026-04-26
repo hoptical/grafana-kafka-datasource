@@ -1,0 +1,42 @@
+# Benchmark overlay for grafana-kafka-datasource performance testing.
+# Usage: docker compose -f docker-compose.yaml -f docker-compose.bench.yaml up -d
+#
+# Changes from the base compose file:
+#  - Pins CPU/memory resources for reproducible results
+#  - Removes per-plugin debug log filter (would skew CPU measurements at high msg/s)
+#  - Tunes Kafka broker for higher throughput
+#  - Enables Grafana Live profiling endpoint
+
+services:
+  grafana:
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1024M
+    environment:
+      GF_LOG_LEVEL: warn
+      # Override the debug filter set in the base compose so it does not generate
+      # thousands of log lines per second at high throughput, which skews CPU numbers.
+      GF_LOG_FILTERS: ''
+      GF_DATAPROXY_LOGGING: '0'
+      GF_LIVE_MAX_CONNECTIONS: '100'
+      # Expose pprof endpoint for Go profiling during load tests.
+      # After starting, CPU profile: go tool pprof http://localhost:6060/debug/pprof/profile?seconds=30
+      GF_PLUGIN_PROFILING: 'true'
+
+  kafka:
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2048M
+    environment:
+      # Flush less aggressively so the broker is not the bottleneck during tests.
+      - KAFKA_CFG_LOG_FLUSH_INTERVAL_MESSAGES=10000
+      - KAFKA_CFG_LOG_FLUSH_INTERVAL_MS=1000
+      # Keep test data for only 1 hour to avoid disk pressure.
+      - KAFKA_CFG_LOG_RETENTION_HOURS=1
+      # Larger socket buffers help at high message rates.
+      - KAFKA_CFG_SOCKET_SEND_BUFFER_BYTES=1048576
+      - KAFKA_CFG_SOCKET_RECEIVE_BUFFER_BYTES=1048576

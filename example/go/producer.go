@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/segmentio/kafka-go"
@@ -100,11 +101,29 @@ func waitForTopicLeaders(brokerURL, topic string, partitions int, timeout time.D
 	}
 }
 
+// batchSize returns the kafka.Writer BatchSize for a given target rate.
+// In benchmark mode (rate > 0) we flush every message to avoid the default
+// 1-second BatchTimeout blocking WriteMessages at low rates.
+func batchSize(rate int) int {
+	if rate > 0 {
+		return 1
+	}
+	return 100 // kafka-go default
+}
+
+// batchTimeout returns the kafka.Writer BatchTimeout for a given target rate.
+func batchTimeout(rate int) time.Duration {
+	if rate > 0 {
+		return time.Millisecond
+	}
+	return time.Second // kafka-go default
+}
+
 func main() {
 	// Define command line flags with default values
 	brokerURL := flag.String("broker", "localhost:9094", "Kafka broker URL")
 	topic := flag.String("topic", "test", "Kafka topic name")
-	sleepTime := flag.Int("interval", 500, "Sleep interval in milliseconds")
+	sleepTime := flag.Int("interval", 500, "Sleep interval in milliseconds (ignored when -rate is set)")
 	numPartitions := flag.Int("num-partitions", 1, "Number of partitions when creating topic")
 	valuesOffset := flag.Float64("values-offset", 1.0, "Offset for the values")
 	connectTimeout := flag.Int("connect-timeout", 5000, "Broker connect timeout in milliseconds")
@@ -117,6 +136,11 @@ func main() {
 	keyFormat := flag.String("key-format", "string", "Message key format: none, string, json, or binary (raw bytes, displayed as base64 in Grafana)")
 	verbose := flag.Bool("verbose", false, "Enable verbose logging")
 	transactionalID := flag.String("transactional-id", "", "Transactional producer ID; when set, each message is produced in its own transaction")
+	// Benchmark flags
+	rate := flag.Int("rate", 0, "Target messages/second using a ticker (0 = use -interval instead). Overrides -interval.")
+	msgSize := flag.Int("msg-size", 0, "Pad message payload to approximately this many bytes using a _padding field (0 = no padding)")
+	duration := flag.Int("duration", 0, "Stop after this many seconds (0 = run forever)")
+	reportInterval := flag.Int("report-interval", 10, "Print throughput stats every N seconds (benchmark mode only; requires -rate > 0)")
 	flag.Parse()
 
 	// Validate format
@@ -156,6 +180,12 @@ func main() {
 		w = &kafka.Writer{
 			Addr:  kafka.TCP(*brokerURL),
 			Topic: *topic,
+			// In benchmark mode, flush every message immediately instead of waiting for
+			// kafka-go's default 1-second BatchTimeout. Without this, WriteMessages blocks
+			// for up to 1 second per call regardless of the -rate flag, capping effective
+			// throughput at 1 msg/s for low-rate tests.
+			BatchSize:    batchSize(*rate),
+			BatchTimeout: batchTimeout(*rate),
 		}
 
 		defer func() {
@@ -182,7 +212,37 @@ func main() {
 	hostName := "srv-01"
 	hostIP := "127.0.0.1"
 
+	// Benchmark mode: ticker-based rate control and optional duration limit.
+	var ticker *time.Ticker
+	var deadline time.Time
+	var benchStart time.Time
+	var benchProduced int
+	var benchDropped int
+	var nextReport time.Time
+	isBenchMode := *rate > 0
+
+	if isBenchMode {
+		tickInterval := time.Duration(float64(time.Second) / float64(*rate))
+		ticker = time.NewTicker(tickInterval)
+		defer ticker.Stop()
+		benchStart = time.Now()
+		nextReport = benchStart.Add(time.Duration(*reportInterval) * time.Second)
+		if *duration > 0 {
+			deadline = benchStart.Add(time.Duration(*duration) * time.Second)
+		}
+	}
+
 	for {
+		// In benchmark mode, block on the ticker instead of sleeping at the end.
+		if isBenchMode {
+			<-ticker.C
+			if *duration > 0 && time.Now().After(deadline) {
+				elapsed := time.Since(benchStart).Seconds()
+				fmt.Printf("[BENCH] done produced=%d dropped=%d elapsed=%.1fs avg_rate=%.1f msg/s\n",
+					benchProduced, benchDropped, elapsed, float64(benchProduced)/elapsed)
+				break
+			}
+		}
 		// Create sample data (flat, nested, or list)
 		// Periodically set value1/value2 to null to reproduce the bug.
 		rawValue1 := *valuesOffset - rand.Float64()
@@ -199,6 +259,11 @@ func main() {
 		var messageData []byte
 		var err error
 
+		// ts_ms is embedded in every message for end-to-end latency measurement.
+		// In Grafana: create a Transform "Add field from calculation": now() - ts_ms
+		// to compute latency in milliseconds.
+		tsMs := time.Now().UnixMilli()
+
 		// Create payload based on shape
 		var payload interface{}
 		switch *shape {
@@ -207,6 +272,7 @@ func main() {
 			if *format == "avro" || *format == "protobuf" {
 				// Avro requires valid field names (no dots)
 				payload = map[string]interface{}{
+					"ts_ms":            tsMs,
 					"host_name":        hostName,
 					"host_ip":          hostIP,
 					"metrics_cpu_load": value1,
@@ -220,6 +286,7 @@ func main() {
 			} else {
 				// JSON can use dotted field names
 				payload = map[string]interface{}{
+					"ts_ms":            tsMs,
 					"host.name":        hostName,
 					"host.ip":          hostIP,
 					"metrics.cpu.load": value1,
@@ -233,6 +300,7 @@ func main() {
 			}
 		case "nested":
 			payload = map[string]interface{}{
+				"ts_ms": tsMs,
 				"host": map[string]interface{}{
 					"name": hostName,
 					"ip":   hostIP,
@@ -268,8 +336,9 @@ func main() {
 			// Top-level array of records
 			payload = []interface{}{
 				map[string]interface{}{
-					"id":   counter,
-					"type": "metric",
+					"ts_ms": tsMs,
+					"id":    counter,
+					"type":  "metric",
 					"host": map[string]interface{}{
 						"name": hostName,
 						"ip":   hostIP,
@@ -278,8 +347,9 @@ func main() {
 					"timestamp": time.Now().Unix(),
 				},
 				map[string]interface{}{
-					"id":   counter + 1,
-					"type": "metric",
+					"ts_ms": tsMs,
+					"id":    counter + 1,
+					"type":  "metric",
 					"host": map[string]interface{}{
 						"name": hostName,
 						"ip":   hostIP,
@@ -288,8 +358,9 @@ func main() {
 					"timestamp": time.Now().Unix(),
 				},
 				map[string]interface{}{
-					"id":   counter + 1000,
-					"type": "event",
+					"ts_ms": tsMs,
+					"id":    counter + 1000,
+					"type":  "event",
 					"host": map[string]interface{}{
 						"name": hostName,
 						"ip":   hostIP,
@@ -323,6 +394,24 @@ func main() {
 		if err != nil {
 			fmt.Printf("Error encoding message: %v\n", err)
 			continue
+		}
+
+		// Pad JSON messages to the requested byte size by injecting a _padding field.
+		// We re-marshal after padding so the final size is accurate. Non-JSON formats
+		// are not padded because their schemas are pre-compiled.
+		if *msgSize > 0 && *format == "json" && len(messageData) < *msgSize {
+			padLen := *msgSize - len(messageData) - len(`,"_padding":""}`) - 1
+			if padLen > 0 {
+				paddedPayload, ok := payload.(map[string]interface{})
+				if ok {
+					paddedPayload["_padding"] = strings.Repeat("X", padLen)
+					messageData, err = json.Marshal(paddedPayload)
+					if err != nil {
+						fmt.Printf("Error encoding padded message: %v\n", err)
+						continue
+					}
+				}
+			}
 		}
 
 		if *verbose {
@@ -395,12 +484,28 @@ func main() {
 			os.Exit(1)
 		}
 
-		if *verbose {
-			fmt.Printf("Sample #%d produced to topic %s (shape=%s, format=%s, key-format=%s)!\n", counter, *topic, *shape, *format, *keyFormat)
+		if isBenchMode {
+			if err == nil {
+				benchProduced++
+			} else {
+				benchDropped++
+			}
+			// Periodic throughput report.
+			if time.Now().After(nextReport) {
+				elapsed := time.Since(benchStart).Seconds()
+				fmt.Printf("[BENCH] produced=%d dropped=%d elapsed=%.1fs rate=%.1f msg/s bytes_per_msg=%d\n",
+					benchProduced, benchDropped, elapsed,
+					float64(benchProduced)/elapsed, len(messageData))
+				nextReport = time.Now().Add(time.Duration(*reportInterval) * time.Second)
+			}
 		} else {
-			fmt.Printf("Sample #%d produced to topic %s\n", counter, *topic)
+			if *verbose {
+				fmt.Printf("Sample #%d produced to topic %s (shape=%s, format=%s, key-format=%s)!\n", counter, *topic, *shape, *format, *keyFormat)
+			} else {
+				fmt.Printf("Sample #%d produced to topic %s\n", counter, *topic)
+			}
+			time.Sleep(time.Duration(*sleepTime) * time.Millisecond)
 		}
 		counter++
-		time.Sleep(time.Duration(*sleepTime) * time.Millisecond)
 	}
 }
