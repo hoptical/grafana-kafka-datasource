@@ -1108,11 +1108,11 @@ class QueryEditorInner extends PureComponent<QueryEditorInnerProps, State> {
               <InlineField
                 label="Measurement filter"
                 labelWidth={25}
-                tooltip="Comma-separated whitelist of LP measurement names to include. Empty = all."
+                tooltip="Comma-separated whitelist of LP measurement names. Each entry is an anchored regex, so plain text is an exact match (e.g. Breaker Data) and patterns work too (e.g. ^Breaker.*). Empty = all."
                 grow
               >
                 <Input
-                  placeholder="e.g. Breaker Data, Last Trip"
+                  placeholder="e.g. Breaker Data, ^Breaker.*"
                   value={query.lineProtocolMeasurements || ''}
                   onChange={this.onLineProtocolMeasurementsChanged}
                 />
@@ -1122,11 +1122,11 @@ class QueryEditorInner extends PureComponent<QueryEditorInnerProps, State> {
               <InlineField
                 label="Field filter"
                 labelWidth={25}
-                tooltip="Comma-separated whitelist of LP field keys to include. Empty = all."
+                tooltip="Comma-separated whitelist of LP field keys. Each entry is an anchored regex, so plain text is an exact match (e.g. PT Primary) and patterns work too (e.g. PT.*). Empty = all."
                 grow
               >
                 <Input
-                  placeholder="e.g. PT Primary, Frequency"
+                  placeholder="e.g. PT Primary, PT.*"
                   value={query.lineProtocolFields || ''}
                   onChange={this.onLineProtocolFieldsChanged}
                 />
@@ -1136,11 +1136,11 @@ class QueryEditorInner extends PureComponent<QueryEditorInnerProps, State> {
               <InlineField
                 label="Tag filter"
                 labelWidth={25}
-                tooltip="Comma-separated tag key=value pairs the row must match (ANDed). Empty = no constraint."
+                tooltip="Comma-separated tag key=value pairs the row must match. The value is an anchored regex (e.g. Device_tag=-XQ00[12]). Different keys are ANDed; the same key repeated is ORed. Empty = no constraint."
                 grow
               >
                 <Input
-                  placeholder="e.g. Building=DCM102, Device_tag=-XQ202"
+                  placeholder="e.g. Building=DCM.*, Device_tag=-XQ00[12]"
                   value={query.lineProtocolTags || ''}
                   onChange={this.onLineProtocolTagsChanged}
                 />

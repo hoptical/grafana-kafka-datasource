@@ -41,7 +41,34 @@ func floatPtrAt(f *data.Field, i int) *float64 {
 
 func buildFrames(t *testing.T, msg kafka_client.KafkaMessage, lines []ParsedLine, partition int32, partitions []int32, cfg *StreamConfig) []*data.Frame {
 	t.Helper()
-	return buildLineProtocolFrames(msg, lines, partition, partitions, cfg, "topic")
+	sm := NewStreamManager(&mockStreamClient{}, 5, 1000)
+	return sm.buildLineProtocolFrames(msg, lines, partition, partitions, cfg, "topic")
+}
+
+// TestCoerceLineProtocolValue_LargeIntegerPreservedAsString locks in that
+// integers beyond float64's exact range land in value_str (as decimal strings)
+// instead of being silently rounded in value.
+func TestCoerceLineProtocolValue_LargeIntegerPreservedAsString(t *testing.T) {
+	// 2^53 + 1 is the first int64 that float64 cannot represent exactly.
+	v, s := coerceLineProtocolValue(int64(9007199254740993))
+	if v != nil {
+		t.Errorf("large int64 should not go to value, got %v", *v)
+	}
+	if s == nil || *s != "9007199254740993" {
+		t.Errorf("large int64 should be decimal string %q, got %v", "9007199254740993", s)
+	}
+
+	// Values within range still go to the numeric column.
+	v2, s2 := coerceLineProtocolValue(int64(42))
+	if v2 == nil || *v2 != 42 || s2 != nil {
+		t.Errorf("small int64 should be value=42 with nil value_str, got v=%v s=%v", v2, s2)
+	}
+
+	// max uint64 exceeds float64 range too.
+	vu, su := coerceLineProtocolValue(uint64(18446744073709551615))
+	if vu != nil || su == nil || *su != "18446744073709551615" {
+		t.Errorf("large uint64 should be decimal string, got v=%v s=%v", vu, su)
+	}
 }
 
 // TestBuildLineProtocolFrames_StableLongShape verifies the streaming-friendly

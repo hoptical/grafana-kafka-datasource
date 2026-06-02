@@ -3,6 +3,7 @@ package plugin
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
@@ -59,7 +60,7 @@ func (sm *StreamManager) ProcessMessageFrames(
 			}
 			return []*data.Frame{errFrame}, nil
 		}
-		return buildLineProtocolFrames(msg, lines, partition, partitions, config, topic), nil
+		return sm.buildLineProtocolFrames(msg, lines, partition, partitions, config, topic), nil
 	}
 
 	frame, err := sm.ProcessMessage(msg, partition, partitions, config, topic)
@@ -87,13 +88,13 @@ func (sm *StreamManager) ProcessMessageFrames(
 // Tag columns are nullable per row because different LP lines within one
 // Kafka message can carry different tag sets — cells where a row's line
 // didn't have a given tag key are nil.
-func buildLineProtocolFrames(
+func (sm *StreamManager) buildLineProtocolFrames(
 	msg kafka_client.KafkaMessage,
 	lines []ParsedLine,
 	partition int32,
 	partitions []int32,
 	config *StreamConfig,
-	_ string, // topic (reserved; aliasing happens upstream)
+	topic string,
 ) []*data.Frame {
 	filter := buildLineProtocolFilter(config)
 	if filter != nil {
@@ -108,7 +109,7 @@ func buildLineProtocolFrames(
 		return nil
 	}
 
-	tagKeys := collectTagKeys(lines)
+	tagKeys := sm.mergeLPTagKeys(lines)
 	multiPartition := len(partitions) > 1
 
 	times := make([]time.Time, 0, totalRows)
@@ -155,6 +156,17 @@ func buildLineProtocolFrames(
 	}
 
 	frame := data.NewFrame("lineprotocol")
+	// Carry query metadata so the configured alias/RefID survive, matching
+	// ProcessMessage. Without this the user's Alias is silently dropped for
+	// line-protocol streams.
+	if config != nil {
+		if config.RefID != "" {
+			frame.RefID = config.RefID
+		}
+		if config.Alias != "" {
+			frame.Name = formatAlias(config.Alias, config, topic, partition, "")
+		}
+	}
 	frame.Fields = append(frame.Fields,
 		data.NewField("Time", nil, times),
 		data.NewField("_measurement", nil, measurements),
@@ -173,39 +185,55 @@ func buildLineProtocolFrames(
 	return []*data.Frame{frame}
 }
 
-// collectTagKeys returns every tag key seen across the lines, sorted for
-// stable column order. Stability matters so Grafana's frame buffer doesn't
-// see a different column ordering on every message.
-func collectTagKeys(lines []ParsedLine) []string {
-	set := make(map[string]struct{})
+// mergeLPTagKeys folds the tag keys from the current message's lines into the
+// stream's running union, then returns the full union sorted for stable column
+// order. Maintaining the union across messages (rather than per-message) keeps
+// the frame schema stable for Grafana Live: once a tag key has been seen, every
+// later frame keeps that column (nil-padded when a message omits the tag),
+// instead of the column set oscillating message to message.
+func (sm *StreamManager) mergeLPTagKeys(lines []ParsedLine) []string {
 	for _, l := range lines {
 		for _, t := range l.Tags {
-			set[t.Key] = struct{}{}
+			sm.lpTagKeys[t.Key] = struct{}{}
 		}
 	}
-	keys := make([]string, 0, len(set))
-	for k := range set {
+	keys := make([]string, 0, len(sm.lpTagKeys))
+	for k := range sm.lpTagKeys {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
 	return keys
 }
 
+// maxExactFloat64Int is the largest integer magnitude float64 can hold without
+// losing precision (2^53 - 1). Integers beyond this are emitted as decimal
+// strings in value_str rather than being silently rounded in value.
+const maxExactFloat64Int = int64(1)<<53 - 1
+
 // coerceLineProtocolValue routes a parsed LP value into the long-format
 // `value` / `value_str` column pair. Numeric and boolean LP types land in
 // `value` as float64; quoted-string LP values land in `value_str`. Booleans
-// become 1 (true) or 0 (false).
+// become 1 (true) or 0 (false). Integers too large for float64 to represent
+// exactly are preserved as decimal strings in `value_str`.
 func coerceLineProtocolValue(v interface{}) (*float64, *string) {
 	switch x := v.(type) {
 	case float64:
 		f := x
 		return &f, nil
 	case int64:
-		f := float64(x)
-		return &f, nil
+		if x >= -maxExactFloat64Int && x <= maxExactFloat64Int {
+			f := float64(x)
+			return &f, nil
+		}
+		s := strconv.FormatInt(x, 10)
+		return nil, &s
 	case uint64:
-		f := float64(x)
-		return &f, nil
+		if x <= uint64(maxExactFloat64Int) {
+			f := float64(x)
+			return &f, nil
+		}
+		s := strconv.FormatUint(x, 10)
+		return nil, &s
 	case bool:
 		var f float64
 		if x {

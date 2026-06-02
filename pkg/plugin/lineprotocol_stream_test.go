@@ -42,6 +42,82 @@ func TestProcessMessageFrames_LineProtocolSingleLongFrame(t *testing.T) {
 	}
 }
 
+// TestProcessMessageFrames_TagSchemaStableAcrossMessages verifies the
+// stream-level tag-key union: once a tag key is seen, later frames keep that
+// column (nil-padded) even when a message omits it, instead of the column set
+// shrinking message to message.
+func TestProcessMessageFrames_TagSchemaStableAcrossMessages(t *testing.T) {
+	sm := NewStreamManager(&mockStreamClient{}, 5, 1000)
+	cfg := &StreamConfig{
+		MessageFormat:                  "lineprotocol",
+		TimestampMode:                  "message",
+		LineProtocolTimestampPrecision: "s",
+	}
+
+	// Message 1 carries tag 'host' only.
+	f1, err := sm.ProcessMessageFrames(
+		kafka_client.KafkaMessage{RawValue: []byte("a,host=h1 f=1 100\n"), Offset: 1, Timestamp: time.Now()},
+		0, []int32{0}, cfg, "topic",
+	)
+	if err != nil {
+		t.Fatalf("msg1 err: %v", err)
+	}
+	if fieldByName(f1[0], "host") == nil {
+		t.Fatalf("frame1 should have 'host' column")
+	}
+
+	// Message 2 carries tag 'region' only — but the frame must still include
+	// 'host' (nil-padded) from the running union.
+	f2, err := sm.ProcessMessageFrames(
+		kafka_client.KafkaMessage{RawValue: []byte("b,region=r1 g=2 200\n"), Offset: 2, Timestamp: time.Now()},
+		0, []int32{0}, cfg, "topic",
+	)
+	if err != nil {
+		t.Fatalf("msg2 err: %v", err)
+	}
+	host := fieldByName(f2[0], "host")
+	region := fieldByName(f2[0], "region")
+	if host == nil {
+		t.Fatalf("frame2 must retain 'host' column from earlier message")
+	}
+	if region == nil {
+		t.Fatalf("frame2 must have 'region' column")
+	}
+	if strPtrAt(host, 0) != nil {
+		t.Errorf("frame2 'host' should be nil-padded (msg2 has no host), got %v", host.At(0))
+	}
+	if v := strPtrAt(region, 0); v == nil || *v != "r1" {
+		t.Errorf("frame2 'region' should be 'r1', got %v", region.At(0))
+	}
+}
+
+// TestProcessMessageFrames_AliasAndRefIDOnFrame verifies the configured RefID
+// and Alias survive onto the line-protocol frame (previously dropped).
+func TestProcessMessageFrames_AliasAndRefIDOnFrame(t *testing.T) {
+	sm := NewStreamManager(&mockStreamClient{}, 5, 1000)
+	frames, err := sm.ProcessMessageFrames(
+		kafka_client.KafkaMessage{RawValue: []byte("a,t=v f=1 100\n"), Offset: 1, Timestamp: time.Now()},
+		0, []int32{0},
+		&StreamConfig{
+			MessageFormat:                  "lineprotocol",
+			TimestampMode:                  "message",
+			LineProtocolTimestampPrecision: "s",
+			RefID:                          "A",
+			Alias:                          "my-stream",
+		},
+		"topic",
+	)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if frames[0].RefID != "A" {
+		t.Errorf("frame RefID: want 'A', got %q", frames[0].RefID)
+	}
+	if frames[0].Name == "" {
+		t.Errorf("frame Name should be set from alias, got empty")
+	}
+}
+
 func TestProcessMessageFrames_LineProtocolTombstoneEmitsNothing(t *testing.T) {
 	sm := NewStreamManager(&mockStreamClient{}, 5, 1000)
 	frames, err := sm.ProcessMessageFrames(

@@ -250,6 +250,51 @@ describe('DataSource', () => {
   });
 
   describe('query', () => {
+    it('incorporates Line Protocol filters into the stream path hash', (done) => {
+      const base: KafkaQuery = {
+        refId: 'A',
+        topicName: 'lp',
+        partition: 0,
+        autoOffsetReset: AutoOffsetReset.LATEST,
+        timestampMode: TimestampMode.Now,
+        messageFormat: MessageFormat.LINEPROTOCOL,
+      } as any;
+
+      capturedPath = undefined;
+      ds.query({ targets: [base] } as any).subscribe({
+        complete: () => {
+          try {
+            const emptyPath = capturedPath;
+            // Empty filters hash to the default '0-0-0' segment after 'auto'.
+            expect(emptyPath).toContain('-auto-0-0-0-');
+
+            capturedPath = undefined;
+            const filtered: KafkaQuery = {
+              ...base,
+              lineProtocolMeasurements: 'Breaker Data',
+              lineProtocolFields: 'PT Primary',
+              lineProtocolTags: 'Building=DCM102',
+            } as any;
+            ds.query({ targets: [filtered] } as any).subscribe({
+              complete: () => {
+                try {
+                  // Non-empty filters must change the hashed segments, so the
+                  // path differs and no longer carries the default '0-0-0'.
+                  expect(capturedPath).not.toBe(emptyPath);
+                  expect(capturedPath).not.toContain('-auto-0-0-0-');
+                  done();
+                } catch (e) {
+                  done(e as any);
+                }
+              },
+            });
+          } catch (e) {
+            done(e as any);
+          }
+        },
+      });
+    });
+
     it('builds a clean path without dangling dash and includes lastN only for LAST_N', (done) => {
       const target: KafkaQuery = {
         refId: 'A',

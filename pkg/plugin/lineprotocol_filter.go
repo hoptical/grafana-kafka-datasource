@@ -109,8 +109,16 @@ func matchesAnyRegexp(patterns []*regexp.Regexp, s string) bool {
 	return false
 }
 
+// compileAnchored compiles pat as a fully-anchored pattern so plain strings
+// match exactly (e.g. "Breaker" no longer matches "Breaker Data") while regex
+// metacharacters still work within the pattern.
+func compileAnchored(pat string) (*regexp.Regexp, error) {
+	return regexp.Compile("^(?:" + pat + ")$")
+}
+
 // parseRegexpSet splits a comma-separated string into compiled regex patterns.
-// Invalid patterns are silently skipped. Returns nil when nothing useful remains.
+// Each pattern is anchored, so plain entries become exact matches. Invalid
+// patterns are silently skipped. Returns nil when nothing useful remains.
 func parseRegexpSet(s string) []*regexp.Regexp {
 	if strings.TrimSpace(s) == "" {
 		return nil
@@ -121,7 +129,7 @@ func parseRegexpSet(s string) []*regexp.Regexp {
 		if p == "" {
 			continue
 		}
-		re, err := regexp.Compile(p)
+		re, err := compileAnchored(p)
 		if err != nil {
 			continue
 		}
@@ -147,7 +155,7 @@ func parseTagPatterns(s string) []tagPattern {
 		if k == "" {
 			continue
 		}
-		re, err := regexp.Compile(v)
+		re, err := compileAnchored(v)
 		if err != nil {
 			continue
 		}

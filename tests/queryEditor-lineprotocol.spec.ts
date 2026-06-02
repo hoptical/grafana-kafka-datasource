@@ -68,5 +68,23 @@ test.describe('Kafka Query Editor - Line Protocol Tests', () => {
       .or(page.getByRole('option', { name: /^Seconds$/ }));
     await expect(secondsOption.first()).toBeVisible({ timeout: 5000 });
     await secondsOption.first().click();
+
+    // The three Line Protocol filter inputs should appear once Line Protocol
+    // is selected, and editing each one should run its handler without error.
+    const measurementFilter = page.getByPlaceholder(/Breaker Data/);
+    const fieldFilter = page.getByPlaceholder(/PT Primary/);
+    const tagFilter = page.getByPlaceholder(/Building=DCM/);
+
+    await expect(measurementFilter).toBeVisible({ timeout: 5000 });
+    await expect(fieldFilter).toBeVisible({ timeout: 5000 });
+    await expect(tagFilter).toBeVisible({ timeout: 5000 });
+
+    await measurementFilter.fill('Breaker Data');
+    await fieldFilter.fill('PT Primary');
+    await tagFilter.fill('Building=DCM102');
+
+    await expect(measurementFilter).toHaveValue('Breaker Data');
+    await expect(fieldFilter).toHaveValue('PT Primary');
+    await expect(tagFilter).toHaveValue('Building=DCM102');
   });
 });

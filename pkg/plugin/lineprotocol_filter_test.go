@@ -192,10 +192,26 @@ func TestLineProtocolFilter_InvalidRegexSkipped(t *testing.T) {
 	}
 }
 
+func TestLineProtocolFilter_PlainEntryIsExactMatch(t *testing.T) {
+	// "Breaker" is a substring of "Breaker Data" but not an exact match, so
+	// with anchored patterns it must NOT match (would have matched as a loose
+	// substring before anchoring).
+	frames := runFilterCase(t, &StreamConfig{
+		MessageFormat:                  "lineprotocol",
+		TimestampMode:                  "message",
+		LineProtocolTimestampPrecision: "s",
+		LineProtocolMeasurements:       "Breaker",
+	})
+	if len(frames) != 0 {
+		t.Errorf("plain 'Breaker' must not match 'Breaker Data' (anchored), got %d frames", len(frames))
+	}
+}
+
 // runFilterCase produces a frame from a fixed two-LP-line payload using the
 // given config. The payload has:
-//   Last Trip,Building=DCM102,Device_tag=-XQ001 a=1,b=2 100
-//   Breaker Data,Building=DCM102,Device_tag=-XQ002 PT Primary=46.37,Frequency=50 100
+//
+//	Last Trip,Building=DCM102,Device_tag=-XQ001 a=1,b=2 100
+//	Breaker Data,Building=DCM102,Device_tag=-XQ002 PT Primary=46.37,Frequency=50 100
 func runFilterCase(t *testing.T, cfg *StreamConfig) []*data.Frame {
 	t.Helper()
 	raw := []byte("Last\\ Trip,Building=DCM102,Device_tag=-XQ001 a=1,b=2 100\nBreaker\\ Data,Building=DCM102,Device_tag=-XQ002 PT\\ Primary=46.37,Frequency=50 100\n")

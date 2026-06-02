@@ -20,7 +20,7 @@
 - **Rich JSON support:** Handles flat, nested, and array data.
 - **Avro support:** Integrates with Schema Registry for Avro messages.
 - **Plaintext support:** Reads raw Kafka payload bytes without schema decoding.
-- **Line Protocol support:** Parses InfluxDB Line Protocol messages into Grafana frames, one frame per line, with tags carried as field labels.
+- **Line Protocol support:** Parses InfluxDB Line Protocol messages into a single long-format Grafana frame per message, with tags carried as columns.
 - **Secure:** SASL authentication & SSL/TLS encryption.
 - **Easy setup:** Install and configure in minutes.
 
@@ -94,7 +94,7 @@ You can automatically configure the Kafka datasource using Grafana's provisionin
      - `Avro`: For Avro messages (requires schema registry or inline schema)
      - `Protobuf`: For Protobuf messages (requires schema registry or inline schema)
      - `Plaintext`: For raw payload bytes (no schema required)
-     - `Line Protocol`: For InfluxDB Line Protocol messages. Each line in a Kafka message becomes its own Grafana frame; tags become field labels; field types (float/int/uint/bool/string) are preserved per spec. A **Timestamp Precision** selector (`Auto-detect` by default) controls how inline timestamps are interpreted.
+     - `Line Protocol`: For InfluxDB Line Protocol messages. All lines in a Kafka message are combined into the rows of a single long-format frame; tags become columns; field types (float/int/uint/bool/string) are preserved per spec. A **Timestamp Precision** selector (`Auto-detect` by default) controls how inline timestamps are interpreted.
    - **Offset Reset**:
      - `latest`: Only new messages
      - `last N messages`: Start from the most recent N messages (set N in the UI)

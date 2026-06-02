@@ -72,11 +72,27 @@ export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourc
       const n = Number.isFinite(parsed) && parsed > 0 ? parsed : 100;
       lastN = n;
     }
+    // Resolve template variables in the Line Protocol filter fields so that
+    // placeholders (e.g. $host) reach the backend resolved, and so the stream
+    // path hash changes when the underlying variable changes. Empty/undefined
+    // values are left untouched.
+    const lineProtocolMeasurements = query.lineProtocolMeasurements
+      ? templateSrv.replace(query.lineProtocolMeasurements, scopedVars)
+      : query.lineProtocolMeasurements;
+    const lineProtocolFields = query.lineProtocolFields
+      ? templateSrv.replace(query.lineProtocolFields, scopedVars)
+      : query.lineProtocolFields;
+    const lineProtocolTags = query.lineProtocolTags
+      ? templateSrv.replace(query.lineProtocolTags, scopedVars)
+      : query.lineProtocolTags;
     const result = {
       ...query,
       topicName,
       partition,
       lastN,
+      lineProtocolMeasurements,
+      lineProtocolFields,
+      lineProtocolTags,
       // Ensure these fields are preserved with defaults if undefined
       autoOffsetReset: query.autoOffsetReset || AutoOffsetReset.LATEST,
       messageFormat: query.messageFormat || MessageFormat.JSON,
