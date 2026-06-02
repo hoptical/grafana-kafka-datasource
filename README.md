@@ -20,6 +20,7 @@
 - **Rich JSON support:** Handles flat, nested, and array data.
 - **Avro support:** Integrates with Schema Registry for Avro messages.
 - **Plaintext support:** Reads raw Kafka payload bytes without schema decoding.
+- **Line Protocol support:** Parses InfluxDB Line Protocol messages into Grafana frames, one frame per line, with tags carried as field labels.
 - **Secure:** SASL authentication & SSL/TLS encryption.
 - **Easy setup:** Install and configure in minutes.
 
@@ -46,6 +47,7 @@ This plugin connects your Grafana instance directly to Kafka brokers, allowing y
 - Avro support with Schema Registry integration (inline schema or Schema Registry)
 - Protobuf support with Schema Registry integration (inline schema or Schema Registry)
 - Plaintext support for raw byte payloads (no schema required)
+- Line Protocol support (InfluxDB format) with per-query timestamp-precision selection (auto / ns / µs / ms / s)
 - Transactional topic support (committed messages only; control records are filtered)
 - Message key support (None, String, JSON, Base64 formats)
 - Configurable flattening depth (default: 5)
@@ -92,6 +94,7 @@ You can automatically configure the Kafka datasource using Grafana's provisionin
      - `Avro`: For Avro messages (requires schema registry or inline schema)
      - `Protobuf`: For Protobuf messages (requires schema registry or inline schema)
      - `Plaintext`: For raw payload bytes (no schema required)
+     - `Line Protocol`: For InfluxDB Line Protocol messages. Each line in a Kafka message becomes its own Grafana frame; tags become field labels; field types (float/int/uint/bool/string) are preserved per spec. A **Timestamp Precision** selector (`Auto-detect` by default) controls how inline timestamps are interpreted.
    - **Offset Reset**:
      - `latest`: Only new messages
      - `last N messages`: Start from the most recent N messages (set N in the UI)
@@ -221,6 +224,7 @@ Want to test the plugin with realistic Kafka messages? Use the included sample p
 - **Does it support secure connections?** Yes, SASL and SSL/TLS are supported.
 - **What JSON formats are supported?** Flat, nested, arrays, mixed types.
 - **What is Plaintext format?** It bypasses schema decoding and renders raw payload bytes in a single `message` field.
+- **What is Line Protocol format?** It parses [InfluxDB Line Protocol](https://docs.influxdata.com/influxdb/v2/reference/syntax/line-protocol/) messages — `measurement,tag=val field=val timestamp`. Each Kafka message produces a single Grafana frame in **long format**, one row per LP field, with a fixed streaming-friendly schema: `Time | _measurement | _field | value | value_str | <one column per tag key> | offset`. This shape works correctly with Grafana Live streaming (consistent schema per channel), and you can pivot it into Influx-style per-series frames with Grafana's **Transform → Partition by values** on `_measurement` + `_field` for dashboards that were built around the InfluxDB datasource. The **Timestamp Precision** dropdown decides how inline timestamps are interpreted; `Auto-detect` picks ns/µs/ms/s from the magnitude.
 - **How do I generate test data?** Use the included Go or Python producers.
 - **Where do I find more help?** See this README or open an issue.
 

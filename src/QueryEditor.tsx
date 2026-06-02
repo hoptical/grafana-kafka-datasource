@@ -24,6 +24,7 @@ import {
   ProtobufSchemaSource,
   MessageFormat,
   KeyFormat,
+  LineProtocolTimestampPrecision,
 } from './types';
 
 // Constants for Last N messages input
@@ -57,6 +58,23 @@ const messageFormats: Array<{ label: string; value: MessageFormat }> = [
   { label: 'Avro', value: MessageFormat.AVRO },
   { label: 'Protobuf', value: MessageFormat.PROTOBUF },
   { label: 'Plaintext', value: MessageFormat.PLAINTEXT },
+  { label: 'Line Protocol', value: MessageFormat.LINEPROTOCOL },
+];
+
+const lineProtocolTimestampPrecisions: Array<{
+  label: string;
+  value: LineProtocolTimestampPrecision;
+  description?: string;
+}> = [
+  {
+    label: 'Auto-detect',
+    value: LineProtocolTimestampPrecision.AUTO,
+    description: 'Infer precision from timestamp magnitude',
+  },
+  { label: 'Nanoseconds', value: LineProtocolTimestampPrecision.NS },
+  { label: 'Microseconds', value: LineProtocolTimestampPrecision.US },
+  { label: 'Milliseconds', value: LineProtocolTimestampPrecision.MS },
+  { label: 'Seconds', value: LineProtocolTimestampPrecision.S },
 ];
 
 const keyFormats: Array<{ label: string; value: KeyFormat }> = [
@@ -625,6 +643,31 @@ class QueryEditorInner extends PureComponent<QueryEditorInnerProps, State> {
     onRunQuery();
   };
 
+  onLineProtocolTimestampPrecisionChanged = (value: LineProtocolTimestampPrecision) => {
+    const { onChange, query, onRunQuery } = this.props;
+    onChange({ ...query, lineProtocolTimestampPrecision: value });
+    this.debouncedRunQuery.cancel();
+    onRunQuery();
+  };
+
+  onLineProtocolMeasurementsChanged = (event: ChangeEvent<HTMLInputElement>) => {
+    const { onChange, query } = this.props;
+    onChange({ ...query, lineProtocolMeasurements: event.target.value });
+    this.debouncedRunQuery();
+  };
+
+  onLineProtocolFieldsChanged = (event: ChangeEvent<HTMLInputElement>) => {
+    const { onChange, query } = this.props;
+    onChange({ ...query, lineProtocolFields: event.target.value });
+    this.debouncedRunQuery();
+  };
+
+  onLineProtocolTagsChanged = (event: ChangeEvent<HTMLInputElement>) => {
+    const { onChange, query } = this.props;
+    onChange({ ...query, lineProtocolTags: event.target.value });
+    this.debouncedRunQuery();
+  };
+
   onKeyFormatChanged = (value: KeyFormat) => {
     const { onChange, query, onRunQuery } = this.props;
     onChange({ ...query, keyFormat: value });
@@ -1039,6 +1082,70 @@ class QueryEditorInner extends PureComponent<QueryEditorInnerProps, State> {
                 </InlineField>
               </InlineFieldRow>
             )}
+          </>
+        )}
+
+        {/* Line Protocol Configuration */}
+        {messageFormat === MessageFormat.LINEPROTOCOL && (
+          <>
+            <InlineFieldRow>
+              <InlineField
+                label="Timestamp Precision"
+                labelWidth={25}
+                tooltip="Precision of the inline line-protocol timestamp. Auto-detect infers it from magnitude."
+              >
+                <Select
+                  width={25}
+                  value={query.lineProtocolTimestampPrecision || LineProtocolTimestampPrecision.AUTO}
+                  options={lineProtocolTimestampPrecisions}
+                  onChange={(value) =>
+                    this.onLineProtocolTimestampPrecisionChanged(value.value as LineProtocolTimestampPrecision)
+                  }
+                />
+              </InlineField>
+            </InlineFieldRow>
+            <InlineFieldRow>
+              <InlineField
+                label="Measurement filter"
+                labelWidth={25}
+                tooltip="Comma-separated whitelist of LP measurement names to include. Empty = all."
+                grow
+              >
+                <Input
+                  placeholder="e.g. Breaker Data, Last Trip"
+                  value={query.lineProtocolMeasurements || ''}
+                  onChange={this.onLineProtocolMeasurementsChanged}
+                />
+              </InlineField>
+            </InlineFieldRow>
+            <InlineFieldRow>
+              <InlineField
+                label="Field filter"
+                labelWidth={25}
+                tooltip="Comma-separated whitelist of LP field keys to include. Empty = all."
+                grow
+              >
+                <Input
+                  placeholder="e.g. PT Primary, Frequency"
+                  value={query.lineProtocolFields || ''}
+                  onChange={this.onLineProtocolFieldsChanged}
+                />
+              </InlineField>
+            </InlineFieldRow>
+            <InlineFieldRow>
+              <InlineField
+                label="Tag filter"
+                labelWidth={25}
+                tooltip="Comma-separated tag key=value pairs the row must match (ANDed). Empty = no constraint."
+                grow
+              >
+                <Input
+                  placeholder="e.g. Building=DCM102, Device_tag=-XQ202"
+                  value={query.lineProtocolTags || ''}
+                  onChange={this.onLineProtocolTagsChanged}
+                />
+              </InlineField>
+            </InlineFieldRow>
           </>
         )}
 

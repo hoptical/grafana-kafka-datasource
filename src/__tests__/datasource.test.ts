@@ -1,5 +1,5 @@
 import { of } from 'rxjs';
-import { DataSource } from '../datasource';
+import { DataSource, PAGE_LOAD_SESSION } from '../datasource';
 import {
   AutoOffsetReset,
   TimestampMode,
@@ -7,6 +7,7 @@ import {
   AvroSchemaSource,
   ProtobufSchemaSource,
   KeyFormat,
+  LineProtocolTimestampPrecision,
   type KafkaQuery,
 } from '../types';
 
@@ -88,6 +89,7 @@ describe('DataSource', () => {
         messageFormat: MessageFormat.JSON,
         avroSchemaSource: AvroSchemaSource.SCHEMA_REGISTRY,
         protobufSchemaSource: ProtobufSchemaSource.SCHEMA_REGISTRY,
+        lineProtocolTimestampPrecision: LineProtocolTimestampPrecision.AUTO,
         keyFormat: KeyFormat.NONE,
       });
     });
@@ -266,7 +268,7 @@ describe('DataSource', () => {
         complete: () => {
           try {
             expect(capturedPath).toBe(
-              'my%20topic-0-latest-json-schemaRegistry-schemaRegistry-none-now-none-none-A-no-alias'
+              'my%20topic-0-latest-json-schemaRegistry-schemaRegistry-none-now-auto-0-0-0-none-none-A-no-alias'
             );
             // Now with LAST_N
             capturedPath = undefined;
@@ -280,7 +282,7 @@ describe('DataSource', () => {
               complete: () => {
                 try {
                   expect(capturedPath).toBe(
-                    'my%20topic-0-lastN-json-schemaRegistry-schemaRegistry-none-now-none-none-10-A-no-alias'
+                    `my%20topic-0-lastN-json-schemaRegistry-schemaRegistry-none-now-auto-0-0-0-none-none-10-${PAGE_LOAD_SESSION}-A-no-alias`
                   );
                   done();
                 } catch (e) {
@@ -306,7 +308,7 @@ describe('DataSource', () => {
         complete: () => {
           // Only one valid query should have been processed
           expect(capturedPath).toBe(
-            'valid-topic-all-latest-json-schemaRegistry-schemaRegistry-none-message-none-none-B-no-alias'
+            'valid-topic-all-latest-json-schemaRegistry-schemaRegistry-none-message-auto-0-0-0-none-none-B-no-alias'
           );
           done();
         },
@@ -337,7 +339,7 @@ describe('DataSource', () => {
       ds.query({ targets: [target] } as any).subscribe({
         complete: () => {
           expect(capturedPath).toBe(
-            'topic%2Fwith-special%3Achars-all-earliest-json-schemaRegistry-schemaRegistry-none-now-none-none-A-no-alias'
+            'topic%2Fwith-special%3Achars-all-earliest-json-schemaRegistry-schemaRegistry-none-now-auto-0-0-0-none-none-A-no-alias'
           );
           done();
         },
@@ -357,7 +359,7 @@ describe('DataSource', () => {
       ds.query({ targets: [target] } as any).subscribe({
         complete: () => {
           expect(capturedPath).toBe(
-            'nmea-topic-all-latest-plaintext-schemaRegistry-schemaRegistry-none-message-none-none-A-no-alias'
+            'nmea-topic-all-latest-plaintext-schemaRegistry-schemaRegistry-none-message-auto-0-0-0-none-none-A-no-alias'
           );
           done();
         },
@@ -381,7 +383,7 @@ describe('DataSource', () => {
           // We don't know the exact hash, but we can match the pattern
           // Path: topic-partition-offset-format-schema-keyformat-timestamp-lastN-refId-Slug-Hash
           expect(capturedPath).toMatch(
-            /^my-topic-0-latest-json-schemaRegistry-schemaRegistry-none-now-none-none-A-MyAlias-[a-z0-9]+$/
+            /^my-topic-0-latest-json-schemaRegistry-schemaRegistry-none-now-auto-0-0-0-none-none-A-MyAlias-[a-z0-9]+$/
           );
           done();
         },

@@ -130,6 +130,18 @@ type StreamConfig struct {
 	KeyFormat            string // "none", "string", "base64", or "json"
 	RefID                string
 	Alias                string
+	// LineProtocolTimestampPrecision selects how inline line-protocol timestamps
+	// are interpreted: "ns", "us", "ms", "s", or "auto" (default).
+	LineProtocolTimestampPrecision string
+	// LineProtocolMeasurements is a comma-separated whitelist of LP measurement
+	// names. Empty / whitespace-only = include all measurements.
+	LineProtocolMeasurements string
+	// LineProtocolFields is a comma-separated whitelist of LP field keys.
+	// Empty / whitespace-only = include all fields.
+	LineProtocolFields string
+	// LineProtocolTags is a comma-separated list of `tag=value` pairs that a
+	// row must match (ANDed). Empty / whitespace-only = no tag constraint.
+	LineProtocolTags string
 }
 
 // NewStreamManager creates a new StreamManager instance.
