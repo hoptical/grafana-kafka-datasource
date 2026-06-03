@@ -1112,6 +1112,7 @@ class QueryEditorInner extends PureComponent<QueryEditorInnerProps, State> {
                 grow
               >
                 <Input
+                  id="lp-measurement-filter"
                   placeholder="e.g. Breaker Data, ^Breaker.*"
                   value={query.lineProtocolMeasurements || ''}
                   onChange={this.onLineProtocolMeasurementsChanged}
@@ -1126,6 +1127,7 @@ class QueryEditorInner extends PureComponent<QueryEditorInnerProps, State> {
                 grow
               >
                 <Input
+                  id="lp-field-filter"
                   placeholder="e.g. PT Primary, PT.*"
                   value={query.lineProtocolFields || ''}
                   onChange={this.onLineProtocolFieldsChanged}
@@ -1140,6 +1142,7 @@ class QueryEditorInner extends PureComponent<QueryEditorInnerProps, State> {
                 grow
               >
                 <Input
+                  id="lp-tag-filter"
                   placeholder="e.g. Building=DCM.*, Device_tag=-XQ00[12]"
                   value={query.lineProtocolTags || ''}
                   onChange={this.onLineProtocolTagsChanged}

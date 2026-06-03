@@ -28,6 +28,7 @@ type StreamManager struct {
 	flattenFieldCap      int
 	fieldBuilder         *FieldBuilder                      // Maintains type registry across messages
 	lpTagKeys            map[string]struct{}                // Union of line-protocol tag keys seen across messages (schema stability)
+	lpTagKeyOrder        []string                           // Tag keys in first-seen order, so frame columns keep a stable position
 	schemaCache          map[string]string                  // Cache for schemas by subject name
 	schemaRegistryClient *kafka_client.SchemaRegistryClient // Cached Schema Registry client
 	mu                   sync.RWMutex
@@ -153,6 +154,7 @@ func NewStreamManager(client KafkaClientAPI, flattenMaxDepth, flattenFieldCap in
 		flattenFieldCap: flattenFieldCap,
 		fieldBuilder:    NewFieldBuilder(),
 		lpTagKeys:       make(map[string]struct{}),
+		lpTagKeyOrder:   make([]string, 0),
 		schemaCache:     make(map[string]string),
 	}
 }

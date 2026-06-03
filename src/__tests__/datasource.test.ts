@@ -282,6 +282,31 @@ describe('DataSource', () => {
                   // path differs and no longer carries the default '0-0-0'.
                   expect(capturedPath).not.toBe(emptyPath);
                   expect(capturedPath).not.toContain('-auto-0-0-0-');
+
+                  // Each axis must contribute to the hash independently. Flip
+                  // one filter at a time: if any single axis were omitted from
+                  // the path hash, that case would still equal the empty path
+                  // (or keep the default '-auto-0-0-0-' segment) and fail here.
+                  // getDataStream runs synchronously while query() builds the
+                  // observable, so capturedPath is set by the time it returns.
+                  const pathFor = (overrides: Partial<KafkaQuery>): string | undefined => {
+                    capturedPath = undefined;
+                    ds.query({ targets: [{ ...base, ...overrides }] } as any).subscribe();
+                    return capturedPath;
+                  };
+
+                  const measurementOnly = pathFor({ lineProtocolMeasurements: 'Breaker Data' });
+                  expect(measurementOnly).not.toBe(emptyPath);
+                  expect(measurementOnly).not.toContain('-auto-0-0-0-');
+
+                  const fieldOnly = pathFor({ lineProtocolFields: 'PT Primary' });
+                  expect(fieldOnly).not.toBe(emptyPath);
+                  expect(fieldOnly).not.toContain('-auto-0-0-0-');
+
+                  const tagOnly = pathFor({ lineProtocolTags: 'Building=DCM102' });
+                  expect(tagOnly).not.toBe(emptyPath);
+                  expect(tagOnly).not.toContain('-auto-0-0-0-');
+
                   done();
                 } catch (e) {
                   done(e as any);

@@ -71,9 +71,12 @@ test.describe('Kafka Query Editor - Line Protocol Tests', () => {
 
     // The three Line Protocol filter inputs should appear once Line Protocol
     // is selected, and editing each one should run its handler without error.
-    const measurementFilter = page.getByPlaceholder(/Breaker Data/);
-    const fieldFilter = page.getByPlaceholder(/PT Primary/);
-    const tagFilter = page.getByPlaceholder(/Building=DCM/);
+    // Target the InlineField labels (associated with the inputs via id/htmlFor)
+    // rather than the example placeholder text, which is illustrative and may
+    // change without affecting behaviour.
+    const measurementFilter = page.getByLabel('Measurement filter', { exact: true });
+    const fieldFilter = page.getByLabel('Field filter', { exact: true });
+    const tagFilter = page.getByLabel('Tag filter', { exact: true });
 
     await expect(measurementFilter).toBeVisible({ timeout: 5000 });
     await expect(fieldFilter).toBeVisible({ timeout: 5000 });

@@ -2,7 +2,6 @@ package plugin
 
 import (
 	"fmt"
-	"sort"
 	"strconv"
 	"time"
 
@@ -127,8 +126,13 @@ func (sm *StreamManager) buildLineProtocolFrames(
 		tagCols[k] = make([]*string, 0, totalRows)
 	}
 
+	// Sample "now" once so every row from this single Kafka message shares the
+	// same timestamp under TimestampMode == "now"; calling time.Now() per line
+	// would scatter rows that belong to the same sample across microseconds.
+	now := time.Now()
+
 	for _, line := range lines {
-		ts := resolveLineProtocolTimestamp(line, config, msg.Timestamp)
+		ts := resolveLineProtocolTimestamp(line, config, msg.Timestamp, now)
 		tagMap := make(map[string]string, len(line.Tags))
 		for _, t := range line.Tags {
 			tagMap[t.Key] = t.Value
@@ -186,22 +190,25 @@ func (sm *StreamManager) buildLineProtocolFrames(
 }
 
 // mergeLPTagKeys folds the tag keys from the current message's lines into the
-// stream's running union, then returns the full union sorted for stable column
-// order. Maintaining the union across messages (rather than per-message) keeps
-// the frame schema stable for Grafana Live: once a tag key has been seen, every
+// stream's running union, then returns the full union in first-seen order.
+// Maintaining the union across messages (rather than per-message) keeps the
+// frame schema stable for Grafana Live: once a tag key has been seen, every
 // later frame keeps that column (nil-padded when a message omits the tag),
-// instead of the column set oscillating message to message.
+// instead of the column set oscillating message to message. First-seen order
+// (rather than re-sorting each call) keeps existing columns in place — a newly
+// discovered key is appended at the end instead of being inserted ahead of
+// columns Live has already established.
 func (sm *StreamManager) mergeLPTagKeys(lines []ParsedLine) []string {
 	for _, l := range lines {
 		for _, t := range l.Tags {
-			sm.lpTagKeys[t.Key] = struct{}{}
+			if _, ok := sm.lpTagKeys[t.Key]; !ok {
+				sm.lpTagKeys[t.Key] = struct{}{}
+				sm.lpTagKeyOrder = append(sm.lpTagKeyOrder, t.Key)
+			}
 		}
 	}
-	keys := make([]string, 0, len(sm.lpTagKeys))
-	for k := range sm.lpTagKeys {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
+	keys := make([]string, len(sm.lpTagKeyOrder))
+	copy(keys, sm.lpTagKeyOrder)
 	return keys
 }
 
@@ -249,10 +256,12 @@ func coerceLineProtocolValue(v interface{}) (*float64, *string) {
 }
 
 // resolveLineProtocolTimestamp picks the right time.Time for a parsed line
-// based on the user's TimestampMode and timestamp-precision configuration.
-func resolveLineProtocolTimestamp(line ParsedLine, config *StreamConfig, kafkaTime time.Time) time.Time {
+// based on the user's TimestampMode and timestamp-precision configuration. The
+// caller supplies a single `now`, sampled once per message, so all rows from one
+// message share a timestamp under TimestampMode == "now".
+func resolveLineProtocolTimestamp(line ParsedLine, config *StreamConfig, kafkaTime time.Time, now time.Time) time.Time {
 	if config != nil && config.TimestampMode == "now" {
-		return time.Now()
+		return now
 	}
 	if !line.HasTimestamp {
 		return kafkaTime

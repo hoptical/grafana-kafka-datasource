@@ -140,6 +140,9 @@ func parseRegexpSet(s string) []*regexp.Regexp {
 
 // parseTagPatterns splits a comma-separated string of `key=value` pairs where
 // the value is treated as a regex pattern. Invalid patterns are silently skipped.
+// Entries with a blank value (e.g. an interpolated-away `Building=`) are ignored
+// rather than compiled into `^(?:)$`, which would otherwise require the tag to be
+// empty and filter out every row.
 func parseTagPatterns(s string) []tagPattern {
 	if strings.TrimSpace(s) == "" {
 		return nil
@@ -152,7 +155,7 @@ func parseTagPatterns(s string) []tagPattern {
 		}
 		k := strings.TrimSpace(part[:eq])
 		v := strings.TrimSpace(part[eq+1:])
-		if k == "" {
+		if k == "" || v == "" {
 			continue
 		}
 		re, err := compileAnchored(v)
