@@ -1,0 +1,5 @@
+[tools]
+go = "1.25.9"
+node = "22"
+mage = "latest"
+pnpm = "10.33.0"
