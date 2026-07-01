@@ -6,6 +6,8 @@ import {
   verifyColumnHeadersVisible,
   setTableVisualization,
   SINGLE_PARTITION_COLUMN_HEADERS,
+  openPartitionSelector,
+  selectAllPartitionsOption,
 } from './test-utils';
 
 type ProducerOptions = {
@@ -105,19 +107,12 @@ test.describe('Kafka Query Editor - JSON Tests', () => {
     // Check input fields are visible
     await expect(page.getByRole('textbox', { name: 'Enter topic name' })).toBeVisible();
 
-    // Check that partition selector has a specific ID for reliable selection
-    await expect(page.locator('#query-editor-partition')).toBeVisible();
-
     // Test configuring all parameters and verify they work correctly
     await page.getByRole('textbox', { name: 'Enter topic name' }).fill('a-topic');
 
-    // Test partition selection using the ID selector
-    await page.locator('#query-editor-partition').click();
-    const allPartitionsFirstTest = page
-      .getByLabel('Select options menu')
-      .getByText('All partitions')
-      .or(page.getByRole('option', { name: /^All partitions$/ }));
-    await allPartitionsFirstTest.first().click();
+    // Test partition selection using the shared fallback selector
+    await openPartitionSelector(page);
+    await selectAllPartitionsOption(page);
 
     // Test Message Format selector (should stay on JSON)
     await expect(page.getByText('Message Format')).toBeVisible();
@@ -247,24 +242,10 @@ test.describe('Kafka Query Editor - JSON Tests', () => {
       await page.getByRole('button', { name: 'Fetch' }).click();
       await page.getByText('test-topic').click(); // The topic name is clicked from the autocomplete list
 
-      // Wait for partition selector to be available after fetch
-      const partitionSelector = page
-        .locator('div')
-        .filter({ hasText: /^All partitions$/ })
-        .nth(2)
-        .or(page.locator('#query-editor-partition'))
-        .or(page.getByText('All partitions').locator('..').locator('.css-1eu65zc'));
-
-      // Partition selector MUST be found after fetch
-      await expect(partitionSelector.first()).toBeVisible({ timeout: 5000 });
-      await partitionSelector.first().click();
+      await openPartitionSelector(page);
 
       // Select "All partitions" option - works for both v10 and v12+
-      const allPartitionsOption = page
-        .getByLabel('Select options menu')
-        .getByText('All partitions')
-        .or(page.getByRole('option', { name: /^All partitions$/ }));
-      await allPartitionsOption.first().click();
+      await selectAllPartitionsOption(page);
 
       await setTableVisualization(panelEditPage);
 
@@ -418,7 +399,7 @@ test.describe('Kafka Query Editor - JSON Tests', () => {
     // We removed inline error; ensure no success message appears
     await expect(page.getByText(/Fetched \d+ partition/)).not.toBeVisible();
     // Open partition select and ensure no concrete partition entries were added
-    await page.locator('#query-editor-partition').click();
+    await openPartitionSelector(page);
     await expect(page.getByRole('option', { name: /Partition 0/ })).toHaveCount(0);
   });
 
@@ -440,15 +421,7 @@ test.describe('Kafka Query Editor - JSON Tests', () => {
       await page.getByRole('button', { name: 'Fetch' }).click();
 
       // Open partition select and ensure options present (All partitions + partition 0,1,2)
-      // Use the same approach as Message Format selector - find the clickable parent
-      // Wait for partition selector to be ready
-      const partitionSelector = page
-        .locator('#query-editor-partition')
-        .or(page.getByText('All partitions').locator('..').locator('.css-1eu65zc'))
-        .or(page.getByText('test-topic').locator('..').locator('.css-1eu65zc'));
-
-      await expect(partitionSelector.first()).toBeVisible({ timeout: 5000 });
-      await partitionSelector.first().click();
+      await openPartitionSelector(page);
 
       // Check for All partitions option
       const allPartitionsOption = page
@@ -511,11 +484,7 @@ test.describe('Kafka Query Editor - JSON Tests', () => {
       await page.getByText(topic).first().click();
 
       // Pick single partition for deterministic assertions.
-      const partitionSelector = page
-        .locator('#query-editor-partition')
-        .or(page.getByText('All partitions').locator('..').locator('.css-1eu65zc'));
-      await expect(partitionSelector.first()).toBeVisible({ timeout: 5000 });
-      await partitionSelector.first().click();
+      await openPartitionSelector(page);
       const partition0Option = page
         .getByRole('option', { name: /Partition 0/ })
         .or(page.getByText(/Partition 0/, { exact: true }));

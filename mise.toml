@@ -1,0 +1,6 @@
+[tools]
+go = "1.25.9"
+node = "22.23.1"
+mage = "1.17.2"
+pnpm = "10.33.0"
+golangci-lint = "2.12.2"

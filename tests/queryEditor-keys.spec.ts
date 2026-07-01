@@ -7,6 +7,8 @@ import {
   setTableVisualization,
   TIMESTAMP_REGEX,
   NUMERIC_REGEX,
+  openPartitionSelector,
+  selectAllPartitionsOption,
 } from './test-utils';
 
 function startKafkaProducer(extraArgs: string[] = []): { producer: ChildProcess; exitPromise: Promise<void> } {
@@ -59,21 +61,8 @@ async function setupStreamingQuery(page: any, panelEditPage: any, readProvisione
   await page.getByRole('button', { name: 'Fetch' }).click();
   await page.getByText('test-keys-topic').click();
 
-  const partitionSelector = page
-    .locator('div')
-    .filter({ hasText: /^All partitions$/ })
-    .nth(2)
-    .or(page.locator('#query-editor-partition'))
-    .or(page.getByText('All partitions').locator('..').locator('.css-1eu65zc'));
-
-  await expect(partitionSelector.first()).toBeVisible({ timeout: 5000 });
-  await partitionSelector.first().click();
-
-  const allPartitionsOption = page
-    .getByLabel('Select options menu')
-    .getByText('All partitions')
-    .or(page.getByRole('option', { name: /^All partitions$/ }));
-  await allPartitionsOption.first().click();
+  await openPartitionSelector(page);
+  await selectAllPartitionsOption(page);
 
   await setTableVisualization(panelEditPage);
 }

@@ -55,3 +55,30 @@ export async function verifyColumnHeadersVisible(page: Page, headers: string[] =
     await expect(page.getByRole('columnheader', { name: header })).toBeVisible();
   }
 }
+
+/**
+ * Opens the partition selector dropdown using a set of fallback locators to
+ * remain resilient across different Grafana/UI library versions.
+ */
+export async function openPartitionSelector(page: Page): Promise<void> {
+  const partitionSelector = page
+    .locator('div')
+    .filter({ hasText: /^All partitions$/ })
+    .nth(2)
+    .or(page.locator('#query-editor-partition'))
+    .or(page.getByText('All partitions').locator('..').locator('.css-1eu65zc'));
+
+  await expect(partitionSelector.first()).toBeVisible({ timeout: 5000 });
+  await partitionSelector.first().click();
+}
+
+/**
+ * Selects the "All partitions" option from an already-open partition selector dropdown.
+ */
+export async function selectAllPartitionsOption(page: Page): Promise<void> {
+  const allPartitionsOption = page
+    .getByLabel('Select options menu')
+    .getByText('All partitions')
+    .or(page.getByRole('option', { name: /^All partitions$/ }));
+  await allPartitionsOption.first().click();
+}

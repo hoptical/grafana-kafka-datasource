@@ -33,7 +33,7 @@ importers:
         version: 12.3.3(eslint@9.39.2)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3)
       '@grafana/plugin-ui':
         specifier: 0.13.1
-        version: 0.13.1(@grafana/data@12.3.3(eslint@9.39.2)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3))(@grafana/e2e-selectors@13.1.0-24448182242)(@grafana/runtime@12.3.3(@types/react@18.3.1)(eslint@9.39.2)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3))(@grafana/ui@12.3.3(@types/react@18.3.1)(eslint@9.39.2)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3))(@testing-library/jest-dom@6.9.1)(@testing-library/react@16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@18.3.1)(@types/react@18.3.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(@testing-library/user-event@14.6.1(@testing-library/dom@10.4.1))(@types/react-dom@18.3.1)(@types/react@18.3.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(rxjs@7.8.2)
+        version: 0.13.1(@grafana/data@12.3.3(eslint@9.39.2)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3))(@grafana/e2e-selectors@13.1.0-25644485979)(@grafana/runtime@12.3.3(@types/react@18.3.1)(eslint@9.39.2)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3))(@grafana/ui@12.3.3(@types/react@18.3.1)(eslint@9.39.2)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3))(@testing-library/jest-dom@6.9.1)(@testing-library/react@16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@18.3.1)(@types/react@18.3.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(@testing-library/user-event@14.6.1(@testing-library/dom@10.4.1))(@types/react-dom@18.3.1)(@types/react@18.3.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(rxjs@7.8.2)
       '@grafana/runtime':
         specifier: 12.3.3
         version: 12.3.3(@types/react@18.3.1)(eslint@9.39.2)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3)
@@ -63,8 +63,8 @@ importers:
         specifier: 9.0.0
         version: 9.0.0(@stylistic/eslint-plugin-ts@4.4.1(eslint@9.39.2)(typescript@5.9.3))(@typescript-eslint/eslint-plugin@8.55.0(@typescript-eslint/parser@8.55.0(eslint@9.39.2)(typescript@5.9.3))(eslint@9.39.2)(typescript@5.9.3))(@typescript-eslint/parser@8.55.0(eslint@9.39.2)(typescript@5.9.3))(eslint-config-prettier@10.1.8(eslint@9.39.2))(eslint-plugin-jsdoc@62.5.4(eslint@9.39.2))(eslint-plugin-react-hooks@7.0.1(eslint@9.39.2))(eslint-plugin-react@7.37.5(eslint@9.39.2))(eslint@9.39.2)(typescript@5.9.3)
       '@grafana/plugin-e2e':
-        specifier: 3.6.1
-        version: 3.6.1(@axe-core/playwright@4.11.1(playwright-core@1.58.2))(@playwright/test@1.58.2)
+        specifier: 3.9.1
+        version: 3.9.1(@axe-core/playwright@4.11.1(playwright-core@1.58.2))(@playwright/test@1.58.2)
       '@grafana/tsconfig':
         specifier: 2.0.1
         version: 2.0.1
@@ -665,9 +665,9 @@ packages:
     resolution:
       { integrity: sha512-A83VWOosQXYTLzrsFk7e4KVAP050BKm0DALny9LKL5j8I8xjJJP7dDUbE85KGG+2Z4KN6AT0upo71Z+R6M3tCg== }
 
-  '@grafana/e2e-selectors@13.1.0-24448182242':
+  '@grafana/e2e-selectors@13.1.0-25644485979':
     resolution:
-      { integrity: sha512-C8VxaFh4PGWhPBOwol3Fo0UBp1//7XNnjg7WG+t3p0P8Q2cw5HZ2NgQt1OFq9radjmWEc3DJQZvxoelI4TIOJA== }
+      { integrity: sha512-2H+veZBayawey47iUTb5N69QK5KYHxzspe8uaauvLH7aSsjeyzH6nFubLkOVxz1JUOVtVrwOaH+libUwSaPMXw== }
 
   '@grafana/eslint-config@9.0.0':
     resolution:
@@ -697,9 +697,9 @@ packages:
     peerDependencies:
       react: '>=18'
 
-  '@grafana/plugin-e2e@3.6.1':
+  '@grafana/plugin-e2e@3.9.1':
     resolution:
-      { integrity: sha512-BQAEMk2yVymYA2cKbHEuGDqXwZ5MwWnCD+293QJgMey3G6ao4PbiZTaZ/c5BVyfWxLOZ3izqay0F7eU0Ncty9Q== }
+      { integrity: sha512-LqRDbTaIK/1IEJFEp+KPdqkLpLuvPgoaNiUCKEJscQIW6vH+eK2PKvaL7L+U7Lf4Xk6Gk85zTkivPge9/LBKaw== }
     engines: { node: '>=20 <=24' }
     peerDependencies:
       '@axe-core/playwright': ^4.11.1
@@ -6232,6 +6232,12 @@ packages:
     engines: { node: '>=14.17' }
     hasBin: true
 
+  typescript@6.0.2:
+    resolution:
+      { integrity: sha512-bGdAIrZ0wiGDo5l8c++HWtbaNCWTS4UTv7RaTH/ThVIgjkveJt83m74bBHMJkuCbslY8ixgLBVZJIOiQlQTjfQ== }
+    engines: { node: '>=14.17' }
+    hasBin: true
+
   ua-parser-js@1.0.41:
     resolution:
       { integrity: sha512-LbBDqdIC5s8iROCUjMbW1f5dJQTEFB1+KO9ogbvlb3nm9n4YHa5p4KTvFPWvh2Hs8gZMBuiB1/8+pdfe/tDPug== }
@@ -6308,11 +6314,6 @@ packages:
   uuid@11.1.0:
     resolution:
       { integrity: sha512-0/A9rDy9P7cJ+8w1c9WD9V//9Wj15Ce2MPz8Ri6032usz+NfePxx5AcN3bN+r6ZL6jEo066/yNYB3tn4pQEx+A== }
-    hasBin: true
-
-  uuid@13.0.0:
-    resolution:
-      { integrity: sha512-XQegIaBTVUjSHliKqcnFqYypAd4S+WCYt5NIeRs6w/UAry7z8Y9j5ZwRRL4kzq9U3sD6v+85er9FvkEaBpji2w== }
     hasBin: true
 
   uwrap@0.1.2:
@@ -7080,11 +7081,11 @@ snapshots:
       tslib: 2.8.1
       typescript: 5.9.2
 
-  '@grafana/e2e-selectors@13.1.0-24448182242':
+  '@grafana/e2e-selectors@13.1.0-25644485979':
     dependencies:
       semver: 7.7.4
       tslib: 2.8.1
-      typescript: 5.9.2
+      typescript: 6.0.2
 
   '@grafana/eslint-config@9.0.0(@stylistic/eslint-plugin-ts@4.4.1(eslint@9.39.2)(typescript@5.9.3))(@typescript-eslint/eslint-plugin@8.55.0(@typescript-eslint/parser@8.55.0(eslint@9.39.2)(typescript@5.9.3))(eslint@9.39.2)(typescript@5.9.3))(@typescript-eslint/parser@8.55.0(eslint@9.39.2)(typescript@5.9.3))(eslint-config-prettier@10.1.8(eslint@9.39.2))(eslint-plugin-jsdoc@62.5.4(eslint@9.39.2))(eslint-plugin-react-hooks@7.0.1(eslint@9.39.2))(eslint-plugin-react@7.37.5(eslint@9.39.2))(eslint@9.39.2)(typescript@5.9.3)':
     dependencies:
@@ -7127,21 +7128,19 @@ snapshots:
       - supports-color
       - typescript
 
-  '@grafana/plugin-e2e@3.6.1(@axe-core/playwright@4.11.1(playwright-core@1.58.2))(@playwright/test@1.58.2)':
+  '@grafana/plugin-e2e@3.9.1(@axe-core/playwright@4.11.1(playwright-core@1.58.2))(@playwright/test@1.58.2)':
     dependencies:
-      '@grafana/e2e-selectors': 13.1.0-24448182242
+      '@grafana/e2e-selectors': 13.1.0-25644485979
       '@playwright/test': 1.58.2
-      semver: 7.7.4
-      uuid: 13.0.0
       yaml: 2.8.3
     optionalDependencies:
       '@axe-core/playwright': 4.11.1(playwright-core@1.58.2)
 
-  '@grafana/plugin-ui@0.13.1(@grafana/data@12.3.3(eslint@9.39.2)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3))(@grafana/e2e-selectors@13.1.0-24448182242)(@grafana/runtime@12.3.3(@types/react@18.3.1)(eslint@9.39.2)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3))(@grafana/ui@12.3.3(@types/react@18.3.1)(eslint@9.39.2)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3))(@testing-library/jest-dom@6.9.1)(@testing-library/react@16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@18.3.1)(@types/react@18.3.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(@testing-library/user-event@14.6.1(@testing-library/dom@10.4.1))(@types/react-dom@18.3.1)(@types/react@18.3.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(rxjs@7.8.2)':
+  '@grafana/plugin-ui@0.13.1(@grafana/data@12.3.3(eslint@9.39.2)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3))(@grafana/e2e-selectors@13.1.0-25644485979)(@grafana/runtime@12.3.3(@types/react@18.3.1)(eslint@9.39.2)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3))(@grafana/ui@12.3.3(@types/react@18.3.1)(eslint@9.39.2)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3))(@testing-library/jest-dom@6.9.1)(@testing-library/react@16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@18.3.1)(@types/react@18.3.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(@testing-library/user-event@14.6.1(@testing-library/dom@10.4.1))(@types/react-dom@18.3.1)(@types/react@18.3.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(rxjs@7.8.2)':
     dependencies:
       '@emotion/css': 11.13.5
       '@grafana/data': 12.3.3(eslint@9.39.2)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3)
-      '@grafana/e2e-selectors': 13.1.0-24448182242
+      '@grafana/e2e-selectors': 13.1.0-25644485979
       '@grafana/runtime': 12.3.3(@types/react@18.3.1)(eslint@9.39.2)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3)
       '@grafana/ui': 12.3.3(@types/react@18.3.1)(eslint@9.39.2)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3)
       '@hello-pangea/dnd': 17.0.0(@types/react@18.3.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -12457,6 +12456,8 @@ snapshots:
 
   typescript@5.9.3: {}
 
+  typescript@6.0.2: {}
+
   ua-parser-js@1.0.41: {}
 
   uc.micro@2.1.0: {}
@@ -12527,8 +12528,6 @@ snapshots:
   util-deprecate@1.0.2: {}
 
   uuid@11.1.0: {}
-
-  uuid@13.0.0: {}
 
   uwrap@0.1.2: {}
 
