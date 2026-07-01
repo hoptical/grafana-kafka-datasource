@@ -3,7 +3,13 @@ import { Page, Locator } from '@playwright/test';
 import { ChildProcess, spawn } from 'child_process';
 import { accessSync, constants, readFileSync } from 'fs';
 import path from 'path';
-import { verifyPanelDataContains, verifyColumnHeadersVisible, setTableVisualization } from './test-utils';
+import {
+  verifyPanelDataContains,
+  verifyColumnHeadersVisible,
+  setTableVisualization,
+  openPartitionSelector,
+  selectAllPartitionsOption,
+} from './test-utils';
 
 interface ProtobufProducerOptions {
   topic: string;
@@ -180,20 +186,8 @@ test.describe.serial('Kafka Query Editor - Protobuf Tests', () => {
       await page.getByText('test-protobuf-schema-topic').click();
       await selectProtobufMessageFormat(page);
 
-      const partitionSelector = page
-        .locator('div')
-        .filter({ hasText: /^All partitions$/ })
-        .nth(2)
-        .or(page.locator('#query-editor-partition'));
-
-      await expect(partitionSelector.first()).toBeVisible({ timeout: 5000 });
-      await partitionSelector.first().click();
-
-      const allPartitionsOption = page
-        .getByLabel('Select options menu')
-        .getByText('All partitions')
-        .or(page.getByRole('option', { name: /^All partitions$/ }));
-      await allPartitionsOption.first().click();
+      await openPartitionSelector(page);
+      await selectAllPartitionsOption(page);
 
       await verifyColumnHeadersVisible(page);
       await verifyPanelDataContains(panelEditPage);
