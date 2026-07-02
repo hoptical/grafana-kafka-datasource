@@ -48,6 +48,9 @@ test.describe('Kafka Query Editor - Line Protocol Tests', () => {
     await expect(page.getByText('Timestamp Precision')).toBeVisible({ timeout: 5000 });
 
     // Switching precision should not throw — open the dropdown and pick Seconds.
+    // Grafana's <Select> renders the chosen value in a sibling <div>, not inside
+    // the combobox input, so the combobox hasText filter never matches. Fall back
+    // to the rendered value container, mirroring the Message Format selector above.
     const precisionSelector = page
       .getByText('Timestamp Precision')
       .locator('..')
@@ -57,6 +60,12 @@ test.describe('Kafka Query Editor - Line Protocol Tests', () => {
         page
           .getByRole('combobox')
           .filter({ hasText: /Auto-detect|Nanoseconds|Microseconds|Milliseconds|Seconds/ })
+          .first()
+      )
+      .or(
+        page
+          .locator('div')
+          .filter({ hasText: /^Auto-detect$/ })
           .first()
       );
     await expect(precisionSelector.first()).toBeVisible({ timeout: 5000 });
