@@ -207,6 +207,59 @@ func TestLineProtocolFilter_PlainEntryIsExactMatch(t *testing.T) {
 	}
 }
 
+// TestParseRegexpSet_InvalidRegexFallsBackToLiteralMatch is a regression test:
+// a filter entry that isn't a valid regex (e.g. "+N01", a real tag value from
+// testdata/lineprotocol/real_sample.txt) used to be silently dropped, which
+// left the axis unconstrained (matching everything) instead of filtering. It
+// must now fall back to an anchored literal exact-match instead.
+func TestParseRegexpSet_InvalidRegexFallsBackToLiteralMatch(t *testing.T) {
+	res := parseRegexpSet("+N01")
+	if len(res) != 1 {
+		t.Fatalf("want 1 compiled pattern (literal fallback), got %d", len(res))
+	}
+	if !res[0].MatchString("+N01") {
+		t.Errorf("literal fallback should match the raw string itself")
+	}
+	if res[0].MatchString("+N012") || res[0].MatchString("N01") {
+		t.Errorf("literal fallback must be an exact match, not a partial/substring match")
+	}
+}
+
+// TestParseTagPatterns_InvalidRegexFallsBackToLiteralMatch covers the same
+// fallback for the tag-filter axis (key=value pairs).
+func TestParseTagPatterns_InvalidRegexFallsBackToLiteralMatch(t *testing.T) {
+	patterns := parseTagPatterns("Site=+N01")
+	if len(patterns) != 1 {
+		t.Fatalf("want 1 tag pattern, got %d", len(patterns))
+	}
+	p := patterns[0]
+	if p.key != "Site" {
+		t.Errorf("key: want %q, got %q", "Site", p.key)
+	}
+	if !p.value.MatchString("+N01") {
+		t.Errorf("literal fallback should match the raw tag value exactly")
+	}
+	if p.value.MatchString("+N012") {
+		t.Errorf("literal fallback must be an exact match, not a prefix match")
+	}
+}
+
+// TestLineProtocolFilter_InvalidTagRegexStillFilters is an end-to-end
+// regression test for the real_sample.txt scenario: a Tag filter whose value
+// isn't a valid regex must still constrain the results (not silently match
+// everything).
+func TestLineProtocolFilter_InvalidTagRegexStillFilters(t *testing.T) {
+	frames := runFilterCase(t, &StreamConfig{
+		MessageFormat:                  "lineprotocol",
+		TimestampMode:                  "message",
+		LineProtocolTimestampPrecision: "s",
+		LineProtocolTags:               "Building=+NoSuchBuilding",
+	})
+	if len(frames) != 0 {
+		t.Errorf("invalid-regex tag filter with no matches should still filter everything out, got %d frames", len(frames))
+	}
+}
+
 // runFilterCase produces a frame from a fixed two-LP-line payload using the
 // given config. The payload has:
 //

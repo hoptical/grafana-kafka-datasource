@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Fix: address post-merge review findings on Line Protocol support (follow-up to [#146](https://github.com/hoptical/grafana-kafka-datasource/pull/146)):
+  - Fix a panic when a Line Protocol message ends in an unterminated quoted field value (e.g. `m f="`).
+  - Line Protocol measurement/field/tag filter entries that aren't valid regexes (e.g. a literal tag value like `+N01`) now fall back to an exact literal match instead of being silently dropped (which previously left the filter axis unconstrained).
+  - Tag keys that collide with a reserved column name (`Time`, `_measurement`, `_field`, `value`, `value_str`, `partition`, `offset`) are now renamed to `tag_<key>` so both columns remain readable.
+  - Line Protocol parse-error frames now share the same core schema (`Time`, `_measurement`, `_field`, `value`, `value_str`, tag columns, `offset`) as successfully parsed frames, plus an `error` column, so the Grafana Live channel schema no longer flips on a malformed message.
+  - The "Sent frames to Grafana" debug log no longer fires when every frame in a message failed to send.
+  - The per-stream Line Protocol tag-key set is now capped (reusing the existing flatten field cap) instead of growing unboundedly for the life of a stream.
+  - The compiled Line Protocol filter is now built once per stream and cached instead of being recompiled from regex on every message.
 - Feat: add InfluxDB Line Protocol support — streaming-friendly long-format frame (one row per LP field) with stable schema `Time | _measurement | _field | value | value_str | <one column per tag key> | partition? | offset`. The fixed schema lets Grafana Live append rows cleanly across messages, while `_measurement` / `_field` / tag columns let dashboards reproduce Influx-style per-series shape via the **Partition by values** transform. Per-query timestamp-precision selector (auto / ns / µs / ms / s).
 - Feat: per-query Line Protocol filters (measurement whitelist, field whitelist, tag `key=value` pairs). Non-matching lines/fields are dropped in the Go plugin after parsing and before frames are built, so high-cardinality topics narrow down to just the subset of data the panel needs.
 

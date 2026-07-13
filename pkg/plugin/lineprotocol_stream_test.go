@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -270,5 +271,82 @@ func TestProcessMessageFrames_FullRealPayload(t *testing.T) {
 	}
 	if !foundFirmware {
 		t.Errorf("expected to find 'Firmware revision' row")
+	}
+}
+
+// TestProcessMessageFrames_ErrorFrameSchemaCompatibleWithSuccessFrame is a
+// regression test: the line-protocol error frame used to have a completely
+// different schema (lowercase "time", no _measurement/_field/value/tag
+// columns) from the success-path frame. Both are sent on the same Grafana
+// Live channel, so a malformed message among valid ones used to flip the
+// channel's schema. The error frame must now share the same core columns
+// (name and type) as the success frame.
+func TestProcessMessageFrames_ErrorFrameSchemaCompatibleWithSuccessFrame(t *testing.T) {
+	sm := NewStreamManager(&mockStreamClient{}, 5, 1000)
+	cfg := &StreamConfig{MessageFormat: "lineprotocol", TimestampMode: "message", LineProtocolTimestampPrecision: "s"}
+
+	// A well-formed message first, establishing the 'host' tag-key schema.
+	good, err := sm.ProcessMessageFrames(
+		kafka_client.KafkaMessage{RawValue: []byte("m,host=h1 f=1 100\n"), Offset: 1, Timestamp: time.Now()},
+		0, []int32{0}, cfg, "topic",
+	)
+	if err != nil {
+		t.Fatalf("good message err: %v", err)
+	}
+
+	// Then a malformed message on the same stream.
+	bad, err := sm.ProcessMessageFrames(
+		kafka_client.KafkaMessage{RawValue: []byte("not line protocol #"), Offset: 2, Timestamp: time.Now()},
+		0, []int32{0}, cfg, "topic",
+	)
+	if err != nil {
+		t.Fatalf("bad message err: %v", err)
+	}
+	if len(bad) != 1 {
+		t.Fatalf("want 1 error frame, got %d", len(bad))
+	}
+
+	successFrame := good[0]
+	errorFrame := bad[0]
+
+	for _, want := range []string{"Time", "_measurement", "_field", "value", "value_str", "host", "offset"} {
+		sf := fieldByName(successFrame, want)
+		ef := fieldByName(errorFrame, want)
+		if sf == nil || ef == nil {
+			t.Fatalf("column %q missing from success frame (present=%v) or error frame (present=%v)", want, sf != nil, ef != nil)
+		}
+		if sf.Type() != ef.Type() {
+			t.Errorf("column %q type mismatch: success=%v error=%v", want, sf.Type(), ef.Type())
+		}
+	}
+	if fieldByName(errorFrame, "error") == nil {
+		t.Errorf("error frame should carry an 'error' column")
+	}
+}
+
+// TestProcessMessageFrames_TagKeyGrowthIsCapped is a regression test: the
+// stream-wide tag-key union used to grow unboundedly for the life of a
+// stream. It must now stop growing once flattenFieldCap distinct tag keys
+// have been seen.
+func TestProcessMessageFrames_TagKeyGrowthIsCapped(t *testing.T) {
+	const tagCap = 3
+	sm := NewStreamManager(&mockStreamClient{}, 5, tagCap)
+	cfg := &StreamConfig{MessageFormat: "lineprotocol", TimestampMode: "message", LineProtocolTimestampPrecision: "s"}
+
+	// Each message introduces a brand-new tag key so the union would grow
+	// unboundedly without a cap.
+	for i := 0; i < tagCap+5; i++ {
+		raw := []byte(fmt.Sprintf("m,tag%d=v f=1 100\n", i))
+		_, err := sm.ProcessMessageFrames(
+			kafka_client.KafkaMessage{RawValue: raw, Offset: int64(i), Timestamp: time.Now()},
+			0, []int32{0}, cfg, "topic",
+		)
+		if err != nil {
+			t.Fatalf("message %d err: %v", i, err)
+		}
+	}
+
+	if got := len(sm.lpTagKeyOrder); got != tagCap {
+		t.Errorf("tag-key union should be capped at %d, got %d", tagCap, got)
 	}
 }

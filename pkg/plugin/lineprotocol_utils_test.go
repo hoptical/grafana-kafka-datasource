@@ -8,6 +8,34 @@ import (
 	"testing"
 )
 
+// TestClassifyFieldValue_UnterminatedQuoteDoesNotPanic is a regression test: a
+// field value that is a lone, unterminated quote at end-of-line (e.g. the
+// message `m f="`) used to panic with a slice-bounds-out-of-range error
+// instead of returning a parse error.
+func TestClassifyFieldValue_UnterminatedQuoteDoesNotPanic(t *testing.T) {
+	v, err := classifyFieldValue(`"`)
+	if err == nil {
+		t.Fatalf("want an error for an unterminated quoted value, got value=%v", v)
+	}
+}
+
+// TestParseLines_UnterminatedQuoteDoesNotPanic exercises the same case through
+// the full ParseLines entry point used by the streaming path.
+func TestParseLines_UnterminatedQuoteDoesNotPanic(t *testing.T) {
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("ParseLines panicked: %v", r)
+		}
+	}()
+	got, errs := ParseLines([]byte(`m f="`))
+	if len(got) != 0 {
+		t.Errorf("want 0 parsed lines for a malformed message, got %d", len(got))
+	}
+	if len(errs) == 0 {
+		t.Errorf("want a parse error for an unterminated quoted field value")
+	}
+}
+
 // TestParseLines_BasicSingleLine covers the simplest valid line.
 func TestParseLines_BasicSingleLine(t *testing.T) {
 	in := []byte(`weather,location=us field=82 1465839830100400200`)
@@ -213,20 +241,20 @@ func TestParseLines_RealPayload(t *testing.T) {
 	}
 	// All lines should share these tags.
 	wantTags := map[string]string{
-		"Building":          "DCM102",
-		"Dashboard":         "HiBreaker",
-		"Description":       "White space busbar",
-		"Device_tag":        "-XQ202",
-		"Equipment-tag":     "N01_DCM102_462_100_XQ202-id3-1",
-		"Floor":             "1",
-		"Full_tag":          "+N01_DCM102_=462.100_-XQ202",
+		"Building":           "DCM102",
+		"Dashboard":          "HiBreaker",
+		"Description":        "White space busbar",
+		"Device_tag":         "-XQ202",
+		"Equipment-tag":      "N01_DCM102_462_100_XQ202-id3-1",
+		"Floor":              "1",
+		"Full_tag":           "+N01_DCM102_=462.100_-XQ202",
 		"Gapit-product-code": "02/gapit-02-03-std.json",
-		"Module":            "207103",
-		"POD":               "X",
-		"POD_nr":            "POD207103",
-		"Site":              "+N01",
-		"System":            "=462.100",
-		"uid":               "ada72705-d21d-4dd0-aeac-459d47e88365",
+		"Module":             "207103",
+		"POD":                "X",
+		"POD_nr":             "POD207103",
+		"Site":               "+N01",
+		"System":             "=462.100",
+		"uid":                "ada72705-d21d-4dd0-aeac-459d47e88365",
 	}
 	gotTags := tagsToMap(first.Tags)
 	if !reflect.DeepEqual(gotTags, wantTags) {

@@ -266,3 +266,58 @@ func TestBuildLineProtocolFrames_AutoPrecisionDetect(t *testing.T) {
 		})
 	}
 }
+
+// TestBuildLineProtocolFrames_TagKeyCollisionWithReservedColumn is a
+// regression test: a tag key that collides with a reserved column name (e.g.
+// "value") used to overwrite/shadow that column since data.Frame.FieldByName
+// only returns the first match. The colliding tag must now be renamed to
+// "tag_<key>" so both columns remain independently readable.
+func TestBuildLineProtocolFrames_TagKeyCollisionWithReservedColumn(t *testing.T) {
+	parsed := []ParsedLine{{
+		Measurement:  "m",
+		Tags:         []TagKV{{"value", "abc"}},
+		Fields:       []FieldKV{{"f", float64(1)}},
+		Timestamp:    100,
+		HasTimestamp: true,
+	}}
+	cfg := &StreamConfig{MessageFormat: "lineprotocol", TimestampMode: "message", LineProtocolTimestampPrecision: "s"}
+
+	frames := buildFrames(t, kafka_client.KafkaMessage{}, parsed, 0, []int32{0}, cfg)
+	f := frames[0]
+
+	reservedValue := fieldByName(f, "value")
+	if reservedValue == nil {
+		t.Fatalf("missing reserved 'value' numeric column")
+	}
+	if got := floatPtrAt(reservedValue, 0); got == nil || *got != 1 {
+		t.Errorf("reserved 'value' column should hold the numeric field value, got %v", reservedValue.At(0))
+	}
+
+	tagValue := fieldByName(f, "tag_value")
+	if tagValue == nil {
+		t.Fatalf("expected colliding tag key 'value' to be renamed to 'tag_value'")
+	}
+	if got := strPtrAt(tagValue, 0); got == nil || *got != "abc" {
+		t.Errorf("tag_value column: want %q, got %v", "abc", tagValue.At(0))
+	}
+}
+
+// TestGetLineProtocolFilter_CachedAcrossCalls is a regression test: the
+// compiled filter used to be rebuilt from scratch (with fresh regexp.Compile
+// calls) on every message. It must now be built once per stream and reused.
+func TestGetLineProtocolFilter_CachedAcrossCalls(t *testing.T) {
+	sm := NewStreamManager(&mockStreamClient{}, 5, 1000)
+	cfg := &StreamConfig{
+		MessageFormat:            "lineprotocol",
+		LineProtocolMeasurements: "Breaker Data",
+	}
+
+	first := sm.getLineProtocolFilter(cfg)
+	second := sm.getLineProtocolFilter(cfg)
+	if first == nil {
+		t.Fatalf("expected a non-nil filter given a non-empty measurement filter")
+	}
+	if first != second {
+		t.Errorf("expected the cached filter pointer to be reused across calls, got different instances")
+	}
+}

@@ -241,8 +241,14 @@ func classifyFieldValue(raw string) (interface{}, error) {
 		return nil, fmt.Errorf("empty value")
 	}
 	// Quoted string: readFieldValue keeps surrounding quotes to mark the type.
-	if raw[0] == '"' && raw[len(raw)-1] == '"' {
+	// Guard against a lone `"` (len 1): an unterminated quoted value at
+	// end-of-line would otherwise make raw[1:len(raw)-1] slice with low > high
+	// and panic.
+	if len(raw) >= 2 && raw[0] == '"' && raw[len(raw)-1] == '"' {
 		return raw[1 : len(raw)-1], nil
+	}
+	if raw == `"` {
+		return nil, fmt.Errorf("unterminated quoted string %q", raw)
 	}
 	// Integer suffix.
 	if last := raw[len(raw)-1]; last == 'i' {

@@ -32,10 +32,7 @@ func (sm *StreamManager) ProcessMessageFrames(
 ) ([]*data.Frame, error) {
 	if config != nil && config.MessageFormat == "lineprotocol" {
 		if msg.Error != nil {
-			errFrame, err := createErrorFrame(msg, partition, partitions, msg.Error, config, topic)
-			if err != nil {
-				return nil, err
-			}
+			errFrame := sm.createLineProtocolErrorFrame(msg, partition, partitions, msg.Error, config, topic)
 			return []*data.Frame{errFrame}, nil
 		}
 		if len(msg.RawValue) == 0 {
@@ -53,10 +50,7 @@ func (sm *StreamManager) ProcessMessageFrames(
 			if len(parseErrs) > 0 {
 				cause = parseErrs[0]
 			}
-			errFrame, err := createErrorFrame(msg, partition, partitions, cause, config, topic)
-			if err != nil {
-				return nil, err
-			}
+			errFrame := sm.createLineProtocolErrorFrame(msg, partition, partitions, cause, config, topic)
 			return []*data.Frame{errFrame}, nil
 		}
 		return sm.buildLineProtocolFrames(msg, lines, partition, partitions, config, topic), nil
@@ -95,7 +89,7 @@ func (sm *StreamManager) buildLineProtocolFrames(
 	config *StreamConfig,
 	topic string,
 ) []*data.Frame {
-	filter := buildLineProtocolFilter(config)
+	filter := sm.getLineProtocolFilter(config)
 	if filter != nil {
 		lines = applyLineProtocolFilter(lines, filter)
 	}
@@ -179,7 +173,7 @@ func (sm *StreamManager) buildLineProtocolFrames(
 		data.NewField("value_str", nil, valueStrs),
 	)
 	for _, k := range tagKeys {
-		frame.Fields = append(frame.Fields, data.NewField(k, nil, tagCols[k]))
+		frame.Fields = append(frame.Fields, data.NewField(lpColumnName(k), nil, tagCols[k]))
 	}
 	if multiPartition {
 		frame.Fields = append(frame.Fields, data.NewField("partition", nil, partitions32))
@@ -187,6 +181,87 @@ func (sm *StreamManager) buildLineProtocolFrames(
 	frame.Fields = append(frame.Fields, data.NewField("offset", nil, offsets))
 
 	return []*data.Frame{frame}
+}
+
+// lpReservedColumns are the fixed, non-tag column names in a line-protocol
+// frame. A tag key that collides with one of these would otherwise produce
+// two same-named fields; data.Frame.FieldByName only returns the first,
+// silently making the tag's value unreachable to downstream consumers.
+var lpReservedColumns = map[string]struct{}{
+	"Time": {}, "_measurement": {}, "_field": {}, "value": {}, "value_str": {},
+	"partition": {}, "offset": {},
+}
+
+// lpColumnName maps a raw line-protocol tag key to its frame column name,
+// prefixing it with "tag_" when the raw key collides with one of the fixed
+// column names in lpReservedColumns.
+func lpColumnName(tagKey string) string {
+	if _, reserved := lpReservedColumns[tagKey]; reserved {
+		return "tag_" + tagKey
+	}
+	return tagKey
+}
+
+// getLineProtocolFilter returns the compiled line-protocol filter for this
+// stream, building it once from config and caching it thereafter. config is
+// immutable for the life of a stream (built once in RunStream), and
+// ProcessMessageFrames is only ever invoked from the single sequential
+// message-processing loop per stream, so no locking is required here—unlike
+// schemaCache, which multiple partition-reader goroutines can touch.
+func (sm *StreamManager) getLineProtocolFilter(config *StreamConfig) *lineProtocolFilter {
+	if !sm.lpFilterBuilt {
+		sm.lpFilter = buildLineProtocolFilter(config)
+		sm.lpFilterBuilt = true
+	}
+	return sm.lpFilter
+}
+
+// createLineProtocolErrorFrame builds a single-row error frame that shares the
+// same core schema as buildLineProtocolFrames (Time, _measurement, _field,
+// value, value_str, one column per tag key already known to this stream,
+// partition?, offset) plus an additional `error` string column. Keeping the
+// core schema compatible with the success-path frame avoids flipping Grafana
+// Live's channel schema between a malformed message and its well-formed
+// neighbors, which previously could reset or break the streaming panel.
+func (sm *StreamManager) createLineProtocolErrorFrame(
+	msg kafka_client.KafkaMessage,
+	partition int32,
+	partitions []int32,
+	cause error,
+	config *StreamConfig,
+	topic string,
+) *data.Frame {
+	multiPartition := len(partitions) > 1
+
+	frame := data.NewFrame("lineprotocol")
+	if config != nil {
+		if config.RefID != "" {
+			frame.RefID = config.RefID
+		}
+		if config.Alias != "" {
+			frame.Name = formatAlias(config.Alias, config, topic, partition, "")
+		}
+	}
+
+	frame.Fields = append(frame.Fields,
+		data.NewField("Time", nil, []time.Time{msg.Timestamp}),
+		data.NewField("_measurement", nil, []string{""}),
+		data.NewField("_field", nil, []string{""}),
+		data.NewField("value", nil, []*float64{nil}),
+		data.NewField("value_str", nil, []*string{nil}),
+	)
+	for _, k := range sm.lpTagKeyOrder {
+		frame.Fields = append(frame.Fields, data.NewField(lpColumnName(k), nil, []*string{nil}))
+	}
+	if multiPartition {
+		frame.Fields = append(frame.Fields, data.NewField("partition", nil, []int32{partition}))
+	}
+	frame.Fields = append(frame.Fields,
+		data.NewField("offset", nil, []int64{msg.Offset}),
+		data.NewField("error", nil, []string{cause.Error()}),
+	)
+
+	return frame
 }
 
 // mergeLPTagKeys folds the tag keys from the current message's lines into the
@@ -201,10 +276,23 @@ func (sm *StreamManager) buildLineProtocolFrames(
 func (sm *StreamManager) mergeLPTagKeys(lines []ParsedLine) []string {
 	for _, l := range lines {
 		for _, t := range l.Tags {
-			if _, ok := sm.lpTagKeys[t.Key]; !ok {
-				sm.lpTagKeys[t.Key] = struct{}{}
-				sm.lpTagKeyOrder = append(sm.lpTagKeyOrder, t.Key)
+			if _, ok := sm.lpTagKeys[t.Key]; ok {
+				continue
 			}
+			// Cap the tag-key union the same way flattenFieldCap bounds JSON
+			// flattening, so a high-cardinality/drifting-tag topic can't grow the
+			// frame schema (and StreamManager's memory) unboundedly for the life
+			// of a stream subscription.
+			if sm.flattenFieldCap > 0 && len(sm.lpTagKeyOrder) >= sm.flattenFieldCap {
+				if !sm.lpTagCapWarned {
+					log.DefaultLogger.Warn("lineprotocol tag-key cap reached; further tag keys will be dropped from the frame schema",
+						"cap", sm.flattenFieldCap)
+					sm.lpTagCapWarned = true
+				}
+				continue
+			}
+			sm.lpTagKeys[t.Key] = struct{}{}
+			sm.lpTagKeyOrder = append(sm.lpTagKeyOrder, t.Key)
 		}
 	}
 	keys := make([]string, len(sm.lpTagKeyOrder))

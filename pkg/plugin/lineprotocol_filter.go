@@ -3,6 +3,8 @@ package plugin
 import (
 	"regexp"
 	"strings"
+
+	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 )
 
 type tagPattern struct {
@@ -116,9 +118,30 @@ func compileAnchored(pat string) (*regexp.Regexp, error) {
 	return regexp.Compile("^(?:" + pat + ")$")
 }
 
+// compileAnchoredOrLiteral compiles pat as an anchored regex. If pat isn't a
+// valid regex (e.g. "+N01", a literal tag value that happens to be an invalid
+// regex fragment), it falls back to an anchored literal exact-match via
+// regexp.QuoteMeta instead of silently dropping the entry — otherwise an axis
+// with zero surviving patterns matches everything, defeating the filter. A
+// warning is logged once per invalid pattern so operators can tell a raw
+// string was matched literally rather than as a regex.
+func compileAnchoredOrLiteral(pat string) *regexp.Regexp {
+	re, err := compileAnchored(pat)
+	if err == nil {
+		return re
+	}
+	log.DefaultLogger.Warn("lineprotocol filter pattern is not a valid regex; matching literally",
+		"pattern", pat,
+		"error", err)
+	// QuoteMeta escapes all regex metacharacters, so this compile cannot fail.
+	literal, _ := compileAnchored(regexp.QuoteMeta(pat))
+	return literal
+}
+
 // parseRegexpSet splits a comma-separated string into compiled regex patterns.
-// Each pattern is anchored, so plain entries become exact matches. Invalid
-// patterns are silently skipped. Returns nil when nothing useful remains.
+// Each pattern is anchored, so plain entries become exact matches. Patterns
+// that aren't valid regexes fall back to an anchored literal match (see
+// compileAnchoredOrLiteral). Returns nil when nothing useful remains.
 func parseRegexpSet(s string) []*regexp.Regexp {
 	if strings.TrimSpace(s) == "" {
 		return nil
@@ -129,17 +152,14 @@ func parseRegexpSet(s string) []*regexp.Regexp {
 		if p == "" {
 			continue
 		}
-		re, err := compileAnchored(p)
-		if err != nil {
-			continue
-		}
-		out = append(out, re)
+		out = append(out, compileAnchoredOrLiteral(p))
 	}
 	return out
 }
 
 // parseTagPatterns splits a comma-separated string of `key=value` pairs where
-// the value is treated as a regex pattern. Invalid patterns are silently skipped.
+// the value is treated as a regex pattern (falling back to a literal exact
+// match when it isn't a valid regex; see compileAnchoredOrLiteral).
 // Entries with a blank value (e.g. an interpolated-away `Building=`) are ignored
 // rather than compiled into `^(?:)$`, which would otherwise require the tag to be
 // empty and filter out every row.
@@ -158,11 +178,7 @@ func parseTagPatterns(s string) []tagPattern {
 		if k == "" || v == "" {
 			continue
 		}
-		re, err := compileAnchored(v)
-		if err != nil {
-			continue
-		}
-		out = append(out, tagPattern{key: k, value: re})
+		out = append(out, tagPattern{key: k, value: compileAnchoredOrLiteral(v)})
 	}
 	return out
 }
