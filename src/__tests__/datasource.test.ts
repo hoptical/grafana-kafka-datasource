@@ -1,5 +1,5 @@
 import { of } from 'rxjs';
-import { DataSource } from '../datasource';
+import { DataSource, PAGE_LOAD_SESSION } from '../datasource';
 import {
   AutoOffsetReset,
   TimestampMode,
@@ -7,6 +7,7 @@ import {
   AvroSchemaSource,
   ProtobufSchemaSource,
   KeyFormat,
+  LineProtocolTimestampPrecision,
   type KafkaQuery,
 } from '../types';
 
@@ -88,6 +89,7 @@ describe('DataSource', () => {
         messageFormat: MessageFormat.JSON,
         avroSchemaSource: AvroSchemaSource.SCHEMA_REGISTRY,
         protobufSchemaSource: ProtobufSchemaSource.SCHEMA_REGISTRY,
+        lineProtocolTimestampPrecision: LineProtocolTimestampPrecision.AUTO,
         keyFormat: KeyFormat.NONE,
       });
     });
@@ -248,6 +250,76 @@ describe('DataSource', () => {
   });
 
   describe('query', () => {
+    it('incorporates Line Protocol filters into the stream path hash', (done) => {
+      const base: KafkaQuery = {
+        refId: 'A',
+        topicName: 'lp',
+        partition: 0,
+        autoOffsetReset: AutoOffsetReset.LATEST,
+        timestampMode: TimestampMode.Now,
+        messageFormat: MessageFormat.LINEPROTOCOL,
+      } as any;
+
+      capturedPath = undefined;
+      ds.query({ targets: [base] } as any).subscribe({
+        complete: () => {
+          try {
+            const emptyPath = capturedPath;
+            // Empty filters hash to the default '0-0-0' segment after 'auto'.
+            expect(emptyPath).toContain('-auto-0-0-0-');
+
+            capturedPath = undefined;
+            const filtered: KafkaQuery = {
+              ...base,
+              lineProtocolMeasurements: 'Breaker Data',
+              lineProtocolFields: 'PT Primary',
+              lineProtocolTags: 'Building=DCM102',
+            } as any;
+            ds.query({ targets: [filtered] } as any).subscribe({
+              complete: () => {
+                try {
+                  // Non-empty filters must change the hashed segments, so the
+                  // path differs and no longer carries the default '0-0-0'.
+                  expect(capturedPath).not.toBe(emptyPath);
+                  expect(capturedPath).not.toContain('-auto-0-0-0-');
+
+                  // Each axis must contribute to the hash independently. Flip
+                  // one filter at a time: if any single axis were omitted from
+                  // the path hash, that case would still equal the empty path
+                  // (or keep the default '-auto-0-0-0-' segment) and fail here.
+                  // getDataStream runs synchronously while query() builds the
+                  // observable, so capturedPath is set by the time it returns.
+                  const pathFor = (overrides: Partial<KafkaQuery>): string | undefined => {
+                    capturedPath = undefined;
+                    ds.query({ targets: [{ ...base, ...overrides }] } as any).subscribe();
+                    return capturedPath;
+                  };
+
+                  const measurementOnly = pathFor({ lineProtocolMeasurements: 'Breaker Data' });
+                  expect(measurementOnly).not.toBe(emptyPath);
+                  expect(measurementOnly).not.toContain('-auto-0-0-0-');
+
+                  const fieldOnly = pathFor({ lineProtocolFields: 'PT Primary' });
+                  expect(fieldOnly).not.toBe(emptyPath);
+                  expect(fieldOnly).not.toContain('-auto-0-0-0-');
+
+                  const tagOnly = pathFor({ lineProtocolTags: 'Building=DCM102' });
+                  expect(tagOnly).not.toBe(emptyPath);
+                  expect(tagOnly).not.toContain('-auto-0-0-0-');
+
+                  done();
+                } catch (e) {
+                  done(e as any);
+                }
+              },
+            });
+          } catch (e) {
+            done(e as any);
+          }
+        },
+      });
+    });
+
     it('builds a clean path without dangling dash and includes lastN only for LAST_N', (done) => {
       const target: KafkaQuery = {
         refId: 'A',
@@ -266,7 +338,7 @@ describe('DataSource', () => {
         complete: () => {
           try {
             expect(capturedPath).toBe(
-              'my%20topic-0-latest-json-schemaRegistry-schemaRegistry-none-now-none-none-A-no-alias'
+              'my%20topic-0-latest-json-schemaRegistry-schemaRegistry-none-now-auto-0-0-0-none-none-A-no-alias'
             );
             // Now with LAST_N
             capturedPath = undefined;
@@ -280,7 +352,7 @@ describe('DataSource', () => {
               complete: () => {
                 try {
                   expect(capturedPath).toBe(
-                    'my%20topic-0-lastN-json-schemaRegistry-schemaRegistry-none-now-none-none-10-A-no-alias'
+                    `my%20topic-0-lastN-json-schemaRegistry-schemaRegistry-none-now-auto-0-0-0-none-none-10-${PAGE_LOAD_SESSION}-A-no-alias`
                   );
                   done();
                 } catch (e) {
@@ -306,7 +378,7 @@ describe('DataSource', () => {
         complete: () => {
           // Only one valid query should have been processed
           expect(capturedPath).toBe(
-            'valid-topic-all-latest-json-schemaRegistry-schemaRegistry-none-message-none-none-B-no-alias'
+            'valid-topic-all-latest-json-schemaRegistry-schemaRegistry-none-message-auto-0-0-0-none-none-B-no-alias'
           );
           done();
         },
@@ -337,7 +409,7 @@ describe('DataSource', () => {
       ds.query({ targets: [target] } as any).subscribe({
         complete: () => {
           expect(capturedPath).toBe(
-            'topic%2Fwith-special%3Achars-all-earliest-json-schemaRegistry-schemaRegistry-none-now-none-none-A-no-alias'
+            'topic%2Fwith-special%3Achars-all-earliest-json-schemaRegistry-schemaRegistry-none-now-auto-0-0-0-none-none-A-no-alias'
           );
           done();
         },
@@ -357,7 +429,7 @@ describe('DataSource', () => {
       ds.query({ targets: [target] } as any).subscribe({
         complete: () => {
           expect(capturedPath).toBe(
-            'nmea-topic-all-latest-plaintext-schemaRegistry-schemaRegistry-none-message-none-none-A-no-alias'
+            'nmea-topic-all-latest-plaintext-schemaRegistry-schemaRegistry-none-message-auto-0-0-0-none-none-A-no-alias'
           );
           done();
         },
@@ -381,7 +453,7 @@ describe('DataSource', () => {
           // We don't know the exact hash, but we can match the pattern
           // Path: topic-partition-offset-format-schema-keyformat-timestamp-lastN-refId-Slug-Hash
           expect(capturedPath).toMatch(
-            /^my-topic-0-latest-json-schemaRegistry-schemaRegistry-none-now-none-none-A-MyAlias-[a-z0-9]+$/
+            /^my-topic-0-latest-json-schemaRegistry-schemaRegistry-none-now-auto-0-0-0-none-none-A-MyAlias-[a-z0-9]+$/
           );
           done();
         },
