@@ -195,6 +195,7 @@ func readFieldValue(b []byte, pos int) (raw string, term byte, end int, err erro
 	}
 	if b[pos] == '"' {
 		var sb strings.Builder
+		closed := false
 		// Mark this as a string field by re-prepending '"' so the classifier
 		// can distinguish "1" (string) from 1 (number).
 		sb.WriteByte('"')
@@ -214,12 +215,16 @@ func readFieldValue(b []byte, pos int) (raw string, term byte, end int, err erro
 			}
 			if c == '"' {
 				sb.WriteByte('"')
+				closed = true
 				i++
 				break
 			}
 			sb.WriteByte(c)
 		}
 		// After the closing quote, expect ',', ' ', or EOL.
+		if !closed {
+			return "", 0, i, fmt.Errorf("unterminated quoted string")
+		}
 		if i >= len(b) {
 			return sb.String(), 0, i, nil
 		}

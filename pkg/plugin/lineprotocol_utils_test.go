@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -33,6 +34,16 @@ func TestParseLines_UnterminatedQuoteDoesNotPanic(t *testing.T) {
 	}
 	if len(errs) == 0 {
 		t.Errorf("want a parse error for an unterminated quoted field value")
+	}
+}
+
+func TestParseLines_UnterminatedQuotedContentReportsClearError(t *testing.T) {
+	_, errs := ParseLines([]byte(`m f="abc`))
+	if len(errs) == 0 {
+		t.Fatalf("want parse error for unterminated quoted content")
+	}
+	if !strings.Contains(errs[0].Error(), "unterminated quoted string") {
+		t.Fatalf("want unterminated quoted string error, got %q", errs[0].Error())
 	}
 }
 

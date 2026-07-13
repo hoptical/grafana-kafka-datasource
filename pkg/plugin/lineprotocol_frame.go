@@ -172,8 +172,9 @@ func (sm *StreamManager) buildLineProtocolFrames(
 		data.NewField("value", nil, values),
 		data.NewField("value_str", nil, valueStrs),
 	)
+	tagColumns := lpTagColumnNames(tagKeys)
 	for _, k := range tagKeys {
-		frame.Fields = append(frame.Fields, data.NewField(lpColumnName(k), nil, tagCols[k]))
+		frame.Fields = append(frame.Fields, data.NewField(tagColumns[k], nil, tagCols[k]))
 	}
 	if multiPartition {
 		frame.Fields = append(frame.Fields, data.NewField("partition", nil, partitions32))
@@ -189,17 +190,31 @@ func (sm *StreamManager) buildLineProtocolFrames(
 // silently making the tag's value unreachable to downstream consumers.
 var lpReservedColumns = map[string]struct{}{
 	"Time": {}, "_measurement": {}, "_field": {}, "value": {}, "value_str": {},
-	"partition": {}, "offset": {},
+	"partition": {}, "offset": {}, "error": {},
 }
 
-// lpColumnName maps a raw line-protocol tag key to its frame column name,
-// prefixing it with "tag_" when the raw key collides with one of the fixed
-// column names in lpReservedColumns.
-func lpColumnName(tagKey string) string {
-	if _, reserved := lpReservedColumns[tagKey]; reserved {
-		return "tag_" + tagKey
+// lpTagColumnNames maps raw line-protocol tag keys to unique frame column
+// names. It reserves fixed columns (including "error"), then for each tag key
+// prefixes with "tag_" until the name is unused. This prevents collisions like
+// "value" -> "tag_value" versus a raw "tag_value" key.
+func lpTagColumnNames(tagKeys []string) map[string]string {
+	used := make(map[string]struct{}, len(lpReservedColumns)+len(tagKeys))
+	for k := range lpReservedColumns {
+		used[k] = struct{}{}
 	}
-	return tagKey
+	out := make(map[string]string, len(tagKeys))
+	for _, raw := range tagKeys {
+		name := raw
+		for {
+			if _, exists := used[name]; !exists {
+				break
+			}
+			name = "tag_" + name
+		}
+		out[raw] = name
+		used[name] = struct{}{}
+	}
+	return out
 }
 
 // getLineProtocolFilter returns the compiled line-protocol filter for this
@@ -250,8 +265,9 @@ func (sm *StreamManager) createLineProtocolErrorFrame(
 		data.NewField("value", nil, []*float64{nil}),
 		data.NewField("value_str", nil, []*string{nil}),
 	)
+	tagColumns := lpTagColumnNames(sm.lpTagKeyOrder)
 	for _, k := range sm.lpTagKeyOrder {
-		frame.Fields = append(frame.Fields, data.NewField(lpColumnName(k), nil, []*string{nil}))
+		frame.Fields = append(frame.Fields, data.NewField(tagColumns[k], nil, []*string{nil}))
 	}
 	if multiPartition {
 		frame.Fields = append(frame.Fields, data.NewField("partition", nil, []int32{partition}))

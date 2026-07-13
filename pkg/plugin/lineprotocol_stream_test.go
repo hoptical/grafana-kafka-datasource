@@ -324,6 +324,47 @@ func TestProcessMessageFrames_ErrorFrameSchemaCompatibleWithSuccessFrame(t *test
 	}
 }
 
+func TestProcessMessageFrames_ErrorFrameKeepsErrorTagDistinct(t *testing.T) {
+	sm := NewStreamManager(&mockStreamClient{}, 5, 1000)
+	cfg := &StreamConfig{MessageFormat: "lineprotocol", TimestampMode: "message", LineProtocolTimestampPrecision: "s"}
+
+	_, err := sm.ProcessMessageFrames(
+		kafka_client.KafkaMessage{RawValue: []byte("m,error=tagval f=1 100\n"), Offset: 1, Timestamp: time.Now()},
+		0, []int32{0}, cfg, "topic",
+	)
+	if err != nil {
+		t.Fatalf("good message err: %v", err)
+	}
+
+	bad, err := sm.ProcessMessageFrames(
+		kafka_client.KafkaMessage{RawValue: []byte("not line protocol #"), Offset: 2, Timestamp: time.Now()},
+		0, []int32{0}, cfg, "topic",
+	)
+	if err != nil {
+		t.Fatalf("bad message err: %v", err)
+	}
+	if len(bad) != 1 {
+		t.Fatalf("want 1 error frame, got %d", len(bad))
+	}
+
+	errorFrame := bad[0]
+	if fieldByName(errorFrame, "tag_error") == nil {
+		t.Fatalf("expected tag key 'error' to map to 'tag_error' column")
+	}
+	if fieldByName(errorFrame, "error") == nil {
+		t.Fatalf("expected dedicated error column")
+	}
+
+	seen := map[string]struct{}{}
+	for _, f := range errorFrame.Fields {
+		name := f.Name
+		if _, dup := seen[name]; dup {
+			t.Fatalf("duplicate field name in error frame: %q", name)
+		}
+		seen[name] = struct{}{}
+	}
+}
+
 // TestProcessMessageFrames_TagKeyGrowthIsCapped is a regression test: the
 // stream-wide tag-key union used to grow unboundedly for the life of a
 // stream. It must now stop growing once flattenFieldCap distinct tag keys

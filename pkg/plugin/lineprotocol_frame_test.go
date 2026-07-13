@@ -302,6 +302,19 @@ func TestBuildLineProtocolFrames_TagKeyCollisionWithReservedColumn(t *testing.T)
 	}
 }
 
+func TestLPTagColumnNames_AvoidsGeneratedNameCollisions(t *testing.T) {
+	names := lpTagColumnNames([]string{"value", "tag_value", "error"})
+	if got := names["value"]; got != "tag_value" {
+		t.Fatalf("value key: want %q, got %q", "tag_value", got)
+	}
+	if got := names["tag_value"]; got != "tag_tag_value" {
+		t.Fatalf("tag_value key: want %q, got %q", "tag_tag_value", got)
+	}
+	if got := names["error"]; got != "tag_error" {
+		t.Fatalf("error key: want %q, got %q", "tag_error", got)
+	}
+}
+
 // TestGetLineProtocolFilter_CachedAcrossCalls is a regression test: the
 // compiled filter used to be rebuilt from scratch (with fresh regexp.Compile
 // calls) on every message. It must now be built once per stream and reused.
