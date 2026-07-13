@@ -657,17 +657,17 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 
 	// Create new stream configuration
 	streamConfig := &StreamConfig{
-		MessageFormat:        qm.MessageFormat,
-		AvroSchemaSource:     qm.AvroSchemaSource,
-		AvroSchema:           qm.AvroSchema,
-		ProtobufSchemaSource: qm.ProtobufSchemaSource,
-		ProtobufSchema:       qm.ProtobufSchema,
-		AutoOffsetReset:      qm.AutoOffsetReset,
-		TimestampMode:        qm.TimestampMode,
-		LastN:                qm.LastN, // Added LastN to stream config
-		KeyFormat:            qm.KeyFormat,
-		RefID:                qm.RefID,
-		Alias:                qm.Alias,
+		MessageFormat:                  qm.MessageFormat,
+		AvroSchemaSource:               qm.AvroSchemaSource,
+		AvroSchema:                     qm.AvroSchema,
+		ProtobufSchemaSource:           qm.ProtobufSchemaSource,
+		ProtobufSchema:                 qm.ProtobufSchema,
+		AutoOffsetReset:                qm.AutoOffsetReset,
+		TimestampMode:                  qm.TimestampMode,
+		LastN:                          qm.LastN, // Added LastN to stream config
+		KeyFormat:                      qm.KeyFormat,
+		RefID:                          qm.RefID,
+		Alias:                          qm.Alias,
 		LineProtocolTimestampPrecision: qm.LineProtocolTimestampPrecision,
 		LineProtocolMeasurements:       qm.LineProtocolMeasurements,
 		LineProtocolFields:             qm.LineProtocolFields,
@@ -751,6 +751,7 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 				continue
 			}
 
+			sentCount := 0
 			for frameIdx, frame := range frames {
 				err = sender.SendFrame(frame, data.IncludeAll)
 				if err != nil {
@@ -761,13 +762,21 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 						"error", err)
 					continue
 				}
+				sentCount++
 			}
 
-			log.DefaultLogger.Debug("Sent frames to Grafana",
-				"messageNumber", messageCount,
-				"partition", msgWithPartition.partition,
-				"offset", msgWithPartition.msg.Offset,
-				"frameCount", len(frames))
+			// Only log success when at least one frame actually made it to Grafana;
+			// otherwise every SendFrame failure was already logged above as an
+			// error, and an unconditional success log here would mask a total
+			// send failure for this message.
+			if sentCount > 0 {
+				log.DefaultLogger.Debug("Sent frames to Grafana",
+					"messageNumber", messageCount,
+					"partition", msgWithPartition.partition,
+					"offset", msgWithPartition.msg.Offset,
+					"sentCount", sentCount,
+					"frameCount", len(frames))
+			}
 		}
 	}
 }

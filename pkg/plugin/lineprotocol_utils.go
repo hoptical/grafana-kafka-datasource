@@ -195,6 +195,7 @@ func readFieldValue(b []byte, pos int) (raw string, term byte, end int, err erro
 	}
 	if b[pos] == '"' {
 		var sb strings.Builder
+		closed := false
 		// Mark this as a string field by re-prepending '"' so the classifier
 		// can distinguish "1" (string) from 1 (number).
 		sb.WriteByte('"')
@@ -214,12 +215,16 @@ func readFieldValue(b []byte, pos int) (raw string, term byte, end int, err erro
 			}
 			if c == '"' {
 				sb.WriteByte('"')
+				closed = true
 				i++
 				break
 			}
 			sb.WriteByte(c)
 		}
 		// After the closing quote, expect ',', ' ', or EOL.
+		if !closed {
+			return "", 0, i, fmt.Errorf("unterminated quoted string")
+		}
 		if i >= len(b) {
 			return sb.String(), 0, i, nil
 		}
@@ -241,8 +246,14 @@ func classifyFieldValue(raw string) (interface{}, error) {
 		return nil, fmt.Errorf("empty value")
 	}
 	// Quoted string: readFieldValue keeps surrounding quotes to mark the type.
-	if raw[0] == '"' && raw[len(raw)-1] == '"' {
+	// Guard against a lone `"` (len 1): an unterminated quoted value at
+	// end-of-line would otherwise make raw[1:len(raw)-1] slice with low > high
+	// and panic.
+	if len(raw) >= 2 && raw[0] == '"' && raw[len(raw)-1] == '"' {
 		return raw[1 : len(raw)-1], nil
+	}
+	if raw == `"` {
+		return nil, fmt.Errorf("unterminated quoted string %q", raw)
 	}
 	// Integer suffix.
 	if last := raw[len(raw)-1]; last == 'i' {

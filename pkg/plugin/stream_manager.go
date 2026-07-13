@@ -29,6 +29,9 @@ type StreamManager struct {
 	fieldBuilder         *FieldBuilder                      // Maintains type registry across messages
 	lpTagKeys            map[string]struct{}                // Union of line-protocol tag keys seen across messages (schema stability)
 	lpTagKeyOrder        []string                           // Tag keys in first-seen order, so frame columns keep a stable position
+	lpTagCapWarned       bool                               // Guards a one-time warning once the tag-key cap (flattenFieldCap) is reached
+	lpFilter             *lineProtocolFilter                // Cached compiled line-protocol filter (built once per stream, see getLineProtocolFilter)
+	lpFilterBuilt        bool                               // Whether lpFilter has been built yet (nil is a valid "no filter" cache value)
 	schemaCache          map[string]string                  // Cache for schemas by subject name
 	schemaRegistryClient *kafka_client.SchemaRegistryClient // Cached Schema Registry client
 	mu                   sync.RWMutex
