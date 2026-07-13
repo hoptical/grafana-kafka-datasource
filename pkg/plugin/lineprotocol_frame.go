@@ -247,6 +247,7 @@ func (sm *StreamManager) createLineProtocolErrorFrame(
 	topic string,
 ) *data.Frame {
 	multiPartition := len(partitions) > 1
+	errTime := resolveLineProtocolTimestamp(ParsedLine{}, config, msg.Timestamp, time.Now())
 
 	frame := data.NewFrame("lineprotocol")
 	if config != nil {
@@ -259,7 +260,7 @@ func (sm *StreamManager) createLineProtocolErrorFrame(
 	}
 
 	frame.Fields = append(frame.Fields,
-		data.NewField("Time", nil, []time.Time{msg.Timestamp}),
+		data.NewField("Time", nil, []time.Time{errTime}),
 		data.NewField("_measurement", nil, []string{""}),
 		data.NewField("_field", nil, []string{""}),
 		data.NewField("value", nil, []*float64{nil}),

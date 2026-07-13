@@ -365,6 +365,28 @@ func TestProcessMessageFrames_ErrorFrameKeepsErrorTagDistinct(t *testing.T) {
 	}
 }
 
+func TestProcessMessageFrames_ErrorFrameRespectsTimestampModeNow(t *testing.T) {
+	sm := NewStreamManager(&mockStreamClient{}, 5, 1000)
+	cfg := &StreamConfig{MessageFormat: "lineprotocol", TimestampMode: "now", LineProtocolTimestampPrecision: "s"}
+
+	msgTs := time.Unix(123, 0)
+	frames, err := sm.ProcessMessageFrames(
+		kafka_client.KafkaMessage{RawValue: []byte("not line protocol #"), Offset: 2, Timestamp: msgTs},
+		0, []int32{0}, cfg, "topic",
+	)
+	if err != nil {
+		t.Fatalf("bad message err: %v", err)
+	}
+	if len(frames) != 1 {
+		t.Fatalf("want 1 error frame, got %d", len(frames))
+	}
+
+	got := frames[0].Fields[0].At(0).(time.Time)
+	if got.Equal(msgTs) {
+		t.Fatalf("TimestampMode=now should not use kafka timestamp; got %v", got)
+	}
+}
+
 // TestProcessMessageFrames_TagKeyGrowthIsCapped is a regression test: the
 // stream-wide tag-key union used to grow unboundedly for the life of a
 // stream. It must now stop growing once flattenFieldCap distinct tag keys
