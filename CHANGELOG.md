@@ -4,10 +4,12 @@
 
 [Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v1.6.0...v1.7.0)
 
-- Feat: add InfluxDB Line Protocol support; streaming-friendly long-format frame (one row per LP field) with stable schema `Time | _measurement | _field | value | value_str | <one column per tag key> | partition? | offset`, per-query timestamp precision (auto / ns / µs / ms / s), and Line Protocol filters for measurement, field, and tags in the query editor ([#146](https://github.com/hoptical/grafana-kafka-datasource/pull/146)).
-- Chore: pin Grafana plugin CI actions to versioned releases, add `mise.toml` tool versions, and improve e2e selector stability across Grafana/UI variants ([#147](https://github.com/hoptical/grafana-kafka-datasource/pull/147)).
-- Test: add Playwright retry support in CI (`--retries 3`) to reduce flaky e2e failures ([#148](https://github.com/hoptical/grafana-kafka-datasource/pull/148)).
-- Fix: address post-merge Line Protocol issues (panic on unterminated quoted values, invalid-regex fallback to literal match, reserved-column tag-key collisions, error-frame schema compatibility, tag-key cap, and per-stream filter caching) ([#149](https://github.com/hoptical/grafana-kafka-datasource/pull/149)).
+- Feat: add InfluxDB Line Protocol support; streaming-friendly long-format frame (one row per LP field) with stable schema `Time | _measurement | _field | value | value_str | <one column per tag key> | partition? | offset`, per-query timestamp precision (auto / ns / µs / ms / s), and Line Protocol filters for measurement, field, and tags in the query editor ([#146](https://github.com/hoptical/grafana-kafka-datasource/pull/146))
+- Chore: pin Grafana plugin CI actions to versioned releases, add `mise.toml` tool versions, and improve e2e selector stability across Grafana/UI variants ([#147](https://github.com/hoptical/grafana-kafka-datasource/pull/147))
+- Test: add Playwright retry support in CI (`--retries 3`) to reduce flaky e2e failures ([#148](https://github.com/hoptical/grafana-kafka-datasource/pull/148))
+- Fix: address post-merge Line Protocol issues (panic on unterminated quoted values, invalid-regex fallback to literal match, reserved-column tag-key collisions, error-frame schema compatibility, tag-key cap, and per-stream filter caching) ([#149](https://github.com/hoptical/grafana-kafka-datasource/pull/149))
+- Feat: update changelog and upgrade dependencies to address security issues ([#150](https://github.com/hoptical/grafana-kafka-datasource/pull/150))
+- Tests: add column and data checker for line protocol e2e tests ([#151](https://github.com/hoptical/grafana-kafka-datasource/pull/151))
 
 ## [v1.6.0](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.6.0)
 

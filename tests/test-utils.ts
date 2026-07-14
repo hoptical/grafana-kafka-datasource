@@ -1,6 +1,6 @@
 // Shared test utilities for Kafka datasource e2e tests
 import { expect } from '@grafana/plugin-e2e';
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import type { PanelEditPage } from '@grafana/plugin-e2e';
 
 /**
@@ -54,6 +54,83 @@ export async function verifyColumnHeadersVisible(page: Page, headers: string[] =
   for (const header of headers) {
     await expect(page.getByRole('columnheader', { name: header })).toBeVisible();
   }
+}
+
+export async function findMessageFormatSelector(page: Page): Promise<Locator | null> {
+  const messageFormatApproaches = [
+    page
+      .locator('div')
+      .filter({ hasText: /^JSON$/ })
+      .nth(2),
+    page.getByText('JSON').locator('../..'),
+    page.locator('.css-1eu65zc').filter({ hasText: /JSON/ }),
+    page.getByText('JSON').filter({ hasText: /^JSON$/ }),
+    page.locator('button').filter({ hasText: /^JSON$/ }),
+    page.getByText('Message Format').locator('..').locator('button').first(),
+    page.locator('[data-testid*="select"]'),
+  ];
+
+  for (const approach of messageFormatApproaches) {
+    if (await approach.isVisible({ timeout: 1000 })) {
+      return approach;
+    }
+  }
+
+  return null;
+}
+
+export async function selectMessageFormat(page: Page, optionName: string): Promise<void> {
+  await expect(page.getByText('Message Format')).toBeVisible({ timeout: 5000 });
+
+  const foundSelector = await findMessageFormatSelector(page);
+  expect(foundSelector).not.toBeNull();
+
+  await foundSelector!.first().click();
+
+  const option = page
+    .getByLabel('Select options menu')
+    .getByText(optionName)
+    .or(page.getByRole('option', { name: optionName }));
+  await expect(option.first()).toBeVisible({ timeout: 5000 });
+  await option.first().click();
+}
+
+export async function findTimestampPrecisionSelector(page: Page): Promise<Locator | null> {
+  const selectorApproaches = [
+    page.getByText('Timestamp Precision').locator('..').locator('button').first(),
+    page
+      .getByRole('combobox')
+      .filter({ hasText: /Auto-detect|Nanoseconds|Microseconds|Milliseconds|Seconds/ })
+      .first(),
+    page
+      .locator('div')
+      .filter({ hasText: /^Auto-detect$/ })
+      .first(),
+  ];
+
+  for (const approach of selectorApproaches) {
+    if (await approach.isVisible({ timeout: 1000 })) {
+      return approach;
+    }
+  }
+
+  return null;
+}
+
+export async function selectTimestampPrecision(page: Page, optionName: string): Promise<void> {
+  await expect(page.getByText('Timestamp Precision')).toBeVisible({ timeout: 5000 });
+
+  const selector = await findTimestampPrecisionSelector(page);
+  expect(selector).not.toBeNull();
+
+  await selector!.first().click();
+
+  const option = page
+    .getByLabel('Select options menu')
+    .getByText(optionName)
+    .or(page.getByRole('option', { name: optionName }));
+  await expect(option.first()).toBeVisible({ timeout: 5000 });
+  await option.first().click();
 }
 
 /**
