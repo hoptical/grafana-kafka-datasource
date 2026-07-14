@@ -1,17 +1,13 @@
 # Changelog
 
-## Unreleased
+## [v1.7.0](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.7.0)
 
-- Fix: address post-merge review findings on Line Protocol support (follow-up to [#146](https://github.com/hoptical/grafana-kafka-datasource/pull/146)):
-  - Fix a panic when a Line Protocol message ends in an unterminated quoted field value (e.g. `m f="`).
-  - Line Protocol measurement/field/tag filter entries that aren't valid regexes (e.g. a literal tag value like `+N01`) now fall back to an exact literal match instead of being silently dropped (which previously left the filter axis unconstrained).
-  - Tag keys that collide with a reserved column name (`Time`, `_measurement`, `_field`, `value`, `value_str`, `partition`, `offset`) are now renamed to `tag_<key>` so both columns remain readable.
-  - Line Protocol parse-error frames now share the same core schema (`Time`, `_measurement`, `_field`, `value`, `value_str`, tag columns, `offset`) as successfully parsed frames, plus an `error` column, so the Grafana Live channel schema no longer flips on a malformed message.
-  - The "Sent frames to Grafana" debug log no longer fires when every frame in a message failed to send.
-  - The per-stream Line Protocol tag-key set is now capped (reusing the existing flatten field cap) instead of growing unboundedly for the life of a stream.
-  - The compiled Line Protocol filter is now built once per stream and cached instead of being recompiled from regex on every message.
-- Feat: add InfluxDB Line Protocol support — streaming-friendly long-format frame (one row per LP field) with stable schema `Time | _measurement | _field | value | value_str | <one column per tag key> | partition? | offset`. The fixed schema lets Grafana Live append rows cleanly across messages, while `_measurement` / `_field` / tag columns let dashboards reproduce Influx-style per-series shape via the **Partition by values** transform. Per-query timestamp-precision selector (auto / ns / µs / ms / s).
-- Feat: per-query Line Protocol filters (measurement whitelist, field whitelist, tag `key=value` pairs). Non-matching lines/fields are dropped in the Go plugin after parsing and before frames are built, so high-cardinality topics narrow down to just the subset of data the panel needs.
+[Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v1.6.0...v1.7.0)
+
+- Feat: add InfluxDB Line Protocol support; streaming-friendly long-format frame (one row per LP field) with stable schema `Time | _measurement | _field | value | value_str | <one column per tag key> | partition? | offset`, per-query timestamp precision (auto / ns / µs / ms / s), and Line Protocol filters for measurement, field, and tags in the query editor ([#146](https://github.com/hoptical/grafana-kafka-datasource/pull/146)).
+- Chore: pin Grafana plugin CI actions to versioned releases, add `mise.toml` tool versions, and improve e2e selector stability across Grafana/UI variants ([#147](https://github.com/hoptical/grafana-kafka-datasource/pull/147)).
+- Test: add Playwright retry support in CI (`--retries 3`) to reduce flaky e2e failures ([#148](https://github.com/hoptical/grafana-kafka-datasource/pull/148)).
+- Fix: address post-merge Line Protocol issues (panic on unterminated quoted values, invalid-regex fallback to literal match, reserved-column tag-key collisions, error-frame schema compatibility, tag-key cap, and per-stream filter caching) ([#149](https://github.com/hoptical/grafana-kafka-datasource/pull/149)).
 
 ## [v1.6.0](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.6.0)
 
