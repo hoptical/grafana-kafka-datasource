@@ -139,7 +139,7 @@ func main() {
 	connectTimeout := flag.Int("connect-timeout", 5000, "Broker connect timeout in milliseconds")
 	leaderWaitTimeout := flag.Int("leader-wait-timeout", 30000, "Timeout in milliseconds to wait for topic leader election")
 	shape := flag.String("shape", "nested", "Payload shape: nested, flat, or list")
-	format := flag.String("format", "json", "Message format: json, avro, or protobuf")
+	format := flag.String("format", "json", "Message format: json, avro, protobuf, or lineprotocol")
 	schemaRegistryURL := flag.String("schema-registry", "", "Schema registry URL (for Avro/Protobuf with schema registry)")
 	schemaRegistryUser := flag.String("schema-registry-user", "", "Schema registry username (optional)")
 	schemaRegistryPass := flag.String("schema-registry-pass", "", "Schema registry password (optional)")
