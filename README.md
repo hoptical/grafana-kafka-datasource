@@ -80,7 +80,7 @@ You can automatically configure the Kafka datasource using Grafana's provisionin
    - **Avro Schema Registry** (if using Avro format)
    - **Timeout settings** (default: two seconds)
 
-[![Kafka basic datasource configuration](src/img/config-basic-thumb.png)](src/img/config-basic.png)
+[![Kafka basic datasource configuration](src/img/config-basic.png)](src/img/config-basic.png)
 
 ### Build the Query
 
