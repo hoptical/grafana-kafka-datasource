@@ -80,6 +80,8 @@ You can automatically configure the Kafka datasource using Grafana's provisionin
    - **Avro Schema Registry** (if using Avro format)
    - **Timeout settings** (default: two seconds)
 
+<a href="src/img/config-basic.png"><img src="src/img/config-basic.png" alt="Kafka basic datasource configuration" width="800"></a>
+
 ### Build the Query
 
 1. Create a new dashboard panel in Grafana.
@@ -112,6 +114,8 @@ You can automatically configure the Kafka datasource using Grafana's provisionin
      - `Base64`: Single "key" column with raw binary key encoded as a base64 string
 
 **Tip:** Numeric fields become time series, string fields are labels, arrays and nested objects are automatically flattened for visualization.
+
+<img src="src/img/query-json.png" alt="JSON query editor example" width="800">
 
 ## Supported JSON Structures
 
@@ -162,6 +166,8 @@ Avro messages are supported using either:
 - **Inline schema**: paste your Avro schema (JSON format) in the UI
 - **Schema Registry**: the plugin fetches the latest schema by subject from the configured Schema Registry
 
+<img src="src/img/query-avro-inline-schema.png" alt="Avro inline schema editor" width="800">
+
 **Example Avro schema:**
 
 ```json
@@ -211,7 +217,12 @@ If you encounter issues with complex Protobuf schemas, open an issue so we can p
 
 ## Live Demo
 
-![Kafka dashboard](https://raw.githubusercontent.com/hoptical/grafana-kafka-datasource/86ea8d360bfd67cfed41004f80adc39219983210/src/img/graph.gif)
+<img src="src/img/graph.gif" alt="Kafka dashboard live demo" width="800">
+
+More screenshots and recordings (click to open):
+
+- [Streaming dashboard (high-resolution screenshot)](src/img/stream-json-screenshot.png)
+- [Authentication and TLS configuration](src/img/config-authentication.png)
 
 ## Sample Data Generator
 
