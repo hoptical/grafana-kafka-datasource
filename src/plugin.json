@@ -14,8 +14,8 @@
     },
     "keywords": ["kafka", "datasource", "backend", "streaming"],
     "logos": {
-      "small": "img/kafka_logo.svg",
-      "large": "img/kafka_logo.svg"
+      "small": "img/kafka-dark-logo.svg",
+      "large": "img/kafka-dark-logo.svg"
     },
     "links": [
       {
