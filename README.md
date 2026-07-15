@@ -3,7 +3,7 @@
 [![License](https://img.shields.io/github/license/hoptical/grafana-kafka-datasource)](LICENSE)
 [![CI](https://github.com/hoptical/grafana-kafka-datasource/actions/workflows/ci.yml/badge.svg)](https://github.com/hoptical/grafana-kafka-datasource/actions/workflows/ci.yml)
 [![Release](https://github.com/hoptical/grafana-kafka-datasource/actions/workflows/release.yml/badge.svg)](https://github.com/hoptical/grafana-kafka-datasource/actions/workflows/release.yml)
-[![Go Version](https://img.shields.io/badge/go-1.26.4-blue?logo=go)](https://golang.org/doc/go1.26)
+[![Go Version](https://img.shields.io/badge/go-1.26.5-blue?logo=go)](https://golang.org/doc/go1.26)
 [![Grafana v10.2+](https://img.shields.io/badge/grafana-10.2%2B-orange?logo=grafana)](https://grafana.com)
 [![Go Report Card](https://goreportcard.com/badge/github.com/hoptical/grafana-kafka-datasource)](https://goreportcard.com/report/github.com/hoptical/grafana-kafka-datasource)
 
