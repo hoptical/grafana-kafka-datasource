@@ -217,12 +217,11 @@ If you encounter issues with complex Protobuf schemas, open an issue so we can p
 
 ## Live Demo
 
-![Kafka dashboard live demo](src/img/graph-new.gif)
+![Kafka dashboard live demo](src/img/graph.gif)
 
 More screenshots and recordings (click to open):
 
 - [Streaming dashboard (high-resolution screenshot)](src/img/stream-json-screenshot.png)
-- [Avro streaming flow (full recording)](src/img/stream-avro.gif)
 - [Authentication and TLS configuration](src/img/config-authentication.png)
 
 ## Sample Data Generator

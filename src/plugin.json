@@ -33,8 +33,8 @@
     ],
     "screenshots": [
       {
-        "name": "Live Streaming Dashboard",
-        "path": "img/graph-new.gif"
+        "name": "Streaming Dashboard",
+        "path": "img/stream-json-screenshot.png"
       },
       {
         "name": "Datasource Configuration",
