@@ -80,7 +80,7 @@ You can automatically configure the Kafka datasource using Grafana's provisionin
    - **Avro Schema Registry** (if using Avro format)
    - **Timeout settings** (default: two seconds)
 
-[![Kafka basic datasource configuration](src/img/config-basic.png)](src/img/config-basic.png)
+<a href="src/img/config-basic.png"><img src="src/img/config-basic.png" alt="Kafka basic datasource configuration" width="800"></a>
 
 ### Build the Query
 
@@ -115,7 +115,7 @@ You can automatically configure the Kafka datasource using Grafana's provisionin
 
 **Tip:** Numeric fields become time series, string fields are labels, arrays and nested objects are automatically flattened for visualization.
 
-![JSON query editor example](src/img/query-json.png)
+<img src="src/img/query-json.png" alt="JSON query editor example" width="800">
 
 ## Supported JSON Structures
 
@@ -166,7 +166,7 @@ Avro messages are supported using either:
 - **Inline schema**: paste your Avro schema (JSON format) in the UI
 - **Schema Registry**: the plugin fetches the latest schema by subject from the configured Schema Registry
 
-![Avro inline schema editor](src/img/query-avro-inline-schema.png)
+<img src="src/img/query-avro-inline-schema.png" alt="Avro inline schema editor" width="800">
 
 **Example Avro schema:**
 
@@ -217,7 +217,7 @@ If you encounter issues with complex Protobuf schemas, open an issue so we can p
 
 ## Live Demo
 
-![Kafka dashboard live demo](src/img/graph.gif)
+<img src="src/img/graph.gif" alt="Kafka dashboard live demo" width="800">
 
 More screenshots and recordings (click to open):
 
