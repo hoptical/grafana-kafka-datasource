@@ -213,6 +213,11 @@ type queryModel struct {
 	ProtobufSchema       string `json:"protobufSchema"`
 	// Key Configuration
 	KeyFormat string `json:"keyFormat"` // "none", "string", or "json"
+	// Line Protocol Configuration
+	LineProtocolTimestampPrecision string `json:"lineProtocolTimestampPrecision"`
+	LineProtocolMeasurements       string `json:"lineProtocolMeasurements"`
+	LineProtocolFields             string `json:"lineProtocolFields"`
+	LineProtocolTags               string `json:"lineProtocolTags"`
 	// Metadata
 	RefID string `json:"refId"`
 	Alias string `json:"alias"`
@@ -652,17 +657,24 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 
 	// Create new stream configuration
 	streamConfig := &StreamConfig{
-		MessageFormat:        qm.MessageFormat,
-		AvroSchemaSource:     qm.AvroSchemaSource,
-		AvroSchema:           qm.AvroSchema,
-		ProtobufSchemaSource: qm.ProtobufSchemaSource,
-		ProtobufSchema:       qm.ProtobufSchema,
-		AutoOffsetReset:      qm.AutoOffsetReset,
-		TimestampMode:        qm.TimestampMode,
-		LastN:                qm.LastN, // Added LastN to stream config
-		KeyFormat:            qm.KeyFormat,
-		RefID:                qm.RefID,
-		Alias:                qm.Alias,
+		MessageFormat:                  qm.MessageFormat,
+		AvroSchemaSource:               qm.AvroSchemaSource,
+		AvroSchema:                     qm.AvroSchema,
+		ProtobufSchemaSource:           qm.ProtobufSchemaSource,
+		ProtobufSchema:                 qm.ProtobufSchema,
+		AutoOffsetReset:                qm.AutoOffsetReset,
+		TimestampMode:                  qm.TimestampMode,
+		LastN:                          qm.LastN, // Added LastN to stream config
+		KeyFormat:                      qm.KeyFormat,
+		RefID:                          qm.RefID,
+		Alias:                          qm.Alias,
+		LineProtocolTimestampPrecision: qm.LineProtocolTimestampPrecision,
+		LineProtocolMeasurements:       qm.LineProtocolMeasurements,
+		LineProtocolFields:             qm.LineProtocolFields,
+		LineProtocolTags:               qm.LineProtocolTags,
+	}
+	if streamConfig.LineProtocolTimestampPrecision == "" {
+		streamConfig.LineProtocolTimestampPrecision = "auto"
 	}
 
 	// Set default values if not provided
@@ -710,7 +722,7 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 				"partition", msgWithPartition.partition,
 				"offset", msgWithPartition.msg.Offset)
 
-			frame, err := streamManager.ProcessMessage(
+			frames, err := streamManager.ProcessMessageFrames(
 				msgWithPartition.msg,
 				msgWithPartition.partition,
 				partitions,
@@ -726,49 +738,45 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 				continue
 			}
 
-			if frame == nil {
-				// ProcessMessage should never return (nil, nil): control records are filtered
-				// inside ConsumerPull before reaching this loop, and all other paths in
-				// ProcessMessage return either a data frame or propagate an error.
-				// If this branch is reached it indicates a bug; log it so it is not silent.
-				log.DefaultLogger.Warn("ProcessMessage returned a nil frame without an error — this is unexpected",
-					"messageNumber", messageCount,
-					"partition", msgWithPartition.partition,
-					"offset", msgWithPartition.msg.Offset)
+			if len(frames) == 0 {
+				// Empty result is legitimate for line-protocol tombstones; for other
+				// formats it indicates a bug since they always return a frame or error.
+				if streamConfig.MessageFormat != "lineprotocol" {
+					log.DefaultLogger.Warn("ProcessMessageFrames returned no frames without an error",
+						"messageNumber", messageCount,
+						"messageFormat", streamConfig.MessageFormat,
+						"partition", msgWithPartition.partition,
+						"offset", msgWithPartition.msg.Offset)
+				}
 				continue
 			}
 
-			fieldCount := 0
-			if obj, ok := msgWithPartition.msg.Value.(map[string]interface{}); ok {
-				fieldCount = len(obj)
-			} else if arr, ok := msgWithPartition.msg.Value.([]interface{}); ok {
-				fieldCount = len(arr)
+			sentCount := 0
+			for frameIdx, frame := range frames {
+				err = sender.SendFrame(frame, data.IncludeAll)
+				if err != nil {
+					log.DefaultLogger.Error("Error sending frame",
+						"messageNumber", messageCount,
+						"frameIndex", frameIdx,
+						"partition", msgWithPartition.partition,
+						"error", err)
+					continue
+				}
+				sentCount++
 			}
 
-			log.DefaultLogger.Debug("Message frame created",
-				"messageNumber", messageCount,
-				"partition", msgWithPartition.partition,
-				"offset", msgWithPartition.msg.Offset,
-				"timestamp", frame.Fields[0].At(0),
-				"fieldCount", fieldCount)
-
-			log.DefaultLogger.Debug("Sending frame to Grafana",
-				"messageNumber", messageCount,
-				"partition", msgWithPartition.partition)
-			err = sender.SendFrame(frame, data.IncludeAll)
-			if err != nil {
-				log.DefaultLogger.Error("Error sending frame",
+			// Only log success when at least one frame actually made it to Grafana;
+			// otherwise every SendFrame failure was already logged above as an
+			// error, and an unconditional success log here would mask a total
+			// send failure for this message.
+			if sentCount > 0 {
+				log.DefaultLogger.Debug("Sent frames to Grafana",
 					"messageNumber", messageCount,
 					"partition", msgWithPartition.partition,
-					"error", err)
-				continue
+					"offset", msgWithPartition.msg.Offset,
+					"sentCount", sentCount,
+					"frameCount", len(frames))
 			}
-
-			log.DefaultLogger.Debug("Successfully sent frame to Grafana",
-				"messageNumber", messageCount,
-				"partition", msgWithPartition.partition,
-				"frameFields", len(frame.Fields),
-				"frameName", frame.Name)
 		}
 	}
 }

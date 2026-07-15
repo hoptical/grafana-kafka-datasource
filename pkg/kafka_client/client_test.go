@@ -683,6 +683,13 @@ func TestKafkaClient_decodeMessageValue_JSON(t *testing.T) {
 			hasError: false,
 		},
 		{
+			name:     "lineprotocol format",
+			data:     []byte(`m,t=v f=1 100`),
+			format:   "lineprotocol",
+			expected: nil,
+			hasError: false,
+		},
+		{
 			name:     "empty format with valid JSON",
 			data:     []byte(`{"key": "value"}`),
 			format:   "",

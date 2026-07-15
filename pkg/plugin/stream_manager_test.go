@@ -398,10 +398,11 @@ func TestStreamManager_ProcessMessage_Plaintext(t *testing.T) {
 			case string:
 				got = v
 			case *string:
-				if v == nil {
+				if v != nil {
+					got = *v
+				} else {
 					t.Fatalf("expected message field to be non-nil")
 				}
-				got = *v
 			default:
 				t.Fatalf("expected message field to be string, got %T", field.At(0))
 			}
@@ -490,10 +491,11 @@ func TestStreamManager_ProcessMessage_Plaintext_EmptyPayloadProducesEmptyString(
 			case string:
 				got = v
 			case *string:
-				if v == nil {
+				if v != nil {
+					got = *v
+				} else {
 					t.Fatalf("expected message field to be non-nil empty string")
 				}
-				got = *v
 			default:
 				t.Fatalf("expected message field to be string, got %T", field.At(0))
 			}
@@ -635,6 +637,50 @@ func TestStreamManager_readFromPartition_PullError(t *testing.T) {
 
 	if !messageReceived {
 		t.Error("Expected error messages to be sent when pull fails")
+	}
+}
+
+func TestStreamManager_readFromPartition_PullContextCanceled(t *testing.T) {
+	mockClient := &mockStreamClient{
+		pullErr: context.Canceled,
+	}
+
+	sm := NewStreamManager(mockClient, 5, 1000)
+	qm := queryModel{
+		Topic:           "test-topic",
+		AutoOffsetReset: "earliest",
+		LastN:           10,
+		MessageFormat:   "json",
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	messagesCh := make(chan messageWithPartition, 10)
+
+	config := &StreamConfig{
+		MessageFormat:   qm.MessageFormat,
+		AutoOffsetReset: qm.AutoOffsetReset,
+	}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		sm.readFromPartition(ctx, 0, qm, config, messagesCh)
+	}()
+
+	select {
+	case <-done:
+		// expected
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("expected partition reader to stop promptly on context cancellation")
+	}
+
+	select {
+	case msg := <-messagesCh:
+		t.Fatalf("expected no error frame for context cancellation, got: %v", msg.msg.Error)
+	default:
+		// expected
 	}
 }
 

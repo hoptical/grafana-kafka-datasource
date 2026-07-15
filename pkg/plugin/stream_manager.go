@@ -27,6 +27,11 @@ type StreamManager struct {
 	flattenMaxDepth      int
 	flattenFieldCap      int
 	fieldBuilder         *FieldBuilder                      // Maintains type registry across messages
+	lpTagKeys            map[string]struct{}                // Union of line-protocol tag keys seen across messages (schema stability)
+	lpTagKeyOrder        []string                           // Tag keys in first-seen order, so frame columns keep a stable position
+	lpTagCapWarned       bool                               // Guards a one-time warning once the tag-key cap (flattenFieldCap) is reached
+	lpFilter             *lineProtocolFilter                // Cached compiled line-protocol filter (built once per stream, see getLineProtocolFilter)
+	lpFilterBuilt        bool                               // Whether lpFilter has been built yet (nil is a valid "no filter" cache value)
 	schemaCache          map[string]string                  // Cache for schemas by subject name
 	schemaRegistryClient *kafka_client.SchemaRegistryClient // Cached Schema Registry client
 	mu                   sync.RWMutex
@@ -130,6 +135,18 @@ type StreamConfig struct {
 	KeyFormat            string // "none", "string", "base64", or "json"
 	RefID                string
 	Alias                string
+	// LineProtocolTimestampPrecision selects how inline line-protocol timestamps
+	// are interpreted: "ns", "us", "ms", "s", or "auto" (default).
+	LineProtocolTimestampPrecision string
+	// LineProtocolMeasurements is a comma-separated whitelist of LP measurement
+	// names. Empty / whitespace-only = include all measurements.
+	LineProtocolMeasurements string
+	// LineProtocolFields is a comma-separated whitelist of LP field keys.
+	// Empty / whitespace-only = include all fields.
+	LineProtocolFields string
+	// LineProtocolTags is a comma-separated list of `tag=value` pairs that a
+	// row must match (ANDed). Empty / whitespace-only = no tag constraint.
+	LineProtocolTags string
 }
 
 // NewStreamManager creates a new StreamManager instance.
@@ -139,6 +156,8 @@ func NewStreamManager(client KafkaClientAPI, flattenMaxDepth, flattenFieldCap in
 		flattenMaxDepth: flattenMaxDepth,
 		flattenFieldCap: flattenFieldCap,
 		fieldBuilder:    NewFieldBuilder(),
+		lpTagKeys:       make(map[string]struct{}),
+		lpTagKeyOrder:   make([]string, 0),
 		schemaCache:     make(map[string]string),
 	}
 }
@@ -1067,14 +1086,10 @@ func (sm *StreamManager) readFromPartition(
 			msgCancel() // Cancel immediately after use to avoid resource leaks in long-running loop
 
 			if err != nil {
-				log.DefaultLogger.Error("Error reading from partition",
-					"partition", partition,
-					"error", err)
-
 				// Check if it's a timeout error - if so, continue to next iteration
 				// to prevent stream from freezing
 				if errors.Is(err, context.DeadlineExceeded) {
-					log.DefaultLogger.Debug("Read timeout on partition, continuing to next iteration",
+					log.DefaultLogger.Debug("No new messages on partition, continuing to next iteration",
 						"partition", partition)
 					// Brief pause before retrying
 					select {
@@ -1084,6 +1099,18 @@ func (sm *StreamManager) readFromPartition(
 					}
 					continue
 				}
+
+				// Stream shutdown and query stop are expected and should not emit
+				// frontend error frames.
+				if errors.Is(err, context.Canceled) {
+					log.DefaultLogger.Debug("Partition reader canceled",
+						"partition", partition)
+					return
+				}
+
+				log.DefaultLogger.Error("Error reading from partition",
+					"partition", partition,
+					"error", err)
 
 				// Create an error message to send to the frontend
 				errorMsg := kafka_client.KafkaMessage{

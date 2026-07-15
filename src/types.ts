@@ -24,7 +24,20 @@ export enum MessageFormat {
   AVRO = 'avro',
   PROTOBUF = 'protobuf',
   PLAINTEXT = 'plaintext',
+  LINEPROTOCOL = 'lineprotocol',
 }
+
+export enum LineProtocolTimestampPrecision {
+  AUTO = 'auto',
+  NS = 'ns',
+  US = 'us',
+  MS = 'ms',
+  S = 's',
+}
+
+export type LineProtocolTimestampPrecisionInterface = {
+  [key in LineProtocolTimestampPrecision]: string;
+};
 
 export enum AvroSchemaSource {
   SCHEMA_REGISTRY = 'schemaRegistry',
@@ -121,6 +134,11 @@ export interface KafkaQuery extends DataQuery {
   // Protobuf Configuration
   protobufSchemaSource?: ProtobufSchemaSource;
   protobufSchema?: string;
+  // Line Protocol Configuration
+  lineProtocolTimestampPrecision?: LineProtocolTimestampPrecision;
+  lineProtocolMeasurements?: string;
+  lineProtocolFields?: string;
+  lineProtocolTags?: string;
   // Key Configuration
   keyFormat?: KeyFormat;
   // Optional alias for the query
@@ -135,5 +153,6 @@ export const defaultQuery: Partial<KafkaQuery> = {
   messageFormat: MessageFormat.JSON,
   avroSchemaSource: AvroSchemaSource.SCHEMA_REGISTRY,
   protobufSchemaSource: ProtobufSchemaSource.SCHEMA_REGISTRY,
+  lineProtocolTimestampPrecision: LineProtocolTimestampPrecision.AUTO,
   keyFormat: KeyFormat.NONE,
 };

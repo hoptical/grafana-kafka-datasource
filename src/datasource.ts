@@ -20,6 +20,12 @@ import {
   TimestampMode,
 } from './types';
 
+// Unique ID per browser page load. Appended to LAST_N channel paths so that a hard
+// refresh always creates a new Grafana Live channel, forcing RunStream to restart
+// and re-seek to latest-N. Without this, Grafana keeps the stream alive during the
+// brief disconnect window and the new subscriber attaches to the already-drained reader.
+export const PAGE_LOAD_SESSION = Math.random().toString(36).slice(2, 10);
+
 export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourceOptions> {
   constructor(instanceSettings: DataSourceInstanceSettings<KafkaDataSourceOptions>) {
     super(instanceSettings);
@@ -66,11 +72,27 @@ export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourc
       const n = Number.isFinite(parsed) && parsed > 0 ? parsed : 100;
       lastN = n;
     }
+    // Resolve template variables in the Line Protocol filter fields so that
+    // placeholders (e.g. $host) reach the backend resolved, and so the stream
+    // path hash changes when the underlying variable changes. Empty/undefined
+    // values are left untouched.
+    const lineProtocolMeasurements = query.lineProtocolMeasurements
+      ? templateSrv.replace(query.lineProtocolMeasurements, scopedVars)
+      : query.lineProtocolMeasurements;
+    const lineProtocolFields = query.lineProtocolFields
+      ? templateSrv.replace(query.lineProtocolFields, scopedVars)
+      : query.lineProtocolFields;
+    const lineProtocolTags = query.lineProtocolTags
+      ? templateSrv.replace(query.lineProtocolTags, scopedVars)
+      : query.lineProtocolTags;
     const result = {
       ...query,
       topicName,
       partition,
       lastN,
+      lineProtocolMeasurements,
+      lineProtocolFields,
+      lineProtocolTags,
       // Ensure these fields are preserved with defaults if undefined
       autoOffsetReset: query.autoOffsetReset || AutoOffsetReset.LATEST,
       messageFormat: query.messageFormat || MessageFormat.JSON,
@@ -99,6 +121,11 @@ export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourc
         segments.push(encodeURIComponent(String(interpolatedQuery.keyFormat || 'none')));
         // Include timestamp mode so changes to timestamp handling trigger a new path/subscription
         segments.push(encodeURIComponent(String(interpolatedQuery.timestampMode || 'message')));
+        // Include Line Protocol settings so changes to precision/filters trigger a stream restart.
+        segments.push(encodeURIComponent(String(interpolatedQuery.lineProtocolTimestampPrecision || 'auto')));
+        segments.push(this.generateSchemaHash(interpolatedQuery.lineProtocolMeasurements || ''));
+        segments.push(this.generateSchemaHash(interpolatedQuery.lineProtocolFields || ''));
+        segments.push(this.generateSchemaHash(interpolatedQuery.lineProtocolTags || ''));
         // Include a hash of the Avro schema to detect changes
         const schemaHash = interpolatedQuery.avroSchema
           ? this.generateSchemaHash(interpolatedQuery.avroSchema)
@@ -114,6 +141,7 @@ export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourc
           typeof interpolatedQuery.lastN !== 'undefined'
         ) {
           segments.push(encodeURIComponent(String(interpolatedQuery.lastN)));
+          segments.push(PAGE_LOAD_SESSION);
         }
 
         // Include RefID to ensure separate streams for different queries in the same panel

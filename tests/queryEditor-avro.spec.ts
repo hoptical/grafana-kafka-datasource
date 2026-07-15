@@ -3,7 +3,14 @@ import { Page, Locator } from '@playwright/test';
 import { ChildProcess, spawn } from 'child_process';
 import { accessSync, constants, readFileSync } from 'fs';
 import path from 'path';
-import { verifyPanelDataContains, verifyColumnHeadersVisible, setTableVisualization } from './test-utils';
+import {
+  verifyPanelDataContains,
+  verifyColumnHeadersVisible,
+  setTableVisualization,
+  openPartitionSelector,
+  selectAllPartitionsOption,
+  selectMessageFormat,
+} from './test-utils';
 
 interface AvroProducerOptions {
   topic: string;
@@ -85,44 +92,8 @@ function startTransactionalAvroKafkaProducer(topic: string): {
   });
 }
 
-async function findMessageFormatSelector(page: Page): Promise<Locator | null> {
-  const messageFormatApproaches = [
-    page
-      .locator('div')
-      .filter({ hasText: /^JSON$/ })
-      .nth(2), // The intercepting parent element
-    page.getByText('JSON').locator('../..'), // Go up two levels to find clickable parent
-    page.locator('.css-1eu65zc').filter({ hasText: /JSON/ }), // Direct selection of intercepting element
-    page.getByText('JSON').filter({ hasText: /^JSON$/ }), // Original approach
-    page.locator('button').filter({ hasText: /^JSON$/ }), // Button with exact JSON text
-    page.getByText('Message Format').locator('..').locator('button').first(), // Button near Message Format label
-    page.locator('[data-testid*="select"]'), // Any element with select in testid
-  ];
-
-  for (let i = 0; i < messageFormatApproaches.length; i++) {
-    const approach = messageFormatApproaches[i];
-    if (await approach.isVisible({ timeout: 1000 })) {
-      console.log(`Message format selector found using approach ${i}: ${approach.toString()}`);
-      return approach;
-    }
-  }
-  return null;
-}
-
 async function selectAvroMessageFormat(page: Page): Promise<void> {
-  // Wait for the page to stabilize after filling topic name
-  await expect(page.getByText('Message Format')).toBeVisible({ timeout: 5000 });
-
-  console.log('Looking for Message Format selector among buttons...');
-
-  const foundSelector = await findMessageFormatSelector(page);
-
-  // Message format selector MUST be found for Avro tests
-  expect(foundSelector).not.toBeNull();
-
-  // Click the message format selector
-  await foundSelector!.first().click();
-  await page.getByText('Avro').click();
+  await selectMessageFormat(page, 'Avro');
 }
 
 function getAvroSchemaSourceLocator(page: Page): Locator {
@@ -288,23 +259,10 @@ test.describe.serial('Kafka Query Editor - Avro Tests', () => {
       await page.getByRole('button', { name: 'Fetch' }).click();
 
       // Wait for partition selector to be available after fetch
-      const partitionSelector = page
-        .locator('div')
-        .filter({ hasText: /^All partitions$/ })
-        .nth(2)
-        .or(page.locator('#query-editor-partition'))
-        .or(page.getByText('All partitions').locator('..').locator('.css-1eu65zc'));
-
-      // Partition selector MUST be found after fetch
-      await expect(partitionSelector.first()).toBeVisible({ timeout: 5000 });
-      await partitionSelector.first().click();
+      await openPartitionSelector(page);
 
       // Select "All partitions" option
-      const allPartitionsOption = page
-        .getByLabel('Select options menu')
-        .getByText('All partitions')
-        .or(page.getByRole('option', { name: /^All partitions$/ }));
-      await allPartitionsOption.first().click();
+      await selectAllPartitionsOption(page);
 
       // Test Schema Registry validation
       await validateSchemaRegistryConnection(page, /accessible/i);
@@ -406,17 +364,8 @@ test.describe.serial('Kafka Query Editor - Avro Tests', () => {
       await selectAvroMessageFormat(page);
       await page.getByRole('button', { name: 'Fetch' }).click();
 
-      const partitionSelector = page
-        .locator('#query-editor-partition')
-        .or(page.getByText('All partitions').locator('..').locator('.css-1eu65zc'));
-      await expect(partitionSelector.first()).toBeVisible({ timeout: 5000 });
-      await partitionSelector.first().click();
-
-      const allPartitionsOption = page
-        .getByLabel('Select options menu')
-        .getByText('All partitions')
-        .or(page.getByRole('option', { name: /^All partitions$/ }));
-      await allPartitionsOption.first().click();
+      await openPartitionSelector(page);
+      await selectAllPartitionsOption(page);
 
       await setTableVisualization(panelEditPage);
       await verifyColumnHeadersVisible(page);
