@@ -73,8 +73,9 @@ func BenchmarkProcessMessage_JSON(b *testing.B) {
 // needing a separate git checkout. Run both with `-benchmem` and compare with
 // benchstat, or set KAFKA_DS_PERF_DISABLE_FIELD_ORDER_CACHE=true out-of-process.
 func BenchmarkProcessMessage_JSON_FieldOrderCacheDisabled(b *testing.B) {
+	wasDisabled := perfflags.FieldOrderCache.Disabled()
 	perfflags.FieldOrderCache.SetDisabledForTest(true)
-	defer perfflags.FieldOrderCache.SetDisabledForTest(false)
+	defer perfflags.FieldOrderCache.SetDisabledForTest(wasDisabled)
 
 	sm := newBenchStreamManager()
 	config := &StreamConfig{MessageFormat: "json", TimestampMode: "message"}
@@ -141,7 +142,13 @@ func BenchmarkProcessMessage_Protobuf(b *testing.B) {
 // BenchmarkProcessMessage_ParseProtobufSchemaOnly isolates the schema
 // compilation cost alone (protocompile.Compiler.Compile), to quantify how much
 // of BenchmarkProcessMessage_Protobuf's cost is recompilation vs. actual decode.
+// Caching is disabled for the duration so every iteration actually compiles,
+// instead of only the first one and cache lookups thereafter.
 func BenchmarkProcessMessage_ParseProtobufSchemaOnly(b *testing.B) {
+	wasDisabled := perfflags.ProtobufSchemaCache.Disabled()
+	perfflags.ProtobufSchemaCache.SetDisabledForTest(true)
+	defer perfflags.ProtobufSchemaCache.SetDisabledForTest(wasDisabled)
+
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		if _, err := kafka_client.ParseProtobufSchema(benchProtoSchema); err != nil {
@@ -199,8 +206,9 @@ func BenchmarkProcessMessage_JSON_Wide100(b *testing.B) {
 }
 
 func BenchmarkProcessMessage_JSON_Wide100_FieldOrderCacheDisabled(b *testing.B) {
+	wasDisabled := perfflags.FieldOrderCache.Disabled()
 	perfflags.FieldOrderCache.SetDisabledForTest(true)
-	defer perfflags.FieldOrderCache.SetDisabledForTest(false)
+	defer perfflags.FieldOrderCache.SetDisabledForTest(wasDisabled)
 
 	sm := newBenchStreamManager()
 	config := &StreamConfig{MessageFormat: "json", TimestampMode: "message"}

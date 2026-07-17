@@ -8,6 +8,8 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/dynamicpb"
+
+	"github.com/hoptical/grafana-kafka-datasource/pkg/perfflags"
 )
 
 // buildBenchProtobufPayload encodes a fixture message once (outside the timed
@@ -71,8 +73,15 @@ func BenchmarkDecodeProtobufMessage_ConfluentWireFormat(b *testing.B) {
 
 // BenchmarkParseProtobufSchema isolates just the schema compilation cost, to
 // quantify how much of BenchmarkDecodeProtobufMessage_Plain's cost is
-// recompilation vs. actual unmarshal + map conversion.
+// recompilation vs. actual unmarshal + map conversion. Caching is disabled
+// for the duration of the benchmark, since with it enabled only the first
+// b.N iteration would actually compile - the rest would measure cache-hit
+// cost instead of the compilation cost this benchmark is meant to isolate.
 func BenchmarkParseProtobufSchema(b *testing.B) {
+	wasDisabled := perfflags.ProtobufSchemaCache.Disabled()
+	perfflags.ProtobufSchemaCache.SetDisabledForTest(true)
+	defer perfflags.ProtobufSchemaCache.SetDisabledForTest(wasDisabled)
+
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		if _, err := ParseProtobufSchema(simpleProtoSchema); err != nil {

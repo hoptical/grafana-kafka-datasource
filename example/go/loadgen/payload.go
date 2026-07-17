@@ -148,7 +148,7 @@ func newLineProtocolBuilder() payloadFunc {
 	return func(seq int64) ([]byte, error) {
 		line := fmt.Sprintf(
 			"loadgen,host=%s value=%f,seq=%di,sent_at_ns=%di %d\n",
-			sensorID, rand.Float64()*100, seq, time.Now().UnixNano(), time.Now().Unix(),
+			sensorID, rand.Float64()*100, seq, time.Now().UnixNano(), time.Now().UnixNano(),
 		)
 		return []byte(line), nil
 	}

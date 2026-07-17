@@ -821,11 +821,7 @@ func (sm *StreamManager) sortedFlatKeys(flat map[string]interface{}) []string {
 	if !perfflags.FieldOrderCache.Disabled() {
 		sm.mu.RLock()
 		hit := sm.flatKeySetMatchesLocked(flat)
-		var cached []string
-		if hit {
-			cached = make([]string, len(sm.flatKeyOrder))
-			copy(cached, sm.flatKeyOrder)
-		}
+		cached := sm.flatKeyOrder
 		sm.mu.RUnlock()
 		if hit {
 			return cached
@@ -840,7 +836,10 @@ func (sm *StreamManager) sortedFlatKeys(flat map[string]interface{}) []string {
 
 	if !perfflags.FieldOrderCache.Disabled() {
 		sm.mu.Lock()
-		sm.flatKeyOrder = append(sm.flatKeyOrder[:0], keys...)
+		// keys is a freshly allocated slice that nothing mutates after this
+		// point, so it can be published directly and handed back as-is on
+		// future cache hits instead of being defensively copied each time.
+		sm.flatKeyOrder = keys
 		if sm.flatKeySet == nil {
 			sm.flatKeySet = make(map[string]struct{}, len(keys))
 		} else {

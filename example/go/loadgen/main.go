@@ -70,12 +70,17 @@ func main() {
 		fmt.Println("Error: -workers must be >= 1")
 		os.Exit(1)
 	}
+	if *statsInterval <= 0 {
+		fmt.Println("Error: -stats-interval must be > 0")
+		os.Exit(1)
+	}
 
-	if err := createTopicIfNotExists(*broker, *topic, *partitions, *connectTimeout); err != nil {
+	actualPartitions, err := createTopicIfNotExists(*broker, *topic, *partitions, *connectTimeout)
+	if err != nil {
 		fmt.Printf("Error: failed to create/verify topic: %v\n", err)
 		os.Exit(1)
 	}
-	if err := waitForTopicLeaders(*broker, *topic, *partitions, *leaderWaitTimeout); err != nil {
+	if err := waitForTopicLeaders(*broker, *topic, actualPartitions, *leaderWaitTimeout); err != nil {
 		fmt.Printf("Error: topic leader not ready: %v\n", err)
 		os.Exit(1)
 	}
@@ -193,9 +198,11 @@ func runWorker(ctx context.Context, writer *kafka.Writer, build payloadFunc, key
 			msg.Key = []byte(fmt.Sprintf("key-%d", n))
 		}
 		atomic.AddUint64(&st.attempted, 1)
-		if err := writer.WriteMessages(ctx, msg); err != nil && ctx.Err() == nil {
-			atomic.AddUint64(&st.errors, 1)
-		}
+		// Delivery errors are counted via the Writer's Completion callback,
+		// which fires for every batch regardless of Async mode - counting
+		// the error here too would double-count it when WriteMessages also
+		// returns it directly (as it does in synchronous mode).
+		_ = writer.WriteMessages(ctx, msg)
 	}
 }
 

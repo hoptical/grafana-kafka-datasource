@@ -33,9 +33,11 @@ func buildBenchAvroPayload(b *testing.B) []byte {
 	return payload
 }
 
-// BenchmarkDecodeAvroMessage measures the full per-message decode cost,
-// including the goavro.NewCodec(schema) call that DecodeAvroMessage currently
-// performs on every invocation (no codec caching).
+// BenchmarkDecodeAvroMessage measures the full per-message decode cost via
+// the optimized, cached codec path (see getAvroCodec): only the first
+// iteration compiles the codec with goavro.NewCodec, and every subsequent
+// iteration reuses it. Run with KAFKA_DS_PERF_DISABLE_AVRO_CODEC_CACHE=true
+// to instead measure the pre-fix behavior of recompiling on every call.
 func BenchmarkDecodeAvroMessage(b *testing.B) {
 	payload := buildBenchAvroPayload(b)
 	b.ReportAllocs()

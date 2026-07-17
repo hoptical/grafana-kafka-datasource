@@ -64,11 +64,11 @@ func getAvroCodec(schema string) (*goavro.Codec, error) {
 | Benchmark                             | Before   | After   | Change     |
 | ------------------------------------- | -------- | ------- | ---------- |
 | `DecodeAvroMessage` (ns/op)           | 4,967 ns | 326 ns  | **-93.5%** |
-| `DecodeAvroMessage` (B/op)            | —        | —       | **-90.8%** |
+| `DecodeAvroMessage` (B/op)            | —        | —       | N/A        |
 | `DecodeAvroMessage` (allocs/op)       | 185      | 16      | **-91.4%** |
 | Full pipeline `ProcessMessage` (Avro) | 6.45 µs  | 1.49 µs | **-77.0%** |
 
-Translated to raw single-threaded, decode-only throughput (no network I/O): **~155k msg/s → ~673k msg/s (~4.3x)**.
+Translated to raw single-threaded, full-pipeline throughput (no network I/O): **~155k msg/s → ~673k msg/s (~4.3x)**.
 
 ---
 
@@ -101,11 +101,11 @@ func ParseProtobufSchema(schema string) (*ParsedProtobufSchema, error) {
 | ----------------------------------------- | --------- | ------- | -------------------------- |
 | `ParseProtobufSchema` alone (ns/op)       | 14,514 ns | 8.5 ns  | **-99.94%**                |
 | `ParseProtobufSchema` (B/op)              | 34,865 B  | 0 B     | **-100%** (pure cache hit) |
-| `DecodeProtobufMessage` (ns/op)           | —         | —       | **-96.4%**                 |
-| `DecodeProtobufMessage` (allocs/op)       | —         | —       | **-94.4%**                 |
+| `DecodeProtobufMessage` (ns/op)           | —         | —       | N/A                        |
+| `DecodeProtobufMessage` (allocs/op)       | —         | —       | N/A                        |
 | Full pipeline `ProcessMessage` (Protobuf) | 18.6 µs   | 1.49 µs | **-92.0%**                 |
 
-Translated to single-threaded, decode-only throughput: **~53.7k msg/s → ~672k msg/s (~12.5x)**. This was the single biggest win in the whole investigation — schema recompilation, not the actual byte decoding, was almost the entire cost.
+Translated to single-threaded, full-pipeline throughput: **~53.7k msg/s → ~672k msg/s (~12.5x)**. This was the single biggest win in the whole investigation — schema recompilation, not the actual byte decoding, was almost the entire cost.
 
 As a sanity check, JSON and plaintext benchmarks (which share no code with the Avro/Protobuf decode path) were unaffected by these two fixes — a useful control group confirming the fixes are properly isolated.
 
@@ -252,8 +252,12 @@ KAFKA_DS_PERF_DISABLE_PROTOBUF_SCHEMA_CACHE=true go test -bench='^BenchmarkParse
 KAFKA_DS_PERF_DISABLE_FIELD_ORDER_CACHE=true go test -bench='^BenchmarkProcessMessage_JSON_Wide100$' -benchmem -run='^$' ./pkg/plugin/...
 
 # Compare statistically (install benchstat once: go install golang.org/x/perf/cmd/benchstat@latest)
-go test -bench=. -benchmem -run='^$' -count=6 ./pkg/kafka_client/... > after.txt
-KAFKA_DS_PERF_DISABLE_AVRO_CODEC_CACHE=true go test -bench=. -benchmem -run='^$' -count=6 ./pkg/kafka_client/... > before.txt
+# Use the same -bench filter for both runs so before/after only differ in the
+# one flag under comparison - mixing in other benchmarks (e.g. Protobuf's,
+# which stay optimized in both runs) would make the aggregate comparison
+# misleading rather than a like-for-like measurement of this one fix.
+go test -bench='^BenchmarkDecodeAvroMessage$' -benchmem -run='^$' -count=6 ./pkg/kafka_client/... > after.txt
+KAFKA_DS_PERF_DISABLE_AVRO_CODEC_CACHE=true go test -bench='^BenchmarkDecodeAvroMessage$' -benchmem -run='^$' -count=6 ./pkg/kafka_client/... > before.txt
 benchstat before.txt after.txt
 
 # Generate load and inspect it in Grafana
