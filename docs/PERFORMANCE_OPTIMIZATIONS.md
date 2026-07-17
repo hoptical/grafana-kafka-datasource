@@ -232,7 +232,7 @@ Useful flags:
 
 Its Avro/Protobuf schemas (`LoadGenReading{id, seq, value, sent_at_ns}`) are plain inline schemas (no schema registry dependency) — paste them straight from `example/go/loadgen/payload.go` into the plugin's datasource query editor to decode the traffic it produces.
 
-**Important caveat:** the throughput numbers the tool prints (hundreds of thousands to over a million messages/sec, depending on format) measure how fast it can _publish_ messages to Kafka — not how fast the plugin can _consume and decode_ them end-to-end through Grafana Live. That's a natural next experiment for anyone who wants to go further: run the plugin backend against this generator with each `perfflags` variable toggled on and off, and measure real consumption throughput and latency under Grafana itself.
+**Important caveat:** the throughput numbers the tool prints (hundreds of thousands to over a million messages/sec, depending on format) measure how fast it can _publish_ messages to Kafka — not how fast the plugin can _consume and decode_ them end-to-end through Grafana Live.
 
 ---
 
