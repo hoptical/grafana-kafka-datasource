@@ -19,6 +19,7 @@ import (
 	"github.com/grafana/grafana-plugin-sdk-go/data"
 
 	"github.com/hoptical/grafana-kafka-datasource/pkg/kafka_client"
+	"github.com/hoptical/grafana-kafka-datasource/pkg/perfflags"
 )
 
 // StreamManager handles the streaming logic for Kafka messages.
@@ -34,6 +35,8 @@ type StreamManager struct {
 	lpFilterBuilt        bool                               // Whether lpFilter has been built yet (nil is a valid "no filter" cache value)
 	schemaCache          map[string]string                  // Cache for schemas by subject name
 	schemaRegistryClient *kafka_client.SchemaRegistryClient // Cached Schema Registry client
+	flatKeyOrder         []string                           // Sorted value-field key order from the last ProcessMessage call
+	flatKeySet           map[string]struct{}                // Key set matching flatKeyOrder, used to detect a schema change (see sortedFlatKeys)
 	mu                   sync.RWMutex
 }
 
@@ -805,6 +808,70 @@ func (sm *StreamManager) getSchemaRegistryClient(registryUrl, username, password
 	return sm.schemaRegistryClient, nil
 }
 
+// sortedFlatKeys returns the flattened value-field keys from flat in sorted
+// order. When perfflags.FieldOrderCache is enabled (default) and this
+// message's key set is identical to the previous ProcessMessage call's, the
+// previously computed sorted order is reused instead of being recomputed:
+// profiling showed collecting and sorting keys accounts for a meaningful
+// share of ProcessMessage's own time, and topics typically have a stable
+// field set from message to message. Set
+// KAFKA_DS_PERF_DISABLE_FIELD_ORDER_CACHE=true to always recompute, matching
+// the plugin's pre-fix behavior (see pkg/perfflags).
+func (sm *StreamManager) sortedFlatKeys(flat map[string]interface{}) []string {
+	if !perfflags.FieldOrderCache.Disabled() {
+		sm.mu.RLock()
+		hit := sm.flatKeySetMatchesLocked(flat)
+		var cached []string
+		if hit {
+			cached = make([]string, len(sm.flatKeyOrder))
+			copy(cached, sm.flatKeyOrder)
+		}
+		sm.mu.RUnlock()
+		if hit {
+			return cached
+		}
+	}
+
+	keys := make([]string, 0, len(flat))
+	for key := range flat {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	if !perfflags.FieldOrderCache.Disabled() {
+		sm.mu.Lock()
+		sm.flatKeyOrder = append(sm.flatKeyOrder[:0], keys...)
+		if sm.flatKeySet == nil {
+			sm.flatKeySet = make(map[string]struct{}, len(keys))
+		} else {
+			for k := range sm.flatKeySet {
+				delete(sm.flatKeySet, k)
+			}
+		}
+		for _, k := range keys {
+			sm.flatKeySet[k] = struct{}{}
+		}
+		sm.mu.Unlock()
+	}
+
+	return keys
+}
+
+// flatKeySetMatchesLocked reports whether flat's key set is identical to the
+// cached key set from a previous sortedFlatKeys call. Callers must hold
+// sm.mu (a read lock is sufficient).
+func (sm *StreamManager) flatKeySetMatchesLocked(flat map[string]interface{}) bool {
+	if sm.flatKeySet == nil || len(flat) != len(sm.flatKeySet) {
+		return false
+	}
+	for key := range flat {
+		if _, ok := sm.flatKeySet[key]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
 // ProcessMessage converts a Kafka message into a Grafana data frame.
 // This method uses the StreamManager's configured flatten settings.
 func (sm *StreamManager) ProcessMessage(
@@ -955,11 +1022,7 @@ func (sm *StreamManager) ProcessMessage(
 	FlattenJSON("", messageValue, flat, 0, sm.flattenMaxDepth, sm.flattenFieldCap)
 
 	// Collect keys and sort them for deterministic field ordering
-	keys := make([]string, 0, len(flat))
-	for key := range flat {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
+	keys := sm.sortedFlatKeys(flat)
 
 	// Combine key fields and value fields, deduplicating on name collision (value fields win)
 	var allKeys []string

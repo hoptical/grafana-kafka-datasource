@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 
 	"github.com/bufbuild/protocompile"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
+	"github.com/hoptical/grafana-kafka-datasource/pkg/perfflags"
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -24,9 +26,42 @@ type ParsedProtobufSchema struct {
 	Message protoreflect.MessageDescriptor
 }
 
+// protobufSchemaCache caches parsed/compiled schemas by their raw schema
+// string. Compiling a .proto schema (protocompile.Compiler.Compile) is
+// expensive - benchmarks show it accounts for >90% of per-message protobuf
+// decode time and allocations - while the resulting descriptors are
+// immutable and safe for concurrent reuse, so compilation only needs to
+// happen once per distinct schema.
+//
+// Set KAFKA_DS_PERF_DISABLE_PROTOBUF_SCHEMA_CACHE=true to disable this cache
+// and reproduce the pre-fix behavior (see pkg/perfflags).
+var protobufSchemaCache sync.Map // map[string]*ParsedProtobufSchema
+
 // ParseProtobufSchema parses a .proto schema and returns a default message descriptor.
 // Imports are not supported for inline schemas; users should inline dependencies.
+// Results are cached by schema string (see protobufSchemaCache), unless
+// perfflags.ProtobufSchemaCache is disabled, in which case the schema is
+// always recompiled, matching the plugin's pre-fix behavior.
 func ParseProtobufSchema(schema string) (*ParsedProtobufSchema, error) {
+	if perfflags.ProtobufSchemaCache.Disabled() {
+		return compileProtobufSchema(schema)
+	}
+
+	if cached, ok := protobufSchemaCache.Load(schema); ok {
+		return cached.(*ParsedProtobufSchema), nil
+	}
+
+	parsed, err := compileProtobufSchema(schema)
+	if err != nil {
+		return nil, err
+	}
+
+	actual, _ := protobufSchemaCache.LoadOrStore(schema, parsed)
+	return actual.(*ParsedProtobufSchema), nil
+}
+
+// compileProtobufSchema compiles schema from scratch, bypassing any cache.
+func compileProtobufSchema(schema string) (*ParsedProtobufSchema, error) {
 	compiler := protocompile.Compiler{
 		Resolver: &protocompile.SourceResolver{
 			Accessor: func(path string) (io.ReadCloser, error) {
