@@ -81,4 +81,10 @@ var (
 	// (the common case for topics with a stable schema), avoiding a
 	// sort.Strings call and a fresh key slice per message.
 	FieldOrderCache = newFlag("KAFKA_DS_PERF_DISABLE_FIELD_ORDER_CACHE")
+
+	// StreamMicroBatch: when disabled, RunStream sends every produced frame
+	// immediately (pre-fix behavior). When enabled (default), compatible
+	// frames are micro-batched into small multi-row frames before sending,
+	// reducing per-message FrameToJSON and packet overhead.
+	StreamMicroBatch = newFlag("KAFKA_DS_PERF_DISABLE_STREAM_MICROBATCH")
 )

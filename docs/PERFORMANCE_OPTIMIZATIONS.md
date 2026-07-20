@@ -152,11 +152,12 @@ At a typical field count, the locking and defensive-copy overhead on a cache hit
 
 Every fix above is controlled by an environment-variable-backed flag in a new `pkg/perfflags` package. By default, all flags are **off**, meaning you get the optimized (fixed) behavior. Set the corresponding variable to a truthy value to force the plugin back to its pre-fix behavior — no git checkout needed:
 
-| Flag                            | Environment variable                          | Reverts                          |
-| ------------------------------- | --------------------------------------------- | -------------------------------- |
-| `perfflags.AvroCodecCache`      | `KAFKA_DS_PERF_DISABLE_AVRO_CODEC_CACHE`      | Avro codec caching (Fix #1)      |
-| `perfflags.ProtobufSchemaCache` | `KAFKA_DS_PERF_DISABLE_PROTOBUF_SCHEMA_CACHE` | Protobuf schema caching (Fix #2) |
-| `perfflags.FieldOrderCache`     | `KAFKA_DS_PERF_DISABLE_FIELD_ORDER_CACHE`     | Field-order caching (Fix #3)     |
+| Flag                            | Environment variable                          | Reverts                           |
+| ------------------------------- | --------------------------------------------- | --------------------------------- |
+| `perfflags.AvroCodecCache`      | `KAFKA_DS_PERF_DISABLE_AVRO_CODEC_CACHE`      | Avro codec caching (Fix #1)       |
+| `perfflags.ProtobufSchemaCache` | `KAFKA_DS_PERF_DISABLE_PROTOBUF_SCHEMA_CACHE` | Protobuf schema caching (Fix #2)  |
+| `perfflags.FieldOrderCache`     | `KAFKA_DS_PERF_DISABLE_FIELD_ORDER_CACHE`     | Field-order caching (Fix #3)      |
+| `perfflags.StreamMicroBatch`    | `KAFKA_DS_PERF_DISABLE_STREAM_MICROBATCH`     | RunStream micro-batching (Fix #4) |
 
 ```go
 type Flag struct {
@@ -197,7 +198,7 @@ Profiling `ProcessMessage`'s JSON decode path showed that `FieldBuilder.AddValue
 
 The reason this wasn't touched: the plugin deliberately always builds _nullable_ field types, even for non-null values, so that a field's Go type stays consistent across the one-frame-per-message live stream — Grafana Live requires stable schema across appended frames. Switching to non-nullable slices would save an allocation per field, but risks breaking that schema stability if a later message needs to send a null value for the same field. That's a real risk I can't verify without an end-to-end Grafana Live test harness, so it wasn't shipped speculatively.
 
-The more promising (but bigger) lever here is architectural: batching multiple Kafka messages into a single multi-row frame instead of one frame per message, which would amortize _all_ of these per-message fixed costs at once. That's a larger, riskier change (it affects latency and batching semantics) that deserves its own discussion rather than a quiet drive-by fix.
+The higher-leverage architectural lever here is to batch compatible Kafka message frames into small multi-row frames before send, amortizing `FrameToJSON` and packet overhead. That is now implemented behind `KAFKA_DS_PERF_DISABLE_STREAM_MICROBATCH` (enabled by default; disable to reproduce pre-fix one-frame-per-message behavior).
 
 ---
 
@@ -236,6 +237,131 @@ Its Avro/Protobuf schemas (`LoadGenReading{id, seq, value, sent_at_ns}`) are pla
 
 ---
 
+## Deterministic full-workflow benchmark (Layer A)
+
+To benchmark the plugin's full per-message backend workflow deterministically (without Kafka/Grafana network effects), use:
+
+```bash
+go test -run '^$' -bench BenchmarkWorkflow -benchmem ./pkg/plugin/...
+```
+
+This benchmark executes `ProcessMessageFrames` and then routes each resulting frame through one of two sink modes:
+
+- `noop`: processing-only baseline (decode + flatten + frame building)
+- `sendframe_json`: processing + real `backend.StreamSender.SendFrame` JSON serialization cost
+
+By default this benchmark also uses the same micro-batching combiner as `RunStream`. To reproduce pre-fix one-frame-per-message behavior, run with:
+
+```bash
+KAFKA_DS_PERF_DISABLE_STREAM_MICROBATCH=true \
+    go test -run '^$' -bench BenchmarkWorkflow -benchmem ./pkg/plugin/...
+```
+
+Current matrix includes `plaintext`, `lineprotocol`, `avro`, `protobuf`, `json_20fields`, and `json_100fields`.
+
+Metrics include:
+
+- `ns/op`, `B/op`, `allocs/op` (standard Go benchmark outputs)
+- `msg/s` (reported by the benchmark)
+- `packets/s` and `out_B/s` in `sendframe_json` mode
+
+Generate profiles and open flame charts:
+
+```bash
+go test -run '^$' -bench BenchmarkWorkflow -benchmem \
+    -cpuprofile workflow.cpu.prof \
+    -memprofile workflow.mem.prof \
+    ./pkg/plugin/...
+
+# Text summaries
+go tool pprof -top workflow.cpu.prof
+go tool pprof -top -alloc_objects workflow.mem.prof
+
+# Flame graph / interactive call graph UI
+go tool pprof -http=:0 workflow.cpu.prof
+go tool pprof -http=:0 -alloc_space workflow.mem.prof
+```
+
+For stable comparisons across iterations, repeat with `-count=6` and compare with `benchstat`.
+
+### Whole-workflow before vs after (all fixes combined)
+
+To measure the full impact of all implemented fixes together, I compared:
+
+- **Before**: all perf flags disabled (`AVRO_CODEC_CACHE`, `PROTOBUF_SCHEMA_CACHE`, `FIELD_ORDER_CACHE`, `STREAM_MICROBATCH`)
+- **After**: default settings (all fixes enabled)
+
+Command pattern used:
+
+```bash
+# After (all fixes enabled)
+go test -run '^$' -bench '^BenchmarkWorkflow/sendframe_json/' -benchmem -count=6 ./pkg/plugin/... > /tmp/workflow-after.txt
+
+# Before (all fixes disabled)
+KAFKA_DS_PERF_DISABLE_AVRO_CODEC_CACHE=true \
+KAFKA_DS_PERF_DISABLE_PROTOBUF_SCHEMA_CACHE=true \
+KAFKA_DS_PERF_DISABLE_FIELD_ORDER_CACHE=true \
+KAFKA_DS_PERF_DISABLE_STREAM_MICROBATCH=true \
+go test -run '^$' -bench '^BenchmarkWorkflow/sendframe_json/' -benchmem -count=6 ./pkg/plugin/... > /tmp/workflow-before.txt
+
+# Keep only benchmark result lines for benchstat parsing
+rg '^Benchmark' /tmp/workflow-before.txt > /tmp/workflow-before-clean.txt
+rg '^Benchmark' /tmp/workflow-after.txt > /tmp/workflow-after-clean.txt
+
+benchstat /tmp/workflow-before-clean.txt /tmp/workflow-after-clean.txt
+```
+
+`msg/s` results (`sendframe_json` mode, n=6):
+
+| Case             |     Before |      After |       Change |
+| ---------------- | ---------: | ---------: | -----------: |
+| `plaintext`      |     558.2k |     813.2k |  **+45.69%** |
+| `lineprotocol`   |     25.51k |     27.01k |   **+5.87%** |
+| `avro`           |     100.9k |     427.8k | **+323.83%** |
+| `protobuf`       |     47.33k |    405.07k | **+755.91%** |
+| `json_20fields`  |     115.7k |     156.7k |  **+35.41%** |
+| `json_100fields` |     24.27k |     34.03k |  **+40.26%** |
+| **geomean**      | **75.89k** | **165.2k** | **+117.64%** |
+
+Interpretation:
+
+- The combined fixes more than **double geomean throughput** for the measured whole-workflow matrix.
+- Biggest relative wins are Avro/Protobuf, where schema/cache fixes remove heavy per-message compile overhead.
+- JSON gains come from the field-order and micro-batch optimizations; `json_100fields` benefits strongly from packet/serialization amortization.
+
+### Profile delta (before vs after)
+
+Using paired profiles on `BenchmarkWorkflow/sendframe_json/json_100fields`:
+
+- CPU cumulative in `data.FrameToJSON`: **11.58% -> 2.06%**.
+- CPU cost in `json-iterator` string/object writing dropped out of top hotspots (`WriteString`/`WriteObjectField` were significant before).
+- Allocation cumulative in `data.FrameToJSON`: **13.73% -> 6.07%**.
+- Dominant allocator remains `FieldBuilder.AddValueToFrame` (still the largest single hotspot), but per-message serialization overhead is substantially reduced.
+- New expected overhead appears in batching helpers (`frameMicroBatcher.AddFrames`, `appendFrameRows`, `Frame.RowCopy`) — this is the trade-off that buys the large packet-rate reduction and throughput gain.
+
+### On-paper catch-up estimate for loadgen rates
+
+From the same `sendframe_json` benchmark medians above, the plugin's backend processing+serialization capacity (single benchmark worker, no external network/UI rendering overhead) is approximately:
+
+- `plaintext`: ~813k msg/s
+- `avro`: ~428k msg/s
+- `protobuf`: ~405k msg/s
+- `json` (default loadgen shape, `-json-fields=20`): ~157k msg/s
+- `json` wide (`-json-fields=100`): ~34k msg/s
+- `lineprotocol`: ~27k msg/s
+
+So, **on paper**, for the loadgen default (`-format json -json-fields=20`), the plugin can catch up at about **157k msg/s** in this Layer A setup after fixes.
+
+For practical sustained budgeting with headroom (GC jitter, Kafka/network variance), a conservative target is ~70% of those values:
+
+- default JSON20: **~110k msg/s**
+- JSON100: **~24k msg/s**
+- line protocol: **~19k msg/s**
+
+These are backend-only capacity estimates; end-to-end Grafana Live behavior (network, UI subscribers, dashboard query load) can lower sustained catch-up in real deployments.
+
+---
+
 ## Reproduce everything
 
 ```bash
@@ -250,6 +376,7 @@ go test -bench=. -benchmem -run='^$' ./pkg/plugin/... ./pkg/kafka_client/...
 KAFKA_DS_PERF_DISABLE_AVRO_CODEC_CACHE=true go test -bench='^BenchmarkDecodeAvroMessage$' -benchmem -run='^$' ./pkg/kafka_client/...
 KAFKA_DS_PERF_DISABLE_PROTOBUF_SCHEMA_CACHE=true go test -bench='^BenchmarkParseProtobufSchema$' -benchmem -run='^$' ./pkg/kafka_client/...
 KAFKA_DS_PERF_DISABLE_FIELD_ORDER_CACHE=true go test -bench='^BenchmarkProcessMessage_JSON_Wide100$' -benchmem -run='^$' ./pkg/plugin/...
+KAFKA_DS_PERF_DISABLE_STREAM_MICROBATCH=true go test -run '^$' -bench BenchmarkWorkflow -benchmem ./pkg/plugin/...
 
 # Compare statistically (install benchstat once: go install golang.org/x/perf/cmd/benchstat@latest)
 # Use the same -bench filter for both runs so before/after only differ in the
