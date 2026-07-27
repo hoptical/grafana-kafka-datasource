@@ -1,8 +1,12 @@
 package plugin
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"hash/fnv"
+	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -56,6 +60,17 @@ func (b *frameMicroBatcher) AddFrames(frames []*data.Frame) ([]*data.Frame, erro
 		agg, exists := b.pending[key]
 		if !exists {
 			agg = frame.EmptyCopy()
+			agg.Meta = frame.Meta
+			for i := range agg.Fields {
+				agg.Fields[i].Config = frame.Fields[i].Config
+				if len(frame.Fields[i].Labels) > 0 {
+					labels := make(data.Labels, len(frame.Fields[i].Labels))
+					for k, v := range frame.Fields[i].Labels {
+						labels[k] = v
+					}
+					agg.Fields[i].Labels = labels
+				}
+			}
 			b.pending[key] = agg
 			b.order = append(b.order, key)
 		}
@@ -91,6 +106,12 @@ func appendFrameRows(dst, src *data.Frame) error {
 	if dst == nil || src == nil {
 		return errors.New("nil frame")
 	}
+	if dst.Name != src.Name {
+		return fmt.Errorf("frame name mismatch: dst=%q src=%q", dst.Name, src.Name)
+	}
+	if dst.RefID != src.RefID {
+		return fmt.Errorf("frame refid mismatch: dst=%q src=%q", dst.RefID, src.RefID)
+	}
 	if len(dst.Fields) != len(src.Fields) {
 		return fmt.Errorf("field count mismatch: dst=%d src=%d", len(dst.Fields), len(src.Fields))
 	}
@@ -105,6 +126,12 @@ func appendFrameRows(dst, src *data.Frame) error {
 		}
 		if df.Type() != sf.Type() {
 			return fmt.Errorf("field type mismatch at index %d: dst=%v src=%v", i, df.Type(), sf.Type())
+		}
+		if !reflect.DeepEqual(df.Config, sf.Config) {
+			return fmt.Errorf("field config mismatch at index %d", i)
+		}
+		if !labelsEqual(df.Labels, sf.Labels) {
+			return fmt.Errorf("field labels mismatch at index %d", i)
 		}
 	}
 
@@ -131,6 +158,15 @@ func frameSchemaKey(frame *data.Frame) (string, error) {
 	b.WriteByte('|')
 	b.WriteString(strconv.Itoa(len(frame.Fields)))
 	b.WriteByte('|')
+	if frame.Meta != nil {
+		metaSig, err := valueSignature(frame.Meta)
+		if err != nil {
+			return "", fmt.Errorf("frame meta signature: %w", err)
+		}
+		b.WriteString("meta:")
+		b.WriteString(metaSig)
+		b.WriteByte('|')
+	}
 
 	for _, field := range frame.Fields {
 		if field == nil {
@@ -139,12 +175,61 @@ func frameSchemaKey(frame *data.Frame) (string, error) {
 		b.WriteString(field.Name)
 		b.WriteByte(':')
 		b.WriteString(strconv.Itoa(int(field.Type())))
-		if field.Config != nil {
+		if len(field.Labels) > 0 {
 			b.WriteByte(':')
-			b.WriteString(field.Config.DisplayNameFromDS)
+			b.WriteString("labels=")
+			appendLabelsKey(&b, field.Labels)
+		}
+		if field.Config != nil {
+			sig, err := valueSignature(field.Config)
+			if err != nil {
+				return "", fmt.Errorf("field config signature: %w", err)
+			}
+			b.WriteByte(':')
+			b.WriteString("cfg=")
+			b.WriteString(sig)
 		}
 		b.WriteByte('|')
 	}
 
 	return b.String(), nil
+}
+
+func appendLabelsKey(b *strings.Builder, labels data.Labels) {
+	keys := make([]string, 0, len(labels))
+	for k := range labels {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		b.WriteString(k)
+		b.WriteByte('=')
+		b.WriteString(labels[k])
+		b.WriteByte(',')
+	}
+}
+
+func labelsEqual(a, b data.Labels) bool {
+	if len(a) == 0 && len(b) == 0 {
+		return true
+	}
+	if len(a) != len(b) {
+		return false
+	}
+	for k, v := range a {
+		if b[k] != v {
+			return false
+		}
+	}
+	return true
+}
+
+func valueSignature(v any) (string, error) {
+	raw, err := json.Marshal(v)
+	if err != nil {
+		return "", err
+	}
+	h := fnv.New64a()
+	_, _ = h.Write(raw)
+	return strconv.FormatUint(h.Sum64(), 16), nil
 }

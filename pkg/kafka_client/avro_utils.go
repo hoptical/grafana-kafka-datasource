@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
@@ -22,7 +21,13 @@ import (
 //
 // Set KAFKA_DS_PERF_DISABLE_AVRO_CODEC_CACHE=true to disable this cache and
 // reproduce the pre-fix behavior (see pkg/perfflags).
-var avroCodecCache sync.Map // map[string]*goavro.Codec
+//
+// Cache size is bounded to avoid unbounded growth in long-lived processes with
+// high schema churn. Override size with
+// KAFKA_DS_PERF_AVRO_CODEC_CACHE_MAX_ENTRIES (default: 256).
+var avroCodecCache = newLRUCache[*goavro.Codec](
+	cacheSizeFromEnv("KAFKA_DS_PERF_AVRO_CODEC_CACHE_MAX_ENTRIES", 256),
+)
 
 // getAvroCodec returns a cached compiled codec for schema, compiling and
 // caching it on first use. When perfflags.AvroCodecCache is disabled, it
@@ -32,8 +37,8 @@ func getAvroCodec(schema string) (*goavro.Codec, error) {
 		return goavro.NewCodec(schema)
 	}
 
-	if cached, ok := avroCodecCache.Load(schema); ok {
-		return cached.(*goavro.Codec), nil
+	if cached, ok := avroCodecCache.Get(schema); ok {
+		return cached, nil
 	}
 
 	codec, err := goavro.NewCodec(schema)
@@ -41,8 +46,8 @@ func getAvroCodec(schema string) (*goavro.Codec, error) {
 		return nil, err
 	}
 
-	actual, _ := avroCodecCache.LoadOrStore(schema, codec)
-	return actual.(*goavro.Codec), nil
+	avroCodecCache.Add(schema, codec)
+	return codec, nil
 }
 
 func truncatePreview(body []byte, max int) string {

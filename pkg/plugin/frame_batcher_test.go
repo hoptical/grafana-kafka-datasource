@@ -71,6 +71,45 @@ func TestFrameMicroBatcher_SeparatesDifferentSchemas(t *testing.T) {
 	}
 }
 
+func TestFrameMicroBatcher_SeparatesDifferentConfigAndLabels(t *testing.T) {
+	b := newFrameMicroBatcher(10)
+
+	f1 := testFrame("response", "A", 1)
+	f1.Fields[2].Config = &data.FieldConfig{Unit: "ms"}
+	f1.Fields[2].Labels = data.Labels{"site": "eu"}
+
+	f2 := testFrame("response", "A", 2)
+	f2.Fields[2].Config = &data.FieldConfig{Unit: "s"}
+	f2.Fields[2].Labels = data.Labels{"site": "us"}
+
+	if _, err := b.AddFrames([]*data.Frame{f1, f2}); err != nil {
+		t.Fatalf("AddFrames failed: %v", err)
+	}
+
+	out := b.Flush()
+	if len(out) != 2 {
+		t.Fatalf("expected 2 flushed frames, got %d", len(out))
+	}
+}
+
+func TestFrameMicroBatcher_SeparatesDifferentMeta(t *testing.T) {
+	b := newFrameMicroBatcher(10)
+
+	f1 := testFrame("response", "A", 1)
+	f2 := testFrame("response", "A", 2)
+	f1.Meta = &data.FrameMeta{Type: data.FrameTypeTimeSeriesWide}
+	f2.Meta = &data.FrameMeta{Type: data.FrameTypeTimeSeriesLong}
+
+	if _, err := b.AddFrames([]*data.Frame{f1, f2}); err != nil {
+		t.Fatalf("AddFrames failed: %v", err)
+	}
+
+	out := b.Flush()
+	if len(out) != 2 {
+		t.Fatalf("expected 2 flushed frames, got %d", len(out))
+	}
+}
+
 func testFrame(name, refID string, value int64) *data.Frame {
 	ts := time.Unix(1700000000, 0).UTC()
 	return data.NewFrame(name,

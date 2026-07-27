@@ -38,24 +38,26 @@ func DecodeAvroMessage(data []byte, schema string) (interface{}, error) {
 }
 ```
 
-**The fix.** Cache the compiled codec per schema string. A `*goavro.Codec` is immutable once built and safe for concurrent reuse, so a `sync.Map` keyed by the raw schema string is enough:
+**The fix.** Cache the compiled codec per schema string. A `*goavro.Codec` is immutable once built and safe for concurrent reuse, so the hot-path helper now uses a bounded LRU cache keyed by raw schema string (default 256 entries):
 
 ```go
-var avroCodecCache sync.Map // map[string]*goavro.Codec
+var avroCodecCache = newLRUCache[*goavro.Codec](
+    cacheSizeFromEnv("KAFKA_DS_PERF_AVRO_CODEC_CACHE_MAX_ENTRIES", 256),
+)
 
 func getAvroCodec(schema string) (*goavro.Codec, error) {
     if perfflags.AvroCodecCache.Disabled() {
         return goavro.NewCodec(schema) // pre-fix behavior, on demand
     }
-    if cached, ok := avroCodecCache.Load(schema); ok {
-        return cached.(*goavro.Codec), nil
+    if cached, ok := avroCodecCache.Get(schema); ok {
+        return cached, nil
     }
     codec, err := goavro.NewCodec(schema)
     if err != nil {
         return nil, err
     }
-    actual, _ := avroCodecCache.LoadOrStore(schema, codec)
-    return actual.(*goavro.Codec), nil
+    avroCodecCache.Add(schema, codec)
+    return codec, nil
 }
 ```
 
@@ -63,12 +65,12 @@ func getAvroCodec(schema string) (*goavro.Codec, error) {
 
 | Benchmark                             | Before   | After   | Change     |
 | ------------------------------------- | -------- | ------- | ---------- |
-| `DecodeAvroMessage` (ns/op)           | 4,967 ns | 326 ns  | **-93.5%** |
-| `DecodeAvroMessage` (B/op)            | —        | —       | N/A        |
+| `DecodeAvroMessage` (ns/op)           | 5,166 ns | 341 ns  | **-93.4%** |
+| `DecodeAvroMessage` (B/op)            | 8,260 B  | 760 B   | **-90.8%** |
 | `DecodeAvroMessage` (allocs/op)       | 185      | 16      | **-91.4%** |
-| Full pipeline `ProcessMessage` (Avro) | 6.45 µs  | 1.49 µs | **-77.0%** |
+| Full pipeline `ProcessMessage` (Avro) | 6.60 µs  | 1.53 µs | **-76.8%** |
 
-Translated to raw single-threaded, full-pipeline throughput (no network I/O): **~155k msg/s → ~673k msg/s (~4.3x)**.
+Translated to raw single-threaded, full-pipeline throughput (no network I/O): **~152k msg/s -> ~654k msg/s (~4.3x)**.
 
 ---
 
@@ -76,36 +78,39 @@ Translated to raw single-threaded, full-pipeline throughput (no network I/O): **
 
 **The problem.** Same shape of bug, different format: `ParseProtobufSchema` ran `protocompile.Compiler.Compile(...)` — a full `.proto` schema compile — on every call.
 
-**The fix.** A `sync.Map` cache identical in spirit to the Avro one, with the compile logic pulled into a small `compileProtobufSchema` helper so both the cached and the flag-disabled path share one implementation (no duplicated logic to drift out of sync):
+**The fix.** A bounded LRU cache identical in spirit to the Avro one, with compile logic in a small `compileProtobufSchema` helper so both cached and flag-disabled paths share one implementation:
 
 ```go
+var protobufSchemaCache = newLRUCache[*ParsedProtobufSchema](
+    cacheSizeFromEnv("KAFKA_DS_PERF_PROTOBUF_SCHEMA_CACHE_MAX_ENTRIES", 256),
+)
+
 func ParseProtobufSchema(schema string) (*ParsedProtobufSchema, error) {
     if perfflags.ProtobufSchemaCache.Disabled() {
         return compileProtobufSchema(schema)
     }
-    if cached, ok := protobufSchemaCache.Load(schema); ok {
-        return cached.(*ParsedProtobufSchema), nil
+    if cached, ok := protobufSchemaCache.Get(schema); ok {
+        return cached, nil
     }
     parsed, err := compileProtobufSchema(schema)
     if err != nil {
         return nil, err
     }
-    actual, _ := protobufSchemaCache.LoadOrStore(schema, parsed)
-    return actual.(*ParsedProtobufSchema), nil
+    protobufSchemaCache.Add(schema, parsed)
+    return parsed, nil
 }
 ```
 
 **Results:**
 
-| Benchmark                                 | Before    | After   | Change                     |
-| ----------------------------------------- | --------- | ------- | -------------------------- |
-| `ParseProtobufSchema` alone (ns/op)       | 14,514 ns | 8.5 ns  | **-99.94%**                |
-| `ParseProtobufSchema` (B/op)              | 34,865 B  | 0 B     | **-100%** (pure cache hit) |
-| `DecodeProtobufMessage` (ns/op)           | —         | —       | N/A                        |
-| `DecodeProtobufMessage` (allocs/op)       | —         | —       | N/A                        |
-| Full pipeline `ProcessMessage` (Protobuf) | 18.6 µs   | 1.49 µs | **-92.0%**                 |
+| Benchmark                                 | Before    | After   | Change     |
+| ----------------------------------------- | --------- | ------- | ---------- |
+| `DecodeProtobufMessage_Plain` (ns/op)     | 15,653 ns | 574 ns  | **-96.3%** |
+| `DecodeProtobufMessage_Plain` (B/op)      | 35,862 B  | 997 B   | **-97.2%** |
+| `DecodeProtobufMessage_Plain` (allocs/op) | 250       | 14      | **-94.4%** |
+| Full pipeline `ProcessMessage` (Protobuf) | 19.07 µs  | 1.53 µs | **-92.0%** |
 
-Translated to single-threaded, full-pipeline throughput: **~53.7k msg/s → ~672k msg/s (~12.5x)**. This was the single biggest win in the whole investigation — schema recompilation, not the actual byte decoding, was almost the entire cost.
+Translated to single-threaded, full-pipeline throughput: **~52k msg/s -> ~656k msg/s (~12.5x)**. This was the single biggest win in the whole investigation - schema recompilation, not byte decoding itself, was almost the entire cost.
 
 As a sanity check, JSON and plaintext benchmarks (which share no code with the Avro/Protobuf decode path) were unaffected by these two fixes — a useful control group confirming the fixes are properly isolated.
 
@@ -122,11 +127,7 @@ func (sm *StreamManager) sortedFlatKeys(flat map[string]interface{}) []string {
     if !perfflags.FieldOrderCache.Disabled() {
         sm.mu.RLock()
         hit := sm.flatKeySetMatchesLocked(flat)
-        var cached []string
-        if hit {
-            cached = make([]string, len(sm.flatKeyOrder))
-            copy(cached, sm.flatKeyOrder)
-        }
+        cached := sm.flatKeyOrder
         sm.mu.RUnlock()
         if hit {
             return cached
@@ -139,12 +140,12 @@ func (sm *StreamManager) sortedFlatKeys(flat map[string]interface{}) []string {
 
 **Results — and this is where I want to be honest rather than sell a bigger win than what's real:**
 
-| Field count               | Before   | After    | Change                |
-| ------------------------- | -------- | -------- | --------------------- |
-| 20 fields (typical topic) | 3.647 µs | 3.640 µs | **~0%, within noise** |
-| 100 fields (wide topic)   | 18.64 µs | 15.75 µs | **-15.5% (p=0.002)**  |
+| Field count               | Before   | After    | Change               |
+| ------------------------- | -------- | -------- | -------------------- |
+| 20 fields (typical topic) | 3.855 µs | 3.543 µs | **-8.1% (p=0.002)**  |
+| 100 fields (wide topic)   | 19.15 µs | 16.12 µs | **-15.8% (p=0.002)** |
 
-At a typical field count, the locking and defensive-copy overhead on a cache hit roughly cancels out the savings from skipping `sort.Strings`. The fix only pays off once a message has a wide schema (tens to hundreds of fields), where sorting cost grows faster than the fixed overhead of a cache check. If your topics have narrow schemas, this fix won't move the needle for you — and that's a useful thing to know before assuming every optimization is universally worth it.
+At typical field counts the win is now measurable, but still smaller than wide-schema cases. As schema width grows, sorting cost grows faster than cache-check overhead, so the relative gain increases.
 
 ---
 
@@ -170,6 +171,13 @@ func (f *Flag) SetDisabledForTest(disabled bool) { f.value.Store(disabled) }
 ```
 
 `Disabled()` is checked at the start of each optimized code path; `SetDisabledForTest` lets benchmarks toggle behavior in-process (used to produce the before/after numbers above without needing two separate benchmark binaries). In production, only the environment variable matters.
+
+Because the schema caches are now bounded, two optional sizing knobs are available:
+
+| Setting                                           | Default | Meaning                                                 |
+| ------------------------------------------------- | ------- | ------------------------------------------------------- |
+| `KAFKA_DS_PERF_AVRO_CODEC_CACHE_MAX_ENTRIES`      | `256`   | Max compiled Avro codecs retained in LRU cache          |
+| `KAFKA_DS_PERF_PROTOBUF_SCHEMA_CACHE_MAX_ENTRIES` | `256`   | Max compiled Protobuf descriptors retained in LRU cache |
 
 Example: reproduce the pre-fix Avro decode behavior yourself:
 
@@ -199,6 +207,19 @@ Profiling `ProcessMessage`'s JSON decode path showed that `FieldBuilder.AddValue
 The reason this wasn't touched: the plugin deliberately always builds _nullable_ field types, even for non-null values, so that a field's Go type stays consistent across the one-frame-per-message live stream — Grafana Live requires stable schema across appended frames. Switching to non-nullable slices would save an allocation per field, but risks breaking that schema stability if a later message needs to send a null value for the same field. That's a real risk I can't verify without an end-to-end Grafana Live test harness, so it wasn't shipped speculatively.
 
 The higher-leverage architectural lever here is to batch compatible Kafka message frames into small multi-row frames before send, amortizing `FrameToJSON` and packet overhead. That is now implemented behind `KAFKA_DS_PERF_DISABLE_STREAM_MICROBATCH` (enabled by default; disable to reproduce pre-fix one-frame-per-message behavior).
+
+### Not shipped in this stage (next candidates)
+
+These are promising but were intentionally left for a later stage:
+
+1. **Optimization #3: remove per-field lock overhead in `FieldBuilder` on single-consumer stream path.**
+   Today each field goes through `AddValueToFrame` with a mutex lock/unlock. In `RunStream`, only one goroutine builds frames, so this is mostly uncontended overhead. A safe follow-up is a lock-free fast path for single-stream ownership, while preserving the current locked path for shared/concurrent call sites.
+2. **Optimization #4: parallel decode/transform workers with ordering guarantees.**
+   Current drain loop is single-threaded by design. A worker pool can raise throughput further, but must preserve partition ordering and controlled backpressure before `SendFrame`.
+3. **Schema-registry request de-duplication (`singleflight`) for cold-cache bursts.**
+   First hits of same schema/subject from concurrent readers can still duplicate outbound HTTP calls. Collapsing in-flight lookups would reduce startup spikes.
+4. **Allocation trimming in flatten/build path (`sync.Pool` for temporary maps/slices).**
+   Useful for very wide JSON messages, but needs careful profiling and contention checks to avoid pool churn regressions.
 
 ---
 
@@ -315,13 +336,13 @@ benchstat /tmp/workflow-before-clean.txt /tmp/workflow-after-clean.txt
 
 | Case             |     Before |      After |       Change |
 | ---------------- | ---------: | ---------: | -----------: |
-| `plaintext`      |     558.2k |     813.2k |  **+45.69%** |
-| `lineprotocol`   |     25.51k |     27.01k |   **+5.87%** |
-| `avro`           |     100.9k |     427.8k | **+323.83%** |
-| `protobuf`       |     47.33k |    405.07k | **+755.91%** |
-| `json_20fields`  |     115.7k |     156.7k |  **+35.41%** |
-| `json_100fields` |     24.27k |     34.03k |  **+40.26%** |
-| **geomean**      | **75.89k** | **165.2k** | **+117.64%** |
+| `plaintext`      |     662.1k |     886.0k |  **+33.81%** |
+| `lineprotocol`   |     29.37k |     29.66k |      **~0%** |
+| `avro`           |     122.4k |     457.0k | **+273.25%** |
+| `protobuf`       |     47.39k |    451.85k | **+853.53%** |
+| `json_20fields`  |     115.8k |     172.5k |  **+48.97%** |
+| `json_100fields` |     24.21k |     37.62k |  **+55.35%** |
+| **geomean**      | **82.55k** | **181.0k** | **+119.32%** |
 
 Interpretation:
 
@@ -333,30 +354,59 @@ Interpretation:
 
 Using paired profiles on `BenchmarkWorkflow/sendframe_json/json_100fields`:
 
-- CPU cumulative in `data.FrameToJSON`: **11.58% -> 2.06%**.
-- CPU cost in `json-iterator` string/object writing dropped out of top hotspots (`WriteString`/`WriteObjectField` were significant before).
-- Allocation cumulative in `data.FrameToJSON`: **13.73% -> 6.07%**.
-- Dominant allocator remains `FieldBuilder.AddValueToFrame` (still the largest single hotspot), but per-message serialization overhead is substantially reduced.
-- New expected overhead appears in batching helpers (`frameMicroBatcher.AddFrames`, `appendFrameRows`, `Frame.RowCopy`) — this is the trade-off that buys the large packet-rate reduction and throughput gain.
+- CPU cumulative in `data.FrameToJSON`: **17.19% -> 5.53%**.
+- CPU cost in `json-iterator` string/object writing (`WriteString`/`WriteObjectField`) drops noticeably after batching.
+- Allocation cumulative in `data.FrameToJSON` (`alloc_objects`): **15.50% -> 5.84%**.
+- Dominant allocator remains `FieldBuilder.AddValueToFrame`, but per-message serialization overhead is substantially reduced.
+- Expected new overhead appears in batching helpers (`frameMicroBatcher.AddFrames`, `appendFrameRows`, `Frame.RowCopy`) — this is the trade-off that buys the large packet-rate reduction and throughput gain.
+
+### Memory profile result (explicit)
+
+To make memory effects as explicit as the CPU profile, here is one concrete paired run of the same case (`BenchmarkWorkflow/sendframe_json/json_100fields`, n=1):
+
+- `alloc_objects`: `data.FrameToJSON` cumulative **15.10% -> 6.90%**.
+- `alloc_space`: `backend.(*StreamSender).SendFrame`/`data.FrameToJSON` path cumulative **40.06% -> 12.48%**.
+- Benchmark memory metrics: **40,598 B/op -> 35,839 B/op** (~11.7% less allocated bytes/op), with **834 allocs/op -> 869 allocs/op** (~4.2% more alloc calls/op) due to expected row-copy batching overhead.
+
+Reproduce those memory deltas directly:
+
+```bash
+# After (all fixes enabled)
+go test -run '^$' -bench '^BenchmarkWorkflow/sendframe_json/json_100fields$' -benchmem \
+    -count=1 -memprofile /tmp/workflow-after.mem.prof ./pkg/plugin/...
+
+# Before (all fixes disabled)
+KAFKA_DS_PERF_DISABLE_AVRO_CODEC_CACHE=true \
+KAFKA_DS_PERF_DISABLE_PROTOBUF_SCHEMA_CACHE=true \
+KAFKA_DS_PERF_DISABLE_FIELD_ORDER_CACHE=true \
+KAFKA_DS_PERF_DISABLE_STREAM_MICROBATCH=true \
+go test -run '^$' -bench '^BenchmarkWorkflow/sendframe_json/json_100fields$' -benchmem \
+    -count=1 -memprofile /tmp/workflow-before.mem.prof ./pkg/plugin/...
+
+go tool pprof -top -alloc_objects /tmp/workflow-before.mem.prof
+go tool pprof -top -alloc_objects /tmp/workflow-after.mem.prof
+go tool pprof -top -alloc_space /tmp/workflow-before.mem.prof
+go tool pprof -top -alloc_space /tmp/workflow-after.mem.prof
+```
 
 ### On-paper catch-up estimate for loadgen rates
 
 From the same `sendframe_json` benchmark medians above, the plugin's backend processing+serialization capacity (single benchmark worker, no external network/UI rendering overhead) is approximately:
 
-- `plaintext`: ~813k msg/s
-- `avro`: ~428k msg/s
-- `protobuf`: ~405k msg/s
-- `json` (default loadgen shape, `-json-fields=20`): ~157k msg/s
-- `json` wide (`-json-fields=100`): ~34k msg/s
-- `lineprotocol`: ~27k msg/s
+- `plaintext`: ~886k msg/s
+- `avro`: ~457k msg/s
+- `protobuf`: ~452k msg/s
+- `json` (default loadgen shape, `-json-fields=20`): ~173k msg/s
+- `json` wide (`-json-fields=100`): ~38k msg/s
+- `lineprotocol`: ~30k msg/s
 
-So, **on paper**, for the loadgen default (`-format json -json-fields=20`), the plugin can catch up at about **157k msg/s** in this Layer A setup after fixes.
+So, **on paper**, for the loadgen default (`-format json -json-fields=20`), the plugin can catch up at about **173k msg/s** in this Layer A setup after fixes.
 
 For practical sustained budgeting with headroom (GC jitter, Kafka/network variance), a conservative target is ~70% of those values:
 
-- default JSON20: **~110k msg/s**
-- JSON100: **~24k msg/s**
-- line protocol: **~19k msg/s**
+- default JSON20: **~121k msg/s**
+- JSON100: **~26k msg/s**
+- line protocol: **~21k msg/s**
 
 These are backend-only capacity estimates; end-to-end Grafana Live behavior (network, UI subscribers, dashboard query load) can lower sustained catch-up in real deployments.
 
@@ -374,7 +424,7 @@ go test -bench=. -benchmem -run='^$' ./pkg/plugin/... ./pkg/kafka_client/...
 
 # Reproduce pre-fix behavior for any single fix
 KAFKA_DS_PERF_DISABLE_AVRO_CODEC_CACHE=true go test -bench='^BenchmarkDecodeAvroMessage$' -benchmem -run='^$' ./pkg/kafka_client/...
-KAFKA_DS_PERF_DISABLE_PROTOBUF_SCHEMA_CACHE=true go test -bench='^BenchmarkParseProtobufSchema$' -benchmem -run='^$' ./pkg/kafka_client/...
+KAFKA_DS_PERF_DISABLE_PROTOBUF_SCHEMA_CACHE=true go test -bench='^BenchmarkDecodeProtobufMessage_Plain$' -benchmem -run='^$' ./pkg/kafka_client/...
 KAFKA_DS_PERF_DISABLE_FIELD_ORDER_CACHE=true go test -bench='^BenchmarkProcessMessage_JSON_Wide100$' -benchmem -run='^$' ./pkg/plugin/...
 KAFKA_DS_PERF_DISABLE_STREAM_MICROBATCH=true go test -run '^$' -bench BenchmarkWorkflow -benchmem ./pkg/plugin/...
 
@@ -396,8 +446,8 @@ go run . -broker localhost:9094 -topic loadgen -format protobuf -duration 30s -w
 
 ## Takeaways
 
-- Two schema-recompilation bugs (Avro, Protobuf) accounted for the overwhelming majority of decode cost — cheap to fix, huge payoff (4.3x-12.5x on the affected paths), and they were only findable by profiling, not by reading the code and guessing.
-- Not every "obvious" optimization pays off equally: the field-order cache is real but genuinely schema-width-dependent — reporting that honestly is more useful than rounding up.
-- Making every fix reversible via a feature flag turned "trust me, it's faster" into "here's the exact command to prove it yourself," which is a much better place to leave both a user's audience and a plugin's contributors.
+- Two schema-recompilation bugs (Avro, Protobuf) accounted for the overwhelming majority of decode cost - cheap to fix, huge payoff (4.3x-12.5x on affected paths), and only obvious once profiled.
+- Field-order caching helps both typical and wide schemas, but wide schemas still benefit more.
+- Bounded caches and explicit feature flags make optimization safer operationally: fast by default, reproducible pre-fix behavior on demand, and controlled memory growth under schema churn.
 
 If you maintain a Grafana datasource plugin (or any hot-path message-processing service), the same recipe applies: benchmark before touching anything, profile to find the _actual_ line costing time, fix only what the data justifies, and keep a way to switch back.

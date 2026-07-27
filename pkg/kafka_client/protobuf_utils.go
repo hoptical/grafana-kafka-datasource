@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"sync"
 
 	"github.com/bufbuild/protocompile"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
@@ -35,7 +34,13 @@ type ParsedProtobufSchema struct {
 //
 // Set KAFKA_DS_PERF_DISABLE_PROTOBUF_SCHEMA_CACHE=true to disable this cache
 // and reproduce the pre-fix behavior (see pkg/perfflags).
-var protobufSchemaCache sync.Map // map[string]*ParsedProtobufSchema
+//
+// Cache size is bounded to avoid unbounded growth in long-lived processes with
+// high schema churn. Override size with
+// KAFKA_DS_PERF_PROTOBUF_SCHEMA_CACHE_MAX_ENTRIES (default: 256).
+var protobufSchemaCache = newLRUCache[*ParsedProtobufSchema](
+	cacheSizeFromEnv("KAFKA_DS_PERF_PROTOBUF_SCHEMA_CACHE_MAX_ENTRIES", 256),
+)
 
 // ParseProtobufSchema parses a .proto schema and returns a default message descriptor.
 // Imports are not supported for inline schemas; users should inline dependencies.
@@ -47,8 +52,8 @@ func ParseProtobufSchema(schema string) (*ParsedProtobufSchema, error) {
 		return compileProtobufSchema(schema)
 	}
 
-	if cached, ok := protobufSchemaCache.Load(schema); ok {
-		return cached.(*ParsedProtobufSchema), nil
+	if cached, ok := protobufSchemaCache.Get(schema); ok {
+		return cached, nil
 	}
 
 	parsed, err := compileProtobufSchema(schema)
@@ -56,8 +61,8 @@ func ParseProtobufSchema(schema string) (*ParsedProtobufSchema, error) {
 		return nil, err
 	}
 
-	actual, _ := protobufSchemaCache.LoadOrStore(schema, parsed)
-	return actual.(*ParsedProtobufSchema), nil
+	protobufSchemaCache.Add(schema, parsed)
+	return parsed, nil
 }
 
 // compileProtobufSchema compiles schema from scratch, bypassing any cache.
