@@ -143,6 +143,33 @@ Null reproduction: All shapes periodically set fields like `value1` or `value2` 
 - `-schema-registry-pass <pass>`: Schema Registry basic-auth password (optional)
 - `-transactional-id <id>`: Enable transactional producer mode
 
+## Load generator (`loadgen`)
+
+`producer.go` above is intentionally low-rate (~1-2 msg/s) for demoing the
+plugin in Grafana. `loadgen/` is a separate, high-throughput synthetic
+producer built for load/perf testing the plugin's consume-and-decode path -
+it can sustain hundreds of thousands of messages/sec per format.
+
+```bash
+cd example/go/loadgen
+go run . -broker localhost:9094 -topic loadgen -format json -duration 30s -workers 4
+```
+
+Key flags:
+
+- `-format <json|avro|protobuf|lineprotocol|plaintext>`: message format (default: json)
+- `-workers <n>`: concurrent producer goroutines (default: 4)
+- `-rate <msgs/sec>`: target aggregate rate across all workers; `0` (default) means max speed
+- `-duration <dur>`: how long to run, e.g. `30s`, `2m`; `0` runs until Ctrl+C
+- `-json-fields <n>`: extra numeric fields to pad JSON payloads with (default: 20) - use a large value (e.g. 100) to test wide-schema topics
+- `-batch-size`, `-batch-timeout`, `-required-acks`, `-async`: `kafka.Writer` tuning knobs
+
+It prints periodic throughput stats and a final summary (confirmed messages,
+errors, msgs/sec, MB/s). The Avro/Protobuf schemas it produces
+(`loadgen/payload.go`) are printed nowhere by the tool itself - copy them
+from that file into the plugin's datasource query editor (inline schema, no
+schema registry needed) to consume and decode this traffic in Grafana.
+
 See the Go source for more advanced options and sample payloads.
 
 ## Python

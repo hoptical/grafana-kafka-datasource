@@ -228,6 +228,22 @@ More screenshots and recordings (click to open):
 
 Want to test the plugin with realistic Kafka messages? Use the included sample producers to generate JSON, Avro, or Protobuf messages with various structures and schema configurations. For detailed usage, see the [example README](https://github.com/hoptical/grafana-kafka-datasource/blob/main/example/README.md). To test Plaintext mode, produce any bytes (for example JSON bytes) and select `Plaintext` in the query editor to view raw payload text.
 
+## Performance Flags
+
+Performance optimizations are enabled by default. You can disable each optimization independently with environment variables (truthy values such as `true`, `1`, `t`):
+
+- `KAFKA_DS_PERF_DISABLE_AVRO_CODEC_CACHE`: disable Avro codec caching
+- `KAFKA_DS_PERF_DISABLE_PROTOBUF_SCHEMA_CACHE`: disable Protobuf schema caching
+- `KAFKA_DS_PERF_DISABLE_FIELD_ORDER_CACHE`: disable cached flattened-field ordering
+- `KAFKA_DS_PERF_DISABLE_STREAM_MICROBATCH`: disable stream micro-batching
+
+Schema caches are bounded. Optional tuning knobs:
+
+- `KAFKA_DS_PERF_AVRO_CODEC_CACHE_MAX_ENTRIES` (default: `256`)
+- `KAFKA_DS_PERF_PROTOBUF_SCHEMA_CACHE_MAX_ENTRIES` (default: `256`)
+
+For benchmark methodology, before/after numbers, profiling commands, and architecture notes, see [Performance Optimizations](docs/PERFORMANCE_OPTIMIZATIONS.md).
+
 ## FAQ & Troubleshooting
 
 - **Can I use this with any Kafka broker?** Yes, supports Apache Kafka v0.11+ and compatible brokers.
@@ -241,6 +257,7 @@ Want to test the plugin with realistic Kafka messages? Use the included sample p
 ## Documentation & Links
 
 - [Sample Producers](https://github.com/hoptical/grafana-kafka-datasource/blob/main/example/README.md)
+- [Performance Optimizations](docs/PERFORMANCE_OPTIMIZATIONS.md)
 - [Changelog](https://github.com/hoptical/grafana-kafka-datasource/blob/main/CHANGELOG.md)
 - [Contribution Guidelines](https://github.com/hoptical/grafana-kafka-datasource/blob/main/CONTRIBUTING.md)
 - [Code of Conduct](https://github.com/hoptical/grafana-kafka-datasource/blob/main/CODE_OF_CONDUCT.md)

@@ -19,6 +19,7 @@ import (
 	"github.com/segmentio/kafka-go"
 
 	"github.com/hoptical/grafana-kafka-datasource/pkg/kafka_client"
+	"github.com/hoptical/grafana-kafka-datasource/pkg/perfflags"
 )
 
 // streamMessageBuffer defines the capacity of the buffered channel used to fan-in
@@ -705,15 +706,57 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 		"topic", qm.Topic,
 		"partitions", partitions)
 
+	microBatchEnabled := !perfflags.StreamMicroBatch.Disabled()
+	var batcher *frameMicroBatcher
+	var flushTicker *time.Ticker
+	var flushTickerCh <-chan time.Time
+	if microBatchEnabled {
+		batcher = newFrameMicroBatcher(defaultMicroBatchMaxRows)
+		flushTicker = time.NewTicker(defaultMicroBatchMaxLatency)
+		flushTickerCh = flushTicker.C
+		defer flushTicker.Stop()
+		log.DefaultLogger.Debug("RunStream micro-batching enabled",
+			"maxRows", defaultMicroBatchMaxRows,
+			"maxLatency", defaultMicroBatchMaxLatency.String())
+	}
+
+	sendFrames := func(frames []*data.Frame, reason string) {
+		sentCount := 0
+		for _, frame := range frames {
+			err = sender.SendFrame(frame, data.IncludeAll)
+			if err != nil {
+				log.DefaultLogger.Error("Error sending frame",
+					"reason", reason,
+					"error", err)
+				continue
+			}
+			sentCount++
+		}
+		if sentCount > 0 {
+			log.DefaultLogger.Debug("Sent frames to Grafana",
+				"reason", reason,
+				"sentCount", sentCount,
+				"frameCount", len(frames))
+		}
+	}
+
 	// Main processing loop
 	messageCount := 0
 	for {
 		select {
 		case <-ctx.Done():
+			if microBatchEnabled {
+				sendFrames(batcher.Flush(), "context_done_flush")
+			}
 			log.DefaultLogger.Debug("Stream context done, finishing",
 				"path", req.Path,
 				"totalMessages", messageCount)
 			return nil
+
+		case <-flushTickerCh:
+			if microBatchEnabled {
+				sendFrames(batcher.Flush(), "ticker_flush")
+			}
 
 		case msgWithPartition := <-messagesCh:
 			messageCount++
@@ -751,32 +794,23 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 				continue
 			}
 
-			sentCount := 0
-			for frameIdx, frame := range frames {
-				err = sender.SendFrame(frame, data.IncludeAll)
-				if err != nil {
-					log.DefaultLogger.Error("Error sending frame",
-						"messageNumber", messageCount,
-						"frameIndex", frameIdx,
-						"partition", msgWithPartition.partition,
-						"error", err)
-					continue
-				}
-				sentCount++
+			if !microBatchEnabled || streamConfig.MessageFormat == "lineprotocol" {
+				sendFrames(frames, "immediate")
+				continue
 			}
 
-			// Only log success when at least one frame actually made it to Grafana;
-			// otherwise every SendFrame failure was already logged above as an
-			// error, and an unconditional success log here would mask a total
-			// send failure for this message.
-			if sentCount > 0 {
-				log.DefaultLogger.Debug("Sent frames to Grafana",
+			ready, batchErr := batcher.AddFrames(frames)
+			if batchErr != nil {
+				log.DefaultLogger.Error("Failed to add frames to micro-batch; falling back to immediate send",
 					"messageNumber", messageCount,
 					"partition", msgWithPartition.partition,
 					"offset", msgWithPartition.msg.Offset,
-					"sentCount", sentCount,
-					"frameCount", len(frames))
+					"error", batchErr)
+				sendFrames(frames, "batch_fallback")
+				continue
 			}
+
+			sendFrames(ready, "row_cap_flush")
 		}
 	}
 }

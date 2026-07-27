@@ -9,8 +9,46 @@ import (
 	"time"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
+	"github.com/hoptical/grafana-kafka-datasource/pkg/perfflags"
 	"github.com/linkedin/goavro/v2"
 )
+
+// avroCodecCache caches compiled Avro codecs by schema string. Compiling a
+// codec (goavro.NewCodec) is comparatively expensive - benchmarks show it
+// dominates per-message Avro decode cost (>90% of the time and allocations)
+// - while a *goavro.Codec is immutable and safe for concurrent reuse once
+// built, so it only needs to be compiled once per distinct schema.
+//
+// Set KAFKA_DS_PERF_DISABLE_AVRO_CODEC_CACHE=true to disable this cache and
+// reproduce the pre-fix behavior (see pkg/perfflags).
+//
+// Cache size is bounded to avoid unbounded growth in long-lived processes with
+// high schema churn. Override size with
+// KAFKA_DS_PERF_AVRO_CODEC_CACHE_MAX_ENTRIES (default: 256).
+var avroCodecCache = newLRUCache[*goavro.Codec](
+	cacheSizeFromEnv("KAFKA_DS_PERF_AVRO_CODEC_CACHE_MAX_ENTRIES", 256),
+)
+
+// getAvroCodec returns a cached compiled codec for schema, compiling and
+// caching it on first use. When perfflags.AvroCodecCache is disabled, it
+// always compiles a fresh codec, matching the plugin's pre-fix behavior.
+func getAvroCodec(schema string) (*goavro.Codec, error) {
+	if perfflags.AvroCodecCache.Disabled() {
+		return goavro.NewCodec(schema)
+	}
+
+	if cached, ok := avroCodecCache.Get(schema); ok {
+		return cached, nil
+	}
+
+	codec, err := goavro.NewCodec(schema)
+	if err != nil {
+		return nil, err
+	}
+
+	avroCodecCache.Add(schema, codec)
+	return codec, nil
+}
 
 func truncatePreview(body []byte, max int) string {
 	if len(body) <= max {
@@ -178,9 +216,9 @@ func DecodeAvroMessage(data []byte, schema string) (interface{}, error) {
 		avroData = data
 	}
 
-	// Parse the Avro schema
+	// Parse the Avro schema (cached - see getAvroCodec)
 	log.DefaultLogger.Debug("Parsing Avro schema")
-	codec, err := goavro.NewCodec(schema)
+	codec, err := getAvroCodec(schema)
 	if err != nil {
 		log.DefaultLogger.Error("Failed to parse Avro schema", "error", err)
 		return nil, fmt.Errorf("failed to parse Avro schema: %w", err)
