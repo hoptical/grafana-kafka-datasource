@@ -1,8 +1,8 @@
 # Changelog
 
-## [v1.8.0](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.8.0)
+## [v1.7.1](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.7.1)
 
-[Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v1.7.0...v1.8.0)
+[Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v1.7.0...v1.7.1)
 
 - Feat: Upgrade Go to v1.26.5 and remove retired badge ([#152](https://github.com/hoptical/grafana-kafka-datasource/pull/152))
 - Docs: Improve documentation images ([#153](https://github.com/hoptical/grafana-kafka-datasource/pull/153))
