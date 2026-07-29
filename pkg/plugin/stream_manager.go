@@ -1221,12 +1221,14 @@ func (sm *StreamManager) ValidateAndGetPartitions(ctx context.Context, qm queryM
 			return nil, sm.handleTopicError(err, qm.Topic)
 		}
 		log.DefaultLogger.Debug("Available partitions", "topic", qm.Topic, "partitions", allPartitions)
-		sel := int(v)
 		count := len(allPartitions)
-		log.DefaultLogger.Debug("Partition validation", "selected", sel, "count", count, "validRange", fmt.Sprintf("[0..%d)", count))
-		if sel < 0 || sel >= count {
-			return nil, fmt.Errorf("partition %d out of range [0..%d) for topic %s", sel, count, qm.Topic)
+		log.DefaultLogger.Debug("Partition validation", "selected", v, "count", count, "validRange", fmt.Sprintf("[0..%d)", count))
+		// Compare while still a float64: converting an out-of-range float to int is
+		// implementation-defined (Go spec), so bounds must be checked before narrowing.
+		if v < 0 || v >= float64(count) {
+			return nil, fmt.Errorf("partition %v out of range [0..%d) for topic %s", v, count, qm.Topic)
 		}
+		sel := int(v)
 		result := []int32{allPartitions[sel]}
 		log.DefaultLogger.Debug("Returning partitions for single partition", "partitions", result)
 		return result, nil
