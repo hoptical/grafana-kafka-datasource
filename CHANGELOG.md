@@ -9,6 +9,8 @@
 - Chore: use static links for the images in the readme ([#154](https://github.com/hoptical/grafana-kafka-datasource/pull/154))
 - Feat: add performance caching optimizations with benchmarks and load generator ([#156](https://github.com/hoptical/grafana-kafka-datasource/pull/156))
 - Docs: add the claude instruction doc ([#157](https://github.com/hoptical/grafana-kafka-datasource/pull/157))
+- Docs: Update README links and changelog for version 1.7.1 ([#158](https://github.com/hoptical/grafana-kafka-datasource/pull/158))
+- Feat: Upgrade dependencies and improve safety in protobuf handling ([#159](https://github.com/hoptical/grafana-kafka-datasource/pull/159))
 
 ## [v1.7.0](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.7.0)
 
