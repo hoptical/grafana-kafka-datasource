@@ -163,13 +163,18 @@ func parseMessageIndexes(data []byte) ([]int, []byte, error) {
 	// (varint count + N varint indexes), with a single-varint(0) optimization
 	// for the default first message. We also accept a legacy terminated format
 	// for compatibility with non-standard encoders.
-	indexes, remaining, ok := parseCountPrefixedIndexes(data)
+	indexes, remaining, ok, err := parseCountPrefixedIndexes(data)
+	if err != nil {
+		return nil, nil, err
+	}
 	if ok {
 		return indexes, remaining, nil
 	}
 
 	// Fallback: legacy terminated format.
-	if indexes, remaining, ok = parseTerminatedIndexes(data); ok {
+	if indexes, remaining, ok, err = parseTerminatedIndexes(data); err != nil {
+		return nil, nil, err
+	} else if ok {
 		logMessageIndexFallback("parseTerminatedIndexes", data, remaining, indexes, "not matched", "matched")
 		return indexes, remaining, nil
 	}
@@ -184,57 +189,90 @@ func parseMessageIndexes(data []byte) ([]int, []byte, error) {
 		return []int{0}, data[n:], nil
 	}
 	// Non-zero single varint is non-standard - warn and treat as 0-based index
-	indexes = []int{int(index)}
+	indexInt, ok := safeUint64ToInt(index)
+	if !ok {
+		return nil, nil, fmt.Errorf("protobuf message index %d out of range", index)
+	}
+	indexes = []int{indexInt}
 	remaining = data[n:]
 	logMessageIndexFallback("single-varint-nonzero", data, remaining, indexes, "not matched", "not matched")
 	return indexes, remaining, nil
 }
 
-func parseTerminatedIndexes(data []byte) ([]int, []byte, bool) {
+// parseTerminatedIndexes reports a match via ok=true, a definite non-match via
+// ok=false/err=nil (caller should try the next format), or a match on
+// structure with corrupt content via err!=nil (caller must not fall through,
+// since silently reinterpreting the same bytes under a different format would
+// mask the corruption instead of rejecting it).
+func parseTerminatedIndexes(data []byte) ([]int, []byte, bool, error) {
 	indexes := make([]int, 0, 4)
 	offset := 0
 	for offset < len(data) {
 		value, n := protowire.ConsumeVarint(data[offset:])
 		if n <= 0 {
-			return nil, nil, false
+			return nil, nil, false, nil
 		}
 		offset += n
 		if value == 0 {
 			if len(indexes) == 0 {
-				return nil, nil, false
+				return nil, nil, false, nil
 			}
-			return indexes, data[offset:], true
+			return indexes, data[offset:], true, nil
 		}
-		indexes = append(indexes, int(value))
+		valueInt, ok := safeUint64ToInt(value)
+		if !ok {
+			return nil, nil, false, fmt.Errorf("protobuf terminated message index %d out of range", value)
+		}
+		indexes = append(indexes, valueInt)
 		if len(indexes) > 16 {
-			return nil, nil, false
+			return nil, nil, false, nil
 		}
 	}
 
-	return nil, nil, false
+	return nil, nil, false, nil
 }
 
-func parseCountPrefixedIndexes(data []byte) ([]int, []byte, bool) {
+// parseCountPrefixedIndexes has the same three-way contract as
+// parseTerminatedIndexes: ok=true is a match, ok=false/err=nil means "try the
+// next format," and err!=nil means the count prefix was structurally valid
+// but one of its indexes overflowed - a hard failure, not a format mismatch.
+func parseCountPrefixedIndexes(data []byte) ([]int, []byte, bool, error) {
 	count, n := protowire.ConsumeVarint(data)
 	if n <= 0 || count == 0 || count > 10 {
-		return nil, nil, false
+		return nil, nil, false, nil
+	}
+	countInt, ok := safeUint64ToInt(count)
+	if !ok {
+		return nil, nil, false, nil
 	}
 
-	indexes := make([]int, 0, count)
+	indexes := make([]int, 0, countInt)
 	offset := n
-	for i := 0; i < int(count); i++ {
+	for i := 0; i < countInt; i++ {
 		idx, m := protowire.ConsumeVarint(data[offset:])
 		if m <= 0 {
-			return nil, nil, false
+			return nil, nil, false, nil
 		}
-		indexes = append(indexes, int(idx))
+		idxInt, ok := safeUint64ToInt(idx)
+		if !ok {
+			return nil, nil, false, fmt.Errorf("protobuf count-prefixed message index %d out of range", idx)
+		}
+		indexes = append(indexes, idxInt)
 		offset += m
 		if offset > len(data) {
-			return nil, nil, false
+			return nil, nil, false, nil
 		}
 	}
 
-	return indexes, data[offset:], true
+	return indexes, data[offset:], true, nil
+}
+
+func safeUint64ToInt(v uint64) (int, bool) {
+	const maxInt = int(^uint(0) >> 1)
+	if v > uint64(maxInt) {
+		return 0, false
+	}
+	return int(v), true
 }
 
 func logMessageIndexFallback(fallback string, raw []byte, remaining []byte, indexes []int, countPrefixedStatus, terminatedStatus string) {

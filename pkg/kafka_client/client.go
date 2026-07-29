@@ -332,7 +332,7 @@ func (client *KafkaClient) NewConnection() error {
 	}
 
 	if client.SecurityProtocol == "SASL_SSL" || client.SecurityProtocol == "SSL" {
-		tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12, InsecureSkipVerify: client.TLSSkipVerify}
+		tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12, InsecureSkipVerify: client.TLSSkipVerify} // #nosec G402 -- datasource option is explicit and required for user-managed/self-signed deployments.
 		if client.ServerName != "" {
 			tlsConfig.ServerName = client.ServerName
 		}
@@ -642,7 +642,12 @@ func (client *KafkaClient) GetTopicPartitions(ctx context.Context, topicName str
 		return nil, err
 	}
 	ids := make([]int32, len(topic.Partitions))
+	const minInt32 = -1 << 31
+	const maxInt32 = 1<<31 - 1
 	for i, p := range topic.Partitions {
+		if p.ID < minInt32 || p.ID > maxInt32 {
+			return nil, fmt.Errorf("partition id %d out of int32 range for topic %s", p.ID, topicName)
+		}
 		ids[i] = int32(p.ID)
 	}
 	return ids, nil
