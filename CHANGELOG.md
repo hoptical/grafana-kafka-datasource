@@ -1,5 +1,15 @@
 # Changelog
 
+## [v1.8.0](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.8.0)
+
+[Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v1.7.0...v1.8.0)
+
+- Feat: Upgrade Go to v1.26.5 and remove retired badge ([#152](https://github.com/hoptical/grafana-kafka-datasource/pull/152))
+- Docs: Improve documentation images ([#153](https://github.com/hoptical/grafana-kafka-datasource/pull/153))
+- Chore: use static links for the images in the readme ([#154](https://github.com/hoptical/grafana-kafka-datasource/pull/154))
+- Feat: add performance caching optimizations with benchmarks and load generator ([#156](https://github.com/hoptical/grafana-kafka-datasource/pull/156))
+- Docs: add the claude instruction doc ([#157](https://github.com/hoptical/grafana-kafka-datasource/pull/157))
+
 ## [v1.7.0](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.7.0)
 
 [Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v1.6.0...v1.7.0)
