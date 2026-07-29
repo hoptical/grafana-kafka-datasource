@@ -184,7 +184,11 @@ func parseMessageIndexes(data []byte) ([]int, []byte, error) {
 		return []int{0}, data[n:], nil
 	}
 	// Non-zero single varint is non-standard - warn and treat as 0-based index
-	indexes = []int{int(index)}
+	indexInt, ok := safeUint64ToInt(index)
+	if !ok {
+		return nil, nil, fmt.Errorf("protobuf message index %d out of range", index)
+	}
+	indexes = []int{indexInt}
 	remaining = data[n:]
 	logMessageIndexFallback("single-varint-nonzero", data, remaining, indexes, "not matched", "not matched")
 	return indexes, remaining, nil
@@ -205,7 +209,11 @@ func parseTerminatedIndexes(data []byte) ([]int, []byte, bool) {
 			}
 			return indexes, data[offset:], true
 		}
-		indexes = append(indexes, int(value))
+		valueInt, ok := safeUint64ToInt(value)
+		if !ok {
+			return nil, nil, false
+		}
+		indexes = append(indexes, valueInt)
 		if len(indexes) > 16 {
 			return nil, nil, false
 		}
@@ -219,15 +227,23 @@ func parseCountPrefixedIndexes(data []byte) ([]int, []byte, bool) {
 	if n <= 0 || count == 0 || count > 10 {
 		return nil, nil, false
 	}
+	countInt, ok := safeUint64ToInt(count)
+	if !ok {
+		return nil, nil, false
+	}
 
-	indexes := make([]int, 0, count)
+	indexes := make([]int, 0, countInt)
 	offset := n
-	for i := 0; i < int(count); i++ {
+	for i := 0; i < countInt; i++ {
 		idx, m := protowire.ConsumeVarint(data[offset:])
 		if m <= 0 {
 			return nil, nil, false
 		}
-		indexes = append(indexes, int(idx))
+		idxInt, ok := safeUint64ToInt(idx)
+		if !ok {
+			return nil, nil, false
+		}
+		indexes = append(indexes, idxInt)
 		offset += m
 		if offset > len(data) {
 			return nil, nil, false
@@ -235,6 +251,14 @@ func parseCountPrefixedIndexes(data []byte) ([]int, []byte, bool) {
 	}
 
 	return indexes, data[offset:], true
+}
+
+func safeUint64ToInt(v uint64) (int, bool) {
+	const maxInt = int(^uint(0) >> 1)
+	if v > uint64(maxInt) {
+		return 0, false
+	}
+	return int(v), true
 }
 
 func logMessageIndexFallback(fallback string, raw []byte, remaining []byte, indexes []int, countPrefixedStatus, terminatedStatus string) {

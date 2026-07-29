@@ -75,6 +75,34 @@ func TestParseMessageIndexes_FallbackBranches(t *testing.T) {
 	}
 }
 
+func TestParseMessageIndexes_RejectsOverflowIndex(t *testing.T) {
+	data := protowire.AppendVarint(nil, ^uint64(0))
+
+	if _, _, err := parseMessageIndexes(data); err == nil {
+		t.Fatalf("expected overflow index to return error")
+	}
+}
+
+func TestParseCountPrefixedIndexes_RejectsOverflowIndex(t *testing.T) {
+	data := make([]byte, 0)
+	data = protowire.AppendVarint(data, 1)
+	data = protowire.AppendVarint(data, ^uint64(0))
+
+	if indexes, remaining, ok := parseCountPrefixedIndexes(data); ok || indexes != nil || remaining != nil {
+		t.Fatalf("expected overflow index to be rejected")
+	}
+}
+
+func TestParseTerminatedIndexes_RejectsOverflowIndex(t *testing.T) {
+	data := make([]byte, 0)
+	data = protowire.AppendVarint(data, ^uint64(0))
+	data = protowire.AppendVarint(data, 0)
+
+	if indexes, remaining, ok := parseTerminatedIndexes(data); ok || indexes != nil || remaining != nil {
+		t.Fatalf("expected overflow index to be rejected")
+	}
+}
+
 func TestResolveMessageByIndexPath_Branches(t *testing.T) {
 	schema := `syntax = "proto3";
 	message Parent {

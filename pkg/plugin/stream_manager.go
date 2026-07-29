@@ -1221,13 +1221,13 @@ func (sm *StreamManager) ValidateAndGetPartitions(ctx context.Context, qm queryM
 			return nil, sm.handleTopicError(err, qm.Topic)
 		}
 		log.DefaultLogger.Debug("Available partitions", "topic", qm.Topic, "partitions", allPartitions)
-		sel := int32(v)
-		count := int32(len(allPartitions))
+		sel := int(v)
+		count := len(allPartitions)
 		log.DefaultLogger.Debug("Partition validation", "selected", sel, "count", count, "validRange", fmt.Sprintf("[0..%d)", count))
 		if sel < 0 || sel >= count {
 			return nil, fmt.Errorf("partition %d out of range [0..%d) for topic %s", sel, count, qm.Topic)
 		}
-		result := []int32{sel}
+		result := []int32{allPartitions[sel]}
 		log.DefaultLogger.Debug("Returning partitions for single partition", "partitions", result)
 		return result, nil
 	case string:
