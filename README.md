@@ -242,7 +242,7 @@ Schema caches are bounded. Optional tuning knobs:
 - `KAFKA_DS_PERF_AVRO_CODEC_CACHE_MAX_ENTRIES` (default: `256`)
 - `KAFKA_DS_PERF_PROTOBUF_SCHEMA_CACHE_MAX_ENTRIES` (default: `256`)
 
-For benchmark methodology, before/after numbers, profiling commands, and architecture notes, see [Performance Optimizations](docs/PERFORMANCE_OPTIMIZATIONS.md).
+For benchmark methodology, before/after numbers, profiling commands, and architecture notes, see [Performance Optimizations](https://github.com/hoptical/grafana-kafka-datasource/blob/main/docs/PERFORMANCE_OPTIMIZATIONS.md).
 
 ## FAQ & Troubleshooting
 
@@ -257,10 +257,11 @@ For benchmark methodology, before/after numbers, profiling commands, and archite
 ## Documentation & Links
 
 - [Sample Producers](https://github.com/hoptical/grafana-kafka-datasource/blob/main/example/README.md)
-- [Performance Optimizations](docs/PERFORMANCE_OPTIMIZATIONS.md)
+- [Performance Optimizations](https://github.com/hoptical/grafana-kafka-datasource/blob/main/docs/PERFORMANCE_OPTIMIZATIONS.md)
 - [Changelog](https://github.com/hoptical/grafana-kafka-datasource/blob/main/CHANGELOG.md)
 - [Contribution Guidelines](https://github.com/hoptical/grafana-kafka-datasource/blob/main/CONTRIBUTING.md)
 - [Code of Conduct](https://github.com/hoptical/grafana-kafka-datasource/blob/main/CODE_OF_CONDUCT.md)
+- [Articles Series](https://hamedkarbasi.com/series/grafana-kafka-datasource-guides)
 
 ---
 
