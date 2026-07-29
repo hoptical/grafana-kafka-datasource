@@ -53,7 +53,7 @@
         "path": "img/config-authentication.png"
       }
     ],
-    "version": "1.7.0",
+    "version": "1.7.1",
     "updated": "%TODAY%"
   },
   "dependencies": {
