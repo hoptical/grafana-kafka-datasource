@@ -78,8 +78,8 @@ You can automatically configure the Kafka datasource using Grafana's provisionin
     - **Broker address** (e.g. `localhost:9094` or `kafka:9092`)
     - **Private Data Source Connect (PDC)** (optional; requires PDC to be configured in Grafana)
     - **Authentication** (SASL, SSL/TLS, optional)
-   - **Avro Schema Registry** (if using Avro format)
-   - **Timeout settings** (default: two seconds)
+    - **Avro Schema Registry** (if using Avro format)
+    - **Timeout settings** (default: two seconds)
 
 <a href="https://raw.githubusercontent.com/hoptical/grafana-kafka-datasource/ba3d10342aca7512c5679fcd7761e5b394094598/src/img/config-basic.png"><img src="https://raw.githubusercontent.com/hoptical/grafana-kafka-datasource/ba3d10342aca7512c5679fcd7761e5b394094598/src/img/config-basic.png" alt="Kafka basic datasource configuration" width="800"></a>
 

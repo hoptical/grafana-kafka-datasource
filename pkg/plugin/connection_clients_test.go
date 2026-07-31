@@ -19,3 +19,13 @@ func TestNewConnectionClients_PDCDisabled(t *testing.T) {
 		t.Fatal("expected no Kafka dial function when PDC is disabled")
 	}
 }
+
+func TestNewConnectionClients_PDCUnavailable(t *testing.T) {
+	_, err := newConnectionClients(context.Background(), backend.DataSourceInstanceSettings{}, true)
+	if err == nil {
+		t.Fatal("expected an error when PDC is enabled but unavailable")
+	}
+	if err.Error() != "PDC is enabled for the datasource but unavailable in Grafana" {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}

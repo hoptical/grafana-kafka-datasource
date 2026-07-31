@@ -240,7 +240,6 @@ func isTransactionControlRecord(key, value []byte) bool {
 }
 
 // NewKafkaClient creates a new KafkaClient instance.
-// dialFunc optionally routes Kafka broker connections through Grafana PDC.
 func NewKafkaClient(options Options) KafkaClient {
 	return newKafkaClient(options, nil)
 }
@@ -250,6 +249,8 @@ func NewKafkaClientWithDialFunc(options Options, dialFunc DialFunc) KafkaClient 
 	return newKafkaClient(options, dialFunc)
 }
 
+// newKafkaClient builds a KafkaClient. A non-nil dialFunc routes broker
+// connections through Grafana PDC; nil uses direct connections.
 func newKafkaClient(options Options, dialFunc DialFunc) KafkaClient {
 	// Build broker slice once
 	raw := strings.Split(options.BootstrapServers, ",")
