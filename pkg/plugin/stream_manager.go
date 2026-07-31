@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net/http"
 	"net/url"
 	"sort"
 	"strings"
@@ -24,20 +25,21 @@ import (
 
 // StreamManager handles the streaming logic for Kafka messages.
 type StreamManager struct {
-	client               KafkaClientAPI
-	flattenMaxDepth      int
-	flattenFieldCap      int
-	fieldBuilder         *FieldBuilder                      // Maintains type registry across messages
-	lpTagKeys            map[string]struct{}                // Union of line-protocol tag keys seen across messages (schema stability)
-	lpTagKeyOrder        []string                           // Tag keys in first-seen order, so frame columns keep a stable position
-	lpTagCapWarned       bool                               // Guards a one-time warning once the tag-key cap (flattenFieldCap) is reached
-	lpFilter             *lineProtocolFilter                // Cached compiled line-protocol filter (built once per stream, see getLineProtocolFilter)
-	lpFilterBuilt        bool                               // Whether lpFilter has been built yet (nil is a valid "no filter" cache value)
-	schemaCache          map[string]string                  // Cache for schemas by subject name
-	schemaRegistryClient *kafka_client.SchemaRegistryClient // Cached Schema Registry client
-	flatKeyOrder         []string                           // Sorted value-field key order from the last ProcessMessage call
-	flatKeySet           map[string]struct{}                // Key set matching flatKeyOrder, used to detect a schema change (see sortedFlatKeys)
-	mu                   sync.RWMutex
+	client                   KafkaClientAPI
+	flattenMaxDepth          int
+	flattenFieldCap          int
+	fieldBuilder             *FieldBuilder                      // Maintains type registry across messages
+	lpTagKeys                map[string]struct{}                // Union of line-protocol tag keys seen across messages (schema stability)
+	lpTagKeyOrder            []string                           // Tag keys in first-seen order, so frame columns keep a stable position
+	lpTagCapWarned           bool                               // Guards a one-time warning once the tag-key cap (flattenFieldCap) is reached
+	lpFilter                 *lineProtocolFilter                // Cached compiled line-protocol filter (built once per stream, see getLineProtocolFilter)
+	lpFilterBuilt            bool                               // Whether lpFilter has been built yet (nil is a valid "no filter" cache value)
+	schemaCache              map[string]string                  // Cache for schemas by subject name
+	schemaRegistryClient     *kafka_client.SchemaRegistryClient // Cached Schema Registry client
+	schemaRegistryHTTPClient *http.Client
+	flatKeyOrder             []string            // Sorted value-field key order from the last ProcessMessage call
+	flatKeySet               map[string]struct{} // Key set matching flatKeyOrder, used to detect a schema change (see sortedFlatKeys)
+	mu                       sync.RWMutex
 }
 
 // createErrorFrame creates a data frame containing error information
@@ -153,15 +155,23 @@ type StreamConfig struct {
 }
 
 // NewStreamManager creates a new StreamManager instance.
-func NewStreamManager(client KafkaClientAPI, flattenMaxDepth, flattenFieldCap int) *StreamManager {
+func NewStreamManager(client KafkaClientAPI, flattenMaxDepth, flattenFieldCap int, schemaRegistryHTTPClient ...*http.Client) *StreamManager {
+	var httpClient *http.Client
+	if len(schemaRegistryHTTPClient) > 0 {
+		httpClient = schemaRegistryHTTPClient[0]
+	}
+	if httpClient == nil {
+		httpClient = &http.Client{Timeout: 30 * time.Second}
+	}
 	return &StreamManager{
-		client:          client,
-		flattenMaxDepth: flattenMaxDepth,
-		flattenFieldCap: flattenFieldCap,
-		fieldBuilder:    NewFieldBuilder(),
-		lpTagKeys:       make(map[string]struct{}),
-		lpTagKeyOrder:   make([]string, 0),
-		schemaCache:     make(map[string]string),
+		client:                   client,
+		flattenMaxDepth:          flattenMaxDepth,
+		flattenFieldCap:          flattenFieldCap,
+		fieldBuilder:             NewFieldBuilder(),
+		lpTagKeys:                make(map[string]struct{}),
+		lpTagKeyOrder:            make([]string, 0),
+		schemaCache:              make(map[string]string),
+		schemaRegistryHTTPClient: httpClient,
 	}
 }
 
@@ -490,10 +500,13 @@ func decodeAvroMessage(sm *StreamManager, client KafkaClientAPI, data []byte, co
 			// Fallback: create client per-message if StreamManager not available
 			log.DefaultLogger.Debug("StreamManager not available, creating Schema Registry client per-message")
 
-			// Get HTTP client from KafkaClient
-			httpClient := client.GetHTTPClient()
+			// Get the protocol-specific HTTP client from StreamManager.
+			if sm == nil || sm.schemaRegistryHTTPClient == nil {
+				return nil, fmt.Errorf("HTTP client not available for Schema Registry")
+			}
+			httpClient := sm.schemaRegistryHTTPClient
 			if httpClient == nil {
-				log.DefaultLogger.Error("HTTP client not available in KafkaClient")
+				log.DefaultLogger.Error("HTTP client not available for Schema Registry")
 				return nil, fmt.Errorf("HTTP client not available for Schema Registry")
 			}
 
@@ -677,7 +690,10 @@ func getProtobufSchemaByID(sm *StreamManager, client KafkaClientAPI, registryUrl
 			schemaID)
 	}
 
-	httpClient := client.GetHTTPClient()
+	var httpClient *http.Client
+	if sm != nil {
+		httpClient = sm.schemaRegistryHTTPClient
+	}
 	if httpClient == nil {
 		return "", fmt.Errorf("HTTP client not available for Schema Registry")
 	}
@@ -699,7 +715,10 @@ func getProtobufSchemaBySubject(sm *StreamManager, client KafkaClientAPI, regist
 			subject)
 	}
 
-	httpClient := client.GetHTTPClient()
+	var httpClient *http.Client
+	if sm != nil {
+		httpClient = sm.schemaRegistryHTTPClient
+	}
 	if httpClient == nil {
 		return "", fmt.Errorf("HTTP client not available for Schema Registry")
 	}
@@ -798,9 +817,9 @@ func (sm *StreamManager) getSchemaRegistryClient(registryUrl, username, password
 	defer sm.mu.Unlock()
 	if sm.schemaRegistryClient == nil {
 		log.DefaultLogger.Debug("Creating Schema Registry client (first use)")
-		httpClient := sm.client.GetHTTPClient()
+		httpClient := sm.schemaRegistryHTTPClient
 		if httpClient == nil {
-			return nil, fmt.Errorf("HTTP client not available in KafkaClient")
+			return nil, fmt.Errorf("HTTP client not available for Schema Registry")
 		}
 		sm.schemaRegistryClient = kafka_client.NewSchemaRegistryClient(registryUrl, username, password, httpClient)
 	}

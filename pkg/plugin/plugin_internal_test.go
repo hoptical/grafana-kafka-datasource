@@ -20,7 +20,6 @@ type internalMockClient struct {
 	schemaRegistryURL      string
 	schemaRegistryUsername string
 	schemaRegistryPassword string
-	httpClient             *http.Client
 }
 
 func (m *internalMockClient) NewConnection() error { return nil }
@@ -49,12 +48,12 @@ func (m *internalMockClient) GetSchemaRegistryUrl() string      { return m.schem
 func (m *internalMockClient) GetSchemaRegistryUsername() string { return m.schemaRegistryUsername }
 func (m *internalMockClient) GetSchemaRegistryPassword() string { return m.schemaRegistryPassword }
 func (m *internalMockClient) GetSubjectNamingStrategy() string  { return "recordName" }
-func (m *internalMockClient) GetHTTPClient() *http.Client       { return m.httpClient }
 
 func TestGetDatasourceSettings_ParsesSecureJSONAndBounds(t *testing.T) {
 	settings, err := getDatasourceSettings(backend.DataSourceInstanceSettings{
 		JSONData: []byte(`{
 			"bootstrapServers": "localhost:9092",
+			"enableSecureSocksProxy": true,
 			"tlsSkipVerify": true,
 			"tlsAuthWithCACert": true,
 			"tlsAuth": true,
@@ -88,6 +87,9 @@ func TestGetDatasourceSettings_ParsesSecureJSONAndBounds(t *testing.T) {
 	}
 	if settings.SchemaRegistryUsername != "sr-user" || settings.SchemaRegistryPassword != "sr-pass" {
 		t.Fatalf("expected schema registry credentials to be loaded")
+	}
+	if !settings.EnableSecureSocksProxy {
+		t.Fatalf("expected PDC setting to be loaded")
 	}
 }
 
@@ -206,8 +208,7 @@ func TestValidateSchemaRegistry_Branches(t *testing.T) {
 
 		ds := NewWithClient(&internalMockClient{
 			schemaRegistryURL: server.URL,
-			httpClient:        server.Client(),
-		})
+		}, server.Client())
 		result, err := ds.ValidateSchemaRegistry(context.Background())
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -226,8 +227,7 @@ func TestCallResource_ValidateSchemaEndpoints(t *testing.T) {
 
 	ds := NewWithClient(&internalMockClient{
 		schemaRegistryURL: server.URL,
-		httpClient:        server.Client(),
-	})
+	}, server.Client())
 
 	t.Run("validate schema registry", func(t *testing.T) {
 		var sent backend.CallResourceResponse

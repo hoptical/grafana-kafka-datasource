@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"net/http"
+	"net"
 	"strings"
 	"testing"
 	"time"
@@ -13,7 +13,6 @@ import (
 )
 
 func TestNewKafkaClient_Defaults(t *testing.T) {
-	httpClient := &http.Client{}
 	options := Options{
 		BootstrapServers:   "localhost:9092",
 		ClientId:           "test-client",
@@ -27,7 +26,7 @@ func TestNewKafkaClient_Defaults(t *testing.T) {
 		Timeout:            1234,
 		HealthcheckTimeout: 5678,
 	}
-	client := NewKafkaClient(options, httpClient)
+	client := NewKafkaClient(options)
 	if client.BootstrapServers != "localhost:9092" {
 		t.Errorf("Expected BootstrapServers to be 'localhost:9092', got %s", client.BootstrapServers)
 	}
@@ -64,16 +63,14 @@ func TestNewKafkaClient_Defaults(t *testing.T) {
 }
 
 func TestNewKafkaClient_NegativeTimeout(t *testing.T) {
-	httpClient := &http.Client{}
-	client := NewKafkaClient(Options{BootstrapServers: "localhost:9092", Timeout: -5}, httpClient)
+	client := NewKafkaClient(Options{BootstrapServers: "localhost:9092", Timeout: -5})
 	if client.Timeout != 0 {
 		t.Fatalf("expected sanitized timeout 0 got %d", client.Timeout)
 	}
 }
 
 func TestKafkaClient_NewConnection_NoSASL(t *testing.T) {
-	httpClient := &http.Client{}
-	client := NewKafkaClient(Options{BootstrapServers: "localhost:9092"}, httpClient)
+	client := NewKafkaClient(Options{BootstrapServers: "localhost:9092"})
 	err := client.NewConnection()
 	if err != nil {
 		t.Errorf("Expected no error, got %v", err)
@@ -84,17 +81,43 @@ func TestKafkaClient_NewConnection_NoSASL(t *testing.T) {
 	if client.Conn == nil {
 		t.Error("Expected Conn to be initialized")
 	}
+	if client.Dialer.DialFunc != nil {
+		t.Error("Expected direct dialing when no custom dial function is configured")
+	}
+}
+
+func TestKafkaClient_NewConnection_UsesCustomDialFunc(t *testing.T) {
+	called := false
+	client := NewKafkaClientWithDialFunc(Options{
+		BootstrapServers: "broker:9092",
+	}, func(_ context.Context, network, address string) (net.Conn, error) {
+		called = network == "tcp" && address == "broker:9092"
+		return nil, errors.New("dial test")
+	})
+
+	if err := client.NewConnection(); err != nil {
+		t.Fatalf("NewConnection() error = %v", err)
+	}
+
+	if client.Dialer.DialFunc == nil {
+		t.Fatal("expected custom dial function to be configured")
+	}
+	if client.Transport.Dial == nil {
+		t.Fatal("expected custom dial function to be configured on the Kafka transport")
+	}
+	_, _ = client.Dialer.DialFunc(context.Background(), "tcp", "broker:9092")
+	if !called {
+		t.Fatal("expected custom dial function to receive the broker address")
+	}
 }
 
 func TestKafkaClient_Dispose(t *testing.T) {
-	httpClient := &http.Client{}
-	client := NewKafkaClient(Options{BootstrapServers: "localhost:9092"}, httpClient)
+	client := NewKafkaClient(Options{BootstrapServers: "localhost:9092"})
 	client.Dispose() // Should not panic
 }
 
 func TestGetSASLMechanism_Unsupported(t *testing.T) {
-	httpClient := &http.Client{}
-	client := NewKafkaClient(Options{SaslMechanisms: "UNSUPPORTED"}, httpClient)
+	client := NewKafkaClient(Options{SaslMechanisms: "UNSUPPORTED"})
 	_, err := getSASLMechanism(&client)
 	if err == nil {
 		t.Error("Expected error for unsupported SASL mechanism")
@@ -112,8 +135,7 @@ func TestGetSASLMechanism_Supported(t *testing.T) {
 		{"", "PLAIN"},
 	}
 	for _, c := range cases {
-		httpClient := &http.Client{}
-		cl := NewKafkaClient(Options{SaslMechanisms: c.mech, SaslUsername: "user", SaslPassword: "password"}, httpClient)
+		cl := NewKafkaClient(Options{SaslMechanisms: c.mech, SaslUsername: "user", SaslPassword: "password"})
 		m, err := getSASLMechanism(&cl)
 		if err != nil {
 			t.Fatalf("expected support for %s got %v", c.mech, err)
@@ -125,8 +147,7 @@ func TestGetSASLMechanism_Supported(t *testing.T) {
 }
 
 func TestNewStreamReader_EarliestAndLastN(t *testing.T) {
-	httpClient := &http.Client{}
-	cl := NewKafkaClient(Options{BootstrapServers: "localhost:9092"}, httpClient)
+	cl := NewKafkaClient(Options{BootstrapServers: "localhost:9092"})
 	ctx := context.Background()
 	// Initialize connection; this config will allow creating a reader object
 	if err := cl.NewConnection(); err != nil {
@@ -197,8 +218,7 @@ func TestNewKafkaClient_BrokerParsing(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			httpClient := &http.Client{}
-			client := NewKafkaClient(Options{BootstrapServers: tt.bootstrapServers}, httpClient)
+			client := NewKafkaClient(Options{BootstrapServers: tt.bootstrapServers})
 
 			if len(client.Brokers) != len(tt.expectedBrokers) {
 				t.Errorf("Expected %d brokers, got %d", len(tt.expectedBrokers), len(client.Brokers))
@@ -226,8 +246,7 @@ func TestNewKafkaClient_TimeoutHandling(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			httpClient := &http.Client{}
-			client := NewKafkaClient(Options{Timeout: tt.timeout}, httpClient)
+			client := NewKafkaClient(Options{Timeout: tt.timeout})
 			if client.Timeout != tt.expectedTimeout {
 				t.Errorf("Expected timeout %d, got %d", tt.expectedTimeout, client.Timeout)
 			}
@@ -255,14 +274,13 @@ func TestNewConnection_SecurityProtocols(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			httpClient := &http.Client{}
 			client := NewKafkaClient(Options{
 				BootstrapServers: "localhost:9092",
 				SecurityProtocol: tt.securityProtocol,
 				SaslMechanisms:   tt.saslMechanisms,
 				SaslUsername:     tt.saslUsername,
 				SaslPassword:     tt.saslPassword,
-			}, httpClient)
+			})
 
 			err := client.NewConnection()
 
@@ -333,7 +351,6 @@ func TestIsTopicNotFound(t *testing.T) {
 }
 
 func TestNewKafkaClient_AvroConfiguration(t *testing.T) {
-	httpClient := &http.Client{}
 	options := Options{
 		BootstrapServers:       "localhost:9092",
 		MessageFormat:          "avro",
@@ -341,7 +358,7 @@ func TestNewKafkaClient_AvroConfiguration(t *testing.T) {
 		SchemaRegistryUsername: "registry-user",
 		SchemaRegistryPassword: "registry-pass",
 	}
-	client := NewKafkaClient(options, httpClient)
+	client := NewKafkaClient(options)
 
 	if client.MessageFormat != "avro" {
 		t.Errorf("Expected MessageFormat to be 'avro', got %s", client.MessageFormat)
@@ -358,11 +375,10 @@ func TestNewKafkaClient_AvroConfiguration(t *testing.T) {
 }
 
 func TestKafkaClient_GetMessageFormat(t *testing.T) {
-	httpClient := &http.Client{}
 	client := NewKafkaClient(Options{
 		BootstrapServers: "localhost:9092",
 		MessageFormat:    "avro",
-	}, httpClient)
+	})
 
 	result := client.GetMessageFormat()
 	if result != "avro" {
@@ -371,11 +387,10 @@ func TestKafkaClient_GetMessageFormat(t *testing.T) {
 }
 
 func TestKafkaClient_GetSchemaRegistryUrl(t *testing.T) {
-	httpClient := &http.Client{}
 	client := NewKafkaClient(Options{
 		BootstrapServers:  "localhost:9092",
 		SchemaRegistryUrl: "http://localhost:8081",
-	}, httpClient)
+	})
 
 	result := client.GetSchemaRegistryUrl()
 	if result != "http://localhost:8081" {
@@ -384,11 +399,10 @@ func TestKafkaClient_GetSchemaRegistryUrl(t *testing.T) {
 }
 
 func TestKafkaClient_GetSchemaRegistryUsername(t *testing.T) {
-	httpClient := &http.Client{}
 	client := NewKafkaClient(Options{
 		BootstrapServers:       "localhost:9092",
 		SchemaRegistryUsername: "test-user",
-	}, httpClient)
+	})
 
 	result := client.GetSchemaRegistryUsername()
 	if result != "test-user" {
@@ -397,11 +411,10 @@ func TestKafkaClient_GetSchemaRegistryUsername(t *testing.T) {
 }
 
 func TestKafkaClient_GetSchemaRegistryPassword(t *testing.T) {
-	httpClient := &http.Client{}
 	client := NewKafkaClient(Options{
 		BootstrapServers:       "localhost:9092",
 		SchemaRegistryPassword: "test-pass",
-	}, httpClient)
+	})
 
 	result := client.GetSchemaRegistryPassword()
 	if result != "test-pass" {
@@ -410,31 +423,13 @@ func TestKafkaClient_GetSchemaRegistryPassword(t *testing.T) {
 }
 
 func TestKafkaClient_GetSubjectNamingStrategy(t *testing.T) {
-	httpClient := &http.Client{}
 	client := NewKafkaClient(Options{
 		BootstrapServers: "localhost:9092",
-	}, httpClient)
+	})
 
 	result := client.GetSubjectNamingStrategy()
 	if result != "recordName" {
 		t.Errorf("Expected GetSubjectNamingStrategy to return 'recordName', got %s", result)
-	}
-}
-
-func TestKafkaClient_GetHTTPClient(t *testing.T) {
-	httpClient := &http.Client{
-		Timeout: 30 * time.Second,
-	}
-	client := NewKafkaClient(Options{
-		BootstrapServers: "localhost:9092",
-	}, httpClient)
-
-	result := client.GetHTTPClient()
-	if result != httpClient {
-		t.Errorf("Expected GetHTTPClient to return the same HTTP client instance")
-	}
-	if result.Timeout != 30*time.Second {
-		t.Errorf("Expected HTTP client timeout to be 30s, got %v", result.Timeout)
 	}
 }
 
@@ -460,8 +455,7 @@ func TestKafkaClient_ConsumerPull_AvroMessage(t *testing.T) {
 }
 
 func TestDecodeMessageValue_NullBytesJSON(t *testing.T) {
-	httpClient := &http.Client{}
-	client := NewKafkaClient(Options{BootstrapServers: "localhost:9092"}, httpClient)
+	client := NewKafkaClient(Options{BootstrapServers: "localhost:9092"})
 
 	_, err := client.decodeMessageValue([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, "json")
 	if err == nil {
@@ -543,8 +537,7 @@ func (s *stubMessageReader) ReadMessage(context.Context) (kafka.Message, error) 
 }
 
 func TestConsumerPull_SkipsControlRecord(t *testing.T) {
-	httpClient := &http.Client{}
-	client := NewKafkaClient(Options{BootstrapServers: "localhost:9092"}, httpClient)
+	client := NewKafkaClient(Options{BootstrapServers: "localhost:9092"})
 
 	commitKey := []byte{0x00, 0x00, 0x00, 0x01}              // version=0, type=COMMIT
 	controlVal := []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x05} // epoch=5
@@ -572,8 +565,7 @@ func TestConsumerPull_SkipsControlRecord(t *testing.T) {
 }
 
 func TestKafkaClient_GetTopicPartitions(t *testing.T) {
-	httpClient := &http.Client{}
-	client := NewKafkaClient(Options{BootstrapServers: "localhost:9092"}, httpClient)
+	client := NewKafkaClient(Options{BootstrapServers: "localhost:9092"})
 	err := client.NewConnection()
 	if err != nil {
 		t.Skip("Skipping test: unable to connect to Kafka broker")
@@ -600,8 +592,7 @@ func TestKafkaClient_GetTopicPartitions(t *testing.T) {
 }
 
 func TestKafkaClient_GetTopics(t *testing.T) {
-	httpClient := &http.Client{}
-	client := NewKafkaClient(Options{BootstrapServers: "localhost:9092"}, httpClient)
+	client := NewKafkaClient(Options{BootstrapServers: "localhost:9092"})
 	err := client.NewConnection()
 	if err != nil {
 		t.Skip("Skipping test: unable to connect to Kafka broker")
@@ -637,8 +628,7 @@ func TestKafkaClient_GetTopics(t *testing.T) {
 }
 
 func TestKafkaClient_decodeMessageValue_JSON(t *testing.T) {
-	httpClient := &http.Client{}
-	client := NewKafkaClient(Options{BootstrapServers: "localhost:9092"}, httpClient)
+	client := NewKafkaClient(Options{BootstrapServers: "localhost:9092"})
 
 	tests := []struct {
 		name     string

@@ -66,7 +66,7 @@ type SchemaRegistryClient struct {
 }
 
 // NewSchemaRegistryClient creates a new Schema Registry client
-// The httpClient should be created using grafana-plugin-sdk-go/backend/httpclient
+// The Schema Registry HTTP client should be created using grafana-plugin-sdk-go/backend/httpclient
 // to support Private Data Source Connect (PDC) with automatic SOCKS proxy handling
 func NewSchemaRegistryClient(baseURL, username, password string, httpClient *http.Client) *SchemaRegistryClient {
 	if httpClient == nil {

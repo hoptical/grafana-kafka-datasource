@@ -1,5 +1,16 @@
 import React, { ChangeEvent, useEffect } from 'react';
-import { InlineField, Input, Divider, SecretInput, Checkbox, SecretTextArea, Select, useStyles2 } from '@grafana/ui';
+import {
+  InlineField,
+  Input,
+  Divider,
+  SecretInput,
+  Checkbox,
+  SecretTextArea,
+  Select,
+  Tooltip,
+  Icon,
+  useStyles2,
+} from '@grafana/ui';
 import { DataSourcePluginOptionsEditorProps, GrafanaTheme2 } from '@grafana/data';
 import { css } from '@emotion/css';
 import { ConfigSection, DataSourceDescription } from '@grafana/plugin-ui';
@@ -66,6 +77,13 @@ export const ConfigEditor = (props: Props) => {
 
   const onClientIdChange = (event: ChangeEvent<HTMLInputElement>) => {
     onOptionsChange({ ...options, jsonData: { ...options.jsonData, clientId: event.target.value } });
+  };
+
+  const onSecureSocksProxyChange = (event: ChangeEvent<HTMLInputElement>) => {
+    onOptionsChange({
+      ...options,
+      jsonData: { ...options.jsonData, enableSecureSocksProxy: event.target.checked },
+    });
   };
 
   const onSaslUsernameChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -222,6 +240,22 @@ export const ConfigEditor = (props: Props) => {
             width={40}
           />
         </InlineField>
+
+        <div className={styles.checkboxRow}>
+          <Checkbox
+            id="config-editor-enable-secure-socks-proxy"
+            value={jsonData.enableSecureSocksProxy || false}
+            onChange={onSecureSocksProxyChange}
+          />
+          <label className={styles.checkboxLabel} htmlFor="config-editor-enable-secure-socks-proxy">
+            Use Private Data Source Connect (PDC)
+          </label>
+          <Tooltip content="Routes Kafka broker and Schema Registry traffic through Grafana PDC. PDC must be configured and available in Grafana.">
+            <span className={styles.infoIcon} aria-label="PDC connection help">
+              <Icon name="info-circle" size="sm" />
+            </span>
+          </Tooltip>
+        </div>
       </ConfigSection>
 
       <Divider spacing={4} />
