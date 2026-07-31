@@ -32,7 +32,7 @@ This plugin connects your Grafana instance directly to Kafka brokers, allowing y
 - Apache Kafka v0.11+
 - Grafana v10.2+
 
-> Note: This is a backend plugin, so the Grafana server should have access to the Kafka broker.
+> Note: This is a backend plugin, so the Grafana server should have access to the Kafka broker. Grafana Cloud users can enable Private Data Source Connect (PDC) in the datasource settings to route Kafka broker and Schema Registry traffic through PDC.
 
 ## Features
 
@@ -75,8 +75,9 @@ You can automatically configure the Kafka datasource using Grafana's provisionin
 
 1. Add a new data source in Grafana and select "Kafka Datasource".
 2. Configure connection settings:
-   - **Broker address** (e.g. `localhost:9094` or `kafka:9092`)
-   - **Authentication** (SASL, SSL/TLS, optional)
+    - **Broker address** (e.g. `localhost:9094` or `kafka:9092`)
+    - **Private Data Source Connect (PDC)** (optional; requires PDC to be configured in Grafana)
+    - **Authentication** (SASL, SSL/TLS, optional)
    - **Avro Schema Registry** (if using Avro format)
    - **Timeout settings** (default: two seconds)
 

@@ -111,6 +111,33 @@ func TestKafkaClient_NewConnection_UsesCustomDialFunc(t *testing.T) {
 	}
 }
 
+func TestKafkaClient_NewConnection_CustomDialFuncPreservesSASLAndTLS(t *testing.T) {
+	client := NewKafkaClientWithDialFunc(Options{
+		BootstrapServers: "broker:9092",
+		SecurityProtocol: "SASL_SSL",
+		SaslMechanisms:   "PLAIN",
+		SaslUsername:     "user",
+		SaslPassword:     "password",
+		TLSSkipVerify:    true,
+	}, func(context.Context, string, string) (net.Conn, error) {
+		return nil, errors.New("dial test")
+	})
+
+	if err := client.NewConnection(); err != nil {
+		t.Fatalf("NewConnection() error = %v", err)
+	}
+
+	if client.Dialer.DialFunc == nil || client.Transport.Dial == nil {
+		t.Fatal("expected custom dial function on both Kafka connection paths")
+	}
+	if client.Dialer.SASLMechanism == nil || client.Transport.SASL == nil {
+		t.Fatal("expected SASL configuration to be preserved")
+	}
+	if client.Dialer.TLS == nil || client.Transport.TLS == nil || !client.Dialer.TLS.InsecureSkipVerify {
+		t.Fatal("expected TLS configuration to be preserved")
+	}
+}
+
 func TestKafkaClient_Dispose(t *testing.T) {
 	client := NewKafkaClient(Options{BootstrapServers: "localhost:9092"})
 	client.Dispose() // Should not panic
