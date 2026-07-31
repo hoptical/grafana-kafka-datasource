@@ -32,7 +32,7 @@ This plugin connects your Grafana instance directly to Kafka brokers, allowing y
 - Apache Kafka v0.11+
 - Grafana v10.2+
 
-> Note: This is a backend plugin, so the Grafana server should have access to the Kafka broker. Grafana Cloud users can enable Private Data Source Connect (PDC) in the datasource settings to route Kafka broker and Schema Registry traffic through PDC.
+> Note: Without PDC, the Grafana server must access the Kafka broker and Schema Registry directly. With PDC enabled, Grafana must access the PDC proxy, and the PDC agent must access the Kafka broker and Schema Registry.
 
 ## Features
 
