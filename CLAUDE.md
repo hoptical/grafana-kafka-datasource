@@ -69,7 +69,7 @@ Avro/Protobuf schema resolution supports both inline schemas and Schema Registry
 
 `frame_batcher.go` (`frameMicroBatcher`) coalesces multiple same-schema frames produced in a short window into fewer, multi-row frames before sending, to cut per-message stream overhead.
 
-### Performance feature flags (`pkg/perfflags/perfflags.go`)
+### Performance benchmark controls (`pkg/kafka_client/message_decoder.go`, `StreamManager` options)
 
 Production always uses the optimized path. Benchmark-only reproduction of the old behavior now happens through explicit constructor options and dedicated benchmark variants, not shipped env vars. `pkg/kafka_client/message_decoder.go` owns the Avro/Protobuf cache behavior, `StreamManager` options control field-order caching, and `BenchmarkWorkflow_NoOptimizations` reproduces the combined old path for whole-workflow measurement. When touching these hot paths, preserve both the optimized production path and the explicit benchmark-only old-path coverage in the corresponding `*_bench_test.go` files. See `docs/PERFORMANCE_OPTIMIZATIONS.md` for the methodology (Go benchmarks + `pprof` + `benchstat`) and the benchmark-name normalization step needed for `benchstat` comparisons.
 

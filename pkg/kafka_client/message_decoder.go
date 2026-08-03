@@ -89,12 +89,9 @@ func (d *MessageDecoder) DecodeAvroMessage(data []byte, schema string) (interfac
 		return nil, fmt.Errorf("failed to parse Avro schema: %w", err)
 	}
 
-	decoded, remaining, err := codec.NativeFromBinary(avroData)
+	decoded, _, err := codec.NativeFromBinary(avroData)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode Avro message: %w", err)
-	}
-	if len(remaining) > 0 {
-		_ = remaining
 	}
 
 	return decoded, nil
