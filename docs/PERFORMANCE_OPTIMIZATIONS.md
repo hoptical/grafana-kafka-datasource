@@ -152,19 +152,19 @@ These optimizations are now controlled in code, not by shipped environment varia
 
 Useful benchmark pairs:
 
-| Optimized benchmark                                | Pre-fix benchmark                                            | Reverts                          |
-| -------------------------------------------------- | ------------------------------------------------------------ | -------------------------------- |
-| `BenchmarkDecodeAvroMessage`                       | `BenchmarkDecodeAvroMessage_NoCache`                         | Avro codec caching              |
-| `BenchmarkDecodeProtobufMessage_Plain`             | `BenchmarkDecodeProtobufMessage_Plain_NoCache`               | Protobuf schema caching         |
-| `BenchmarkProcessMessage_JSON_Wide100`             | `BenchmarkProcessMessage_JSON_Wide100_FieldOrderCacheDisabled` | Field-order caching             |
-| `BenchmarkWorkflow`                                | `BenchmarkWorkflow_NoOptimizations`                          | Combined old path, including micro-batching |
+| Optimized benchmark                    | Pre-fix benchmark                                              | Reverts                                     |
+| -------------------------------------- | -------------------------------------------------------------- | ------------------------------------------- |
+| `BenchmarkDecodeAvroMessage`           | `BenchmarkDecodeAvroMessage_NoCache`                           | Avro codec caching                          |
+| `BenchmarkDecodeProtobufMessage_Plain` | `BenchmarkDecodeProtobufMessage_Plain_NoCache`                 | Protobuf schema caching                     |
+| `BenchmarkProcessMessage_JSON_Wide100` | `BenchmarkProcessMessage_JSON_Wide100_FieldOrderCacheDisabled` | Field-order caching                         |
+| `BenchmarkWorkflow`                    | `BenchmarkWorkflow_NoOptimizations`                            | Combined old path, including micro-batching |
 
 The schema caches remain bounded with hardcoded defaults:
 
-| Constant                                       | Default | Meaning                                                 |
-| ---------------------------------------------- | ------- | ------------------------------------------------------- |
-| `defaultAvroCodecCacheMaxEntries`              | `256`   | Max compiled Avro codecs retained in LRU cache          |
-| `defaultProtobufSchemaCacheMaxEntries`         | `256`   | Max compiled Protobuf descriptors retained in LRU cache |
+| Constant                               | Default | Meaning                                                 |
+| -------------------------------------- | ------- | ------------------------------------------------------- |
+| `defaultAvroCodecCacheMaxEntries`      | `256`   | Max compiled Avro codecs retained in LRU cache          |
+| `defaultProtobufSchemaCacheMaxEntries` | `256`   | Max compiled Protobuf descriptors retained in LRU cache |
 
 Example: reproduce the pre-fix Avro decode behavior yourself:
 
