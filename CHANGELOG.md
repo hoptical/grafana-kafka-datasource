@@ -1,5 +1,11 @@
 # Changelog
 
+## [v1.7.2](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.7.2)
+
+[Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v1.7.1...v1.7.2)
+
+- Chore: Refactor to remove performance environment flags ([#163](https://github.com/hoptical/grafana-kafka-datasource/pull/163))
+
 ## [v1.7.1](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.7.1)
 
 [Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v1.7.0...v1.7.1)
