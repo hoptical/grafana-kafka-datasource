@@ -19,7 +19,6 @@ import (
 	"github.com/segmentio/kafka-go"
 
 	"github.com/hoptical/grafana-kafka-datasource/pkg/kafka_client"
-	"github.com/hoptical/grafana-kafka-datasource/pkg/perfflags"
 )
 
 // streamMessageBuffer defines the capacity of the buffered channel used to fan-in
@@ -706,7 +705,7 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 		"topic", qm.Topic,
 		"partitions", partitions)
 
-	microBatchEnabled := !perfflags.StreamMicroBatch.Disabled()
+	microBatchEnabled := true
 	var batcher *frameMicroBatcher
 	var flushTicker *time.Ticker
 	var flushTickerCh <-chan time.Time

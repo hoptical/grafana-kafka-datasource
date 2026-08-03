@@ -9,11 +9,8 @@ import (
 
 	"github.com/bufbuild/protocompile"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
-	"github.com/hoptical/grafana-kafka-datasource/pkg/perfflags"
 	"google.golang.org/protobuf/encoding/protowire"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
-	"google.golang.org/protobuf/types/dynamicpb"
 )
 
 const (
@@ -25,44 +22,10 @@ type ParsedProtobufSchema struct {
 	Message protoreflect.MessageDescriptor
 }
 
-// protobufSchemaCache caches parsed/compiled schemas by their raw schema
-// string. Compiling a .proto schema (protocompile.Compiler.Compile) is
-// expensive - benchmarks show it accounts for >90% of per-message protobuf
-// decode time and allocations - while the resulting descriptors are
-// immutable and safe for concurrent reuse, so compilation only needs to
-// happen once per distinct schema.
-//
-// Set KAFKA_DS_PERF_DISABLE_PROTOBUF_SCHEMA_CACHE=true to disable this cache
-// and reproduce the pre-fix behavior (see pkg/perfflags).
-//
-// Cache size is bounded to avoid unbounded growth in long-lived processes with
-// high schema churn. Override size with
-// KAFKA_DS_PERF_PROTOBUF_SCHEMA_CACHE_MAX_ENTRIES (default: 256).
-var protobufSchemaCache = newLRUCache[*ParsedProtobufSchema](
-	cacheSizeFromEnv("KAFKA_DS_PERF_PROTOBUF_SCHEMA_CACHE_MAX_ENTRIES", 256),
-)
-
 // ParseProtobufSchema parses a .proto schema and returns a default message descriptor.
 // Imports are not supported for inline schemas; users should inline dependencies.
-// Results are cached by schema string (see protobufSchemaCache), unless
-// perfflags.ProtobufSchemaCache is disabled, in which case the schema is
-// always recompiled, matching the plugin's pre-fix behavior.
 func ParseProtobufSchema(schema string) (*ParsedProtobufSchema, error) {
-	if perfflags.ProtobufSchemaCache.Disabled() {
-		return compileProtobufSchema(schema)
-	}
-
-	if cached, ok := protobufSchemaCache.Get(schema); ok {
-		return cached, nil
-	}
-
-	parsed, err := compileProtobufSchema(schema)
-	if err != nil {
-		return nil, err
-	}
-
-	protobufSchemaCache.Add(schema, parsed)
-	return parsed, nil
+	return defaultMessageDecoder.ParseProtobufSchema(schema)
 }
 
 // compileProtobufSchema compiles schema from scratch, bypassing any cache.
@@ -113,26 +76,7 @@ func defaultTopLevelMessage(fileDesc protoreflect.FileDescriptor) protoreflect.M
 // DecodeProtobufMessage decodes a protobuf message using the provided schema.
 // It supports Confluent wire format (magic byte + schema ID + message indexes) and raw protobuf bytes.
 func DecodeProtobufMessage(data []byte, schema string) (interface{}, error) {
-	parsed, err := ParseProtobufSchema(schema)
-	if err != nil {
-		return nil, err
-	}
-
-	payload := data
-	messageDesc := parsed.Message
-	if len(data) > 5 && data[0] == confluentWireMagicByte {
-		payload, messageDesc, err = extractConfluentProtobufPayload(data, parsed.File)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	msg := dynamicpb.NewMessage(messageDesc)
-	if err := proto.Unmarshal(payload, msg); err != nil {
-		return nil, fmt.Errorf("failed to decode protobuf message: %w", err)
-	}
-
-	return protobufMessageToMap(msg.ProtoReflect()), nil
+	return defaultMessageDecoder.DecodeProtobufMessage(data, schema)
 }
 
 func extractConfluentProtobufPayload(data []byte, fileDesc protoreflect.FileDescriptor) ([]byte, protoreflect.MessageDescriptor, error) {

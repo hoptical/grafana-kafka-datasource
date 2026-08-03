@@ -2,9 +2,6 @@ package kafka_client
 
 import (
 	"testing"
-
-	"github.com/hoptical/grafana-kafka-datasource/pkg/perfflags"
-	"github.com/linkedin/goavro/v2"
 )
 
 func TestLRUCache_EvictsLeastRecentlyUsed(t *testing.T) {
@@ -29,91 +26,58 @@ func TestLRUCache_EvictsLeastRecentlyUsed(t *testing.T) {
 	}
 }
 
-func TestCacheSizeFromEnv(t *testing.T) {
-	t.Setenv("TEST_CACHE_SIZE", "17")
-	if got := cacheSizeFromEnv("TEST_CACHE_SIZE", 4); got != 17 {
-		t.Fatalf("expected 17, got %d", got)
-	}
-
-	t.Setenv("TEST_CACHE_SIZE", "0")
-	if got := cacheSizeFromEnv("TEST_CACHE_SIZE", 4); got != 4 {
-		t.Fatalf("expected fallback 4 for invalid low value, got %d", got)
-	}
-
-	t.Setenv("TEST_CACHE_SIZE", "bad")
-	if got := cacheSizeFromEnv("TEST_CACHE_SIZE", 4); got != 4 {
-		t.Fatalf("expected fallback 4 for invalid value, got %d", got)
-	}
-}
-
 func TestAvroCodecCache_BoundedAndLRU(t *testing.T) {
-	oldCache := avroCodecCache
-	avroCodecCache = newLRUCache[*goavro.Codec](2)
-	defer func() {
-		avroCodecCache = oldCache
-	}()
-
-	wasDisabled := perfflags.AvroCodecCache.Disabled()
-	perfflags.AvroCodecCache.SetDisabledForTest(false)
-	defer perfflags.AvroCodecCache.SetDisabledForTest(wasDisabled)
+	decoder := NewMessageDecoder(MessageDecoderOptions{AvroCodecCacheMaxEntries: 2})
 
 	s1 := `{"type":"record","name":"S1","fields":[{"name":"x","type":"long"}]}`
 	s2 := `{"type":"record","name":"S2","fields":[{"name":"x","type":"long"}]}`
 	s3 := `{"type":"record","name":"S3","fields":[{"name":"x","type":"long"}]}`
 
-	if _, err := getAvroCodec(s1); err != nil {
+	if _, err := decoder.getAvroCodec(s1); err != nil {
 		t.Fatalf("getAvroCodec(s1): %v", err)
 	}
-	if _, err := getAvroCodec(s2); err != nil {
+	if _, err := decoder.getAvroCodec(s2); err != nil {
 		t.Fatalf("getAvroCodec(s2): %v", err)
 	}
-	if _, ok := avroCodecCache.Get(s1); !ok {
+	if _, ok := decoder.avroCodecCache.Get(s1); !ok {
 		t.Fatalf("expected s1 cache hit")
 	}
-	if _, err := getAvroCodec(s3); err != nil {
+	if _, err := decoder.getAvroCodec(s3); err != nil {
 		t.Fatalf("getAvroCodec(s3): %v", err)
 	}
 
-	if got := avroCodecCache.Len(); got != 2 {
+	if got := decoder.avroCodecCache.Len(); got != 2 {
 		t.Fatalf("expected cache len 2, got %d", got)
 	}
-	if _, ok := avroCodecCache.Get(s2); ok {
+	if _, ok := decoder.avroCodecCache.Get(s2); ok {
 		t.Fatalf("expected s2 to be evicted as LRU")
 	}
 }
 
 func TestProtobufSchemaCache_BoundedAndLRU(t *testing.T) {
-	oldCache := protobufSchemaCache
-	protobufSchemaCache = newLRUCache[*ParsedProtobufSchema](2)
-	defer func() {
-		protobufSchemaCache = oldCache
-	}()
-
-	wasDisabled := perfflags.ProtobufSchemaCache.Disabled()
-	perfflags.ProtobufSchemaCache.SetDisabledForTest(false)
-	defer perfflags.ProtobufSchemaCache.SetDisabledForTest(wasDisabled)
+	decoder := NewMessageDecoder(MessageDecoderOptions{ProtobufSchemaCacheMaxEntries: 2})
 
 	s1 := "syntax = \"proto3\"; package p1; message M1 { int64 x = 1; }"
 	s2 := "syntax = \"proto3\"; package p2; message M2 { int64 x = 1; }"
 	s3 := "syntax = \"proto3\"; package p3; message M3 { int64 x = 1; }"
 
-	if _, err := ParseProtobufSchema(s1); err != nil {
+	if _, err := decoder.ParseProtobufSchema(s1); err != nil {
 		t.Fatalf("ParseProtobufSchema(s1): %v", err)
 	}
-	if _, err := ParseProtobufSchema(s2); err != nil {
+	if _, err := decoder.ParseProtobufSchema(s2); err != nil {
 		t.Fatalf("ParseProtobufSchema(s2): %v", err)
 	}
-	if _, ok := protobufSchemaCache.Get(s1); !ok {
+	if _, ok := decoder.protobufSchemaCache.Get(s1); !ok {
 		t.Fatalf("expected s1 cache hit")
 	}
-	if _, err := ParseProtobufSchema(s3); err != nil {
+	if _, err := decoder.ParseProtobufSchema(s3); err != nil {
 		t.Fatalf("ParseProtobufSchema(s3): %v", err)
 	}
 
-	if got := protobufSchemaCache.Len(); got != 2 {
+	if got := decoder.protobufSchemaCache.Len(); got != 2 {
 		t.Fatalf("expected cache len 2, got %d", got)
 	}
-	if _, ok := protobufSchemaCache.Get(s2); ok {
+	if _, ok := decoder.protobufSchemaCache.Get(s2); ok {
 		t.Fatalf("expected s2 to be evicted as LRU")
 	}
 }

@@ -1,6 +1,6 @@
 # Finding and Fixing Performance Bottlenecks in the Grafana Kafka Datasource Plugin
 
-_How profiling, benchmarking, and feature flags turned a per-message decode bottleneck into a 12x throughput win — and how you can reproduce every number in this post yourself._
+_How profiling, benchmarking, and explicit benchmark variants turned a per-message decode bottleneck into a 12x throughput win — and how you can reproduce every number in this post yourself._
 
 ---
 
@@ -11,7 +11,7 @@ The [Grafana Kafka Datasource plugin](https://github.com/hoptical/grafana-kafka-
 1. How much load can the plugin's message-processing pipeline actually handle?
 2. Where exactly is time and memory being spent, and can it be reduced without changing behavior?
 
-Rather than guessing, this was done the only way that produces trustworthy answers: **write Go benchmarks, profile them with `pprof`, fix what the data says is worth fixing, and prove the improvement with `benchstat`.** Every fix below is also gated behind a runtime feature flag, so anyone can flip it off and reproduce the exact pre-fix behavior — no need to check out an old commit.
+Rather than guessing, this was done the only way that produces trustworthy answers: **write Go benchmarks, profile them with `pprof`, fix what the data says is worth fixing, and prove the improvement with `benchstat`.** Every fix below also has an explicit benchmark path that reproduces the pre-fix behavior without shipping runtime toggles in the plugin.
 
 All numbers in this post come from `go test -bench` on an Apple M5. Your numbers will differ, but the _relative_ improvements should hold.
 
@@ -41,22 +41,23 @@ func DecodeAvroMessage(data []byte, schema string) (interface{}, error) {
 **The fix.** Cache the compiled codec per schema string. A `*goavro.Codec` is immutable once built and safe for concurrent reuse, so the hot-path helper now uses a bounded LRU cache keyed by raw schema string (default 256 entries):
 
 ```go
-var avroCodecCache = newLRUCache[*goavro.Codec](
-    cacheSizeFromEnv("KAFKA_DS_PERF_AVRO_CODEC_CACHE_MAX_ENTRIES", 256),
-)
+type MessageDecoder struct {
+    disableAvroCodecCache bool
+    avroCodecCache        *lruCache[*goavro.Codec]
+}
 
-func getAvroCodec(schema string) (*goavro.Codec, error) {
-    if perfflags.AvroCodecCache.Disabled() {
-        return goavro.NewCodec(schema) // pre-fix behavior, on demand
+func (d *MessageDecoder) getAvroCodec(schema string) (*goavro.Codec, error) {
+    if d.disableAvroCodecCache {
+        return goavro.NewCodec(schema)
     }
-    if cached, ok := avroCodecCache.Get(schema); ok {
+    if cached, ok := d.avroCodecCache.Get(schema); ok {
         return cached, nil
     }
     codec, err := goavro.NewCodec(schema)
     if err != nil {
         return nil, err
     }
-    avroCodecCache.Add(schema, codec)
+    d.avroCodecCache.Add(schema, codec)
     return codec, nil
 }
 ```
@@ -78,25 +79,21 @@ Translated to raw single-threaded, full-pipeline throughput (no network I/O): **
 
 **The problem.** Same shape of bug, different format: `ParseProtobufSchema` ran `protocompile.Compiler.Compile(...)` — a full `.proto` schema compile — on every call.
 
-**The fix.** A bounded LRU cache identical in spirit to the Avro one, with compile logic in a small `compileProtobufSchema` helper so both cached and flag-disabled paths share one implementation:
+**The fix.** A bounded LRU cache identical in spirit to the Avro one, with compile logic in a small `compileProtobufSchema` helper so both cached and no-cache benchmark paths share one implementation:
 
 ```go
-var protobufSchemaCache = newLRUCache[*ParsedProtobufSchema](
-    cacheSizeFromEnv("KAFKA_DS_PERF_PROTOBUF_SCHEMA_CACHE_MAX_ENTRIES", 256),
-)
-
-func ParseProtobufSchema(schema string) (*ParsedProtobufSchema, error) {
-    if perfflags.ProtobufSchemaCache.Disabled() {
+func (d *MessageDecoder) ParseProtobufSchema(schema string) (*ParsedProtobufSchema, error) {
+    if d.disableProtobufSchemaCache {
         return compileProtobufSchema(schema)
     }
-    if cached, ok := protobufSchemaCache.Get(schema); ok {
+    if cached, ok := d.protobufSchemaCache.Get(schema); ok {
         return cached, nil
     }
     parsed, err := compileProtobufSchema(schema)
     if err != nil {
         return nil, err
     }
-    protobufSchemaCache.Add(schema, parsed)
+    d.protobufSchemaCache.Add(schema, parsed)
     return parsed, nil
 }
 ```
@@ -124,7 +121,7 @@ As a sanity check, JSON and plaintext benchmarks (which share no code with the A
 
 ```go
 func (sm *StreamManager) sortedFlatKeys(flat map[string]interface{}) []string {
-    if !perfflags.FieldOrderCache.Disabled() {
+    if sm.fieldOrderCacheEnabled {
         sm.mu.RLock()
         hit := sm.flatKeySetMatchesLocked(flat)
         cached := sm.flatKeyOrder
@@ -149,50 +146,46 @@ At typical field counts the win is now measurable, but still smaller than wide-s
 
 ---
 
-## Reproducing every fix's "before" behavior: feature flags
+## Reproducing every fix's "before" behavior: benchmark variants
 
-Every fix above is controlled by an environment-variable-backed flag in a new `pkg/perfflags` package. By default, all flags are **off**, meaning you get the optimized (fixed) behavior. Set the corresponding variable to a truthy value to force the plugin back to its pre-fix behavior — no git checkout needed:
+These optimizations are now controlled in code, not by shipped environment variables. Production always uses the optimized path. Benchmarks reproduce the pre-fix behavior by constructing explicit no-cache or no-optimization variants.
 
-| Flag                            | Environment variable                          | Reverts                           |
-| ------------------------------- | --------------------------------------------- | --------------------------------- |
-| `perfflags.AvroCodecCache`      | `KAFKA_DS_PERF_DISABLE_AVRO_CODEC_CACHE`      | Avro codec caching (Fix #1)       |
-| `perfflags.ProtobufSchemaCache` | `KAFKA_DS_PERF_DISABLE_PROTOBUF_SCHEMA_CACHE` | Protobuf schema caching (Fix #2)  |
-| `perfflags.FieldOrderCache`     | `KAFKA_DS_PERF_DISABLE_FIELD_ORDER_CACHE`     | Field-order caching (Fix #3)      |
-| `perfflags.StreamMicroBatch`    | `KAFKA_DS_PERF_DISABLE_STREAM_MICROBATCH`     | RunStream micro-batching (Fix #4) |
+Useful benchmark pairs:
 
-```go
-type Flag struct {
-    envVar string
-    value  atomic.Bool
-}
+| Optimized benchmark                                | Pre-fix benchmark                                            | Reverts                          |
+| -------------------------------------------------- | ------------------------------------------------------------ | -------------------------------- |
+| `BenchmarkDecodeAvroMessage`                       | `BenchmarkDecodeAvroMessage_NoCache`                         | Avro codec caching              |
+| `BenchmarkDecodeProtobufMessage_Plain`             | `BenchmarkDecodeProtobufMessage_Plain_NoCache`               | Protobuf schema caching         |
+| `BenchmarkProcessMessage_JSON_Wide100`             | `BenchmarkProcessMessage_JSON_Wide100_FieldOrderCacheDisabled` | Field-order caching             |
+| `BenchmarkWorkflow`                                | `BenchmarkWorkflow_NoOptimizations`                          | Combined old path, including micro-batching |
 
-func (f *Flag) Disabled() bool                 { return f.value.Load() }
-func (f *Flag) SetDisabledForTest(disabled bool) { f.value.Store(disabled) }
-```
+The schema caches remain bounded with hardcoded defaults:
 
-`Disabled()` is checked at the start of each optimized code path; `SetDisabledForTest` lets benchmarks toggle behavior in-process (used to produce the before/after numbers above without needing two separate benchmark binaries). In production, only the environment variable matters.
-
-Because the schema caches are now bounded, two optional sizing knobs are available:
-
-| Setting                                           | Default | Meaning                                                 |
-| ------------------------------------------------- | ------- | ------------------------------------------------------- |
-| `KAFKA_DS_PERF_AVRO_CODEC_CACHE_MAX_ENTRIES`      | `256`   | Max compiled Avro codecs retained in LRU cache          |
-| `KAFKA_DS_PERF_PROTOBUF_SCHEMA_CACHE_MAX_ENTRIES` | `256`   | Max compiled Protobuf descriptors retained in LRU cache |
+| Constant                                       | Default | Meaning                                                 |
+| ---------------------------------------------- | ------- | ------------------------------------------------------- |
+| `defaultAvroCodecCacheMaxEntries`              | `256`   | Max compiled Avro codecs retained in LRU cache          |
+| `defaultProtobufSchemaCacheMaxEntries`         | `256`   | Max compiled Protobuf descriptors retained in LRU cache |
 
 Example: reproduce the pre-fix Avro decode behavior yourself:
 
 ```bash
-# Fixed (default) behavior
-go test -bench='^BenchmarkDecodeAvroMessage$' -benchmem -run='^$' ./pkg/kafka_client/...
+# Optimized path
+go test -run '^$' -bench '^BenchmarkDecodeAvroMessage$' -benchmem ./pkg/kafka_client/...
 # BenchmarkDecodeAvroMessage-10   707856   326.2 ns/op   760 B/op   16 allocs/op
 
-# Pre-fix behavior, reproduced on demand
-KAFKA_DS_PERF_DISABLE_AVRO_CODEC_CACHE=true \
-  go test -bench='^BenchmarkDecodeAvroMessage$' -benchmem -run='^$' ./pkg/kafka_client/...
-# BenchmarkDecodeAvroMessage-10   48212   4967 ns/op   8260 B/op   185 allocs/op
+# Explicit pre-fix path
+go test -run '^$' -bench '^BenchmarkDecodeAvroMessage_NoCache$' -benchmem ./pkg/kafka_client/...
+# BenchmarkDecodeAvroMessage_NoCache-10   48212   4967 ns/op   8260 B/op   185 allocs/op
 ```
 
-The same pattern applies to the datasource plugin binary itself in a real Grafana deployment: set the environment variable before starting Grafana, and the plugin's backend process will behave exactly as it did before the fix.
+When using `benchstat`, normalize the explicit pre-fix benchmark name back to the optimized name so both files contain matching benchmark identifiers:
+
+```bash
+go test -run '^$' -bench '^BenchmarkDecodeAvroMessage$' -benchmem -count=6 ./pkg/kafka_client/... > after.txt
+go test -run '^$' -bench '^BenchmarkDecodeAvroMessage_NoCache$' -benchmem -count=6 ./pkg/kafka_client/... > before.txt
+sed 's/BenchmarkDecodeAvroMessage_NoCache/BenchmarkDecodeAvroMessage/' before.txt > before.norm.txt
+benchstat before.norm.txt after.txt
+```
 
 ---
 
@@ -206,7 +199,7 @@ Profiling `ProcessMessage`'s JSON decode path showed that `FieldBuilder.AddValue
 
 The reason this wasn't touched: the plugin deliberately always builds _nullable_ field types, even for non-null values, so that a field's Go type stays consistent across the one-frame-per-message live stream — Grafana Live requires stable schema across appended frames. Switching to non-nullable slices would save an allocation per field, but risks breaking that schema stability if a later message needs to send a null value for the same field. That's a real risk I can't verify without an end-to-end Grafana Live test harness, so it wasn't shipped speculatively.
 
-The higher-leverage architectural lever here is to batch compatible Kafka message frames into small multi-row frames before send, amortizing `FrameToJSON` and packet overhead. That is now implemented behind `KAFKA_DS_PERF_DISABLE_STREAM_MICROBATCH` (enabled by default; disable to reproduce pre-fix one-frame-per-message behavior).
+The higher-leverage architectural lever here is to batch compatible Kafka message frames into small multi-row frames before send, amortizing `FrameToJSON` and packet overhead. That optimization is enabled in production and is reproduced in benchmarks with `BenchmarkWorkflow`; `BenchmarkWorkflow_NoOptimizations` exercises the old one-frame-per-message behavior.
 
 ### Not shipped in this stage (next candidates)
 
@@ -271,12 +264,7 @@ This benchmark executes `ProcessMessageFrames` and then routes each resulting fr
 - `noop`: processing-only baseline (decode + flatten + frame building)
 - `sendframe_json`: processing + real `backend.StreamSender.SendFrame` JSON serialization cost
 
-By default this benchmark also uses the same micro-batching combiner as `RunStream`. To reproduce pre-fix one-frame-per-message behavior, run with:
-
-```bash
-KAFKA_DS_PERF_DISABLE_STREAM_MICROBATCH=true \
-    go test -run '^$' -bench BenchmarkWorkflow -benchmem ./pkg/plugin/...
-```
+By default this benchmark also uses the same micro-batching combiner as `RunStream`. To reproduce the combined pre-fix behavior, run `BenchmarkWorkflow_NoOptimizations`.
 
 Current matrix includes `plaintext`, `lineprotocol`, `avro`, `protobuf`, `json_20fields`, and `json_100fields`.
 
@@ -309,8 +297,8 @@ For stable comparisons across iterations, repeat with `-count=6` and compare wit
 
 To measure the full impact of all implemented fixes together, I compared:
 
-- **Before**: all perf flags disabled (`AVRO_CODEC_CACHE`, `PROTOBUF_SCHEMA_CACHE`, `FIELD_ORDER_CACHE`, `STREAM_MICROBATCH`)
-- **After**: default settings (all fixes enabled)
+- **Before**: `BenchmarkWorkflow_NoOptimizations`
+- **After**: `BenchmarkWorkflow`
 
 Command pattern used:
 
@@ -318,18 +306,17 @@ Command pattern used:
 # After (all fixes enabled)
 go test -run '^$' -bench '^BenchmarkWorkflow/sendframe_json/' -benchmem -count=6 ./pkg/plugin/... > /tmp/workflow-after.txt
 
-# Before (all fixes disabled)
-KAFKA_DS_PERF_DISABLE_AVRO_CODEC_CACHE=true \
-KAFKA_DS_PERF_DISABLE_PROTOBUF_SCHEMA_CACHE=true \
-KAFKA_DS_PERF_DISABLE_FIELD_ORDER_CACHE=true \
-KAFKA_DS_PERF_DISABLE_STREAM_MICROBATCH=true \
-go test -run '^$' -bench '^BenchmarkWorkflow/sendframe_json/' -benchmem -count=6 ./pkg/plugin/... > /tmp/workflow-before.txt
+# Before (combined explicit old path)
+go test -run '^$' -bench '^BenchmarkWorkflow_NoOptimizations/sendframe_json/' -benchmem -count=6 ./pkg/plugin/... > /tmp/workflow-before.txt
 
 # Keep only benchmark result lines for benchstat parsing
 rg '^Benchmark' /tmp/workflow-before.txt > /tmp/workflow-before-clean.txt
 rg '^Benchmark' /tmp/workflow-after.txt > /tmp/workflow-after-clean.txt
 
-benchstat /tmp/workflow-before-clean.txt /tmp/workflow-after-clean.txt
+# Normalize the explicit old-path benchmark name so benchstat can pair rows
+sed 's/BenchmarkWorkflow_NoOptimizations/BenchmarkWorkflow/' /tmp/workflow-before-clean.txt > /tmp/workflow-before-norm.txt
+
+benchstat /tmp/workflow-before-norm.txt /tmp/workflow-after-clean.txt
 ```
 
 `msg/s` results (`sendframe_json` mode, n=6):
@@ -375,12 +362,8 @@ Reproduce those memory deltas directly:
 go test -run '^$' -bench '^BenchmarkWorkflow/sendframe_json/json_100fields$' -benchmem \
     -count=1 -memprofile /tmp/workflow-after.mem.prof ./pkg/plugin/...
 
-# Before (all fixes disabled)
-KAFKA_DS_PERF_DISABLE_AVRO_CODEC_CACHE=true \
-KAFKA_DS_PERF_DISABLE_PROTOBUF_SCHEMA_CACHE=true \
-KAFKA_DS_PERF_DISABLE_FIELD_ORDER_CACHE=true \
-KAFKA_DS_PERF_DISABLE_STREAM_MICROBATCH=true \
-go test -run '^$' -bench '^BenchmarkWorkflow/sendframe_json/json_100fields$' -benchmem \
+# Before (combined explicit old path)
+go test -run '^$' -bench '^BenchmarkWorkflow_NoOptimizations/sendframe_json/json_100fields$' -benchmem \
     -count=1 -memprofile /tmp/workflow-before.mem.prof ./pkg/plugin/...
 
 go tool pprof -top -alloc_objects /tmp/workflow-before.mem.prof
@@ -422,20 +405,19 @@ cd grafana-kafka-datasource
 # Run the micro-benchmarks (fixed/default behavior)
 go test -bench=. -benchmem -run='^$' ./pkg/plugin/... ./pkg/kafka_client/...
 
-# Reproduce pre-fix behavior for any single fix
-KAFKA_DS_PERF_DISABLE_AVRO_CODEC_CACHE=true go test -bench='^BenchmarkDecodeAvroMessage$' -benchmem -run='^$' ./pkg/kafka_client/...
-KAFKA_DS_PERF_DISABLE_PROTOBUF_SCHEMA_CACHE=true go test -bench='^BenchmarkDecodeProtobufMessage_Plain$' -benchmem -run='^$' ./pkg/kafka_client/...
-KAFKA_DS_PERF_DISABLE_FIELD_ORDER_CACHE=true go test -bench='^BenchmarkProcessMessage_JSON_Wide100$' -benchmem -run='^$' ./pkg/plugin/...
-KAFKA_DS_PERF_DISABLE_STREAM_MICROBATCH=true go test -run '^$' -bench BenchmarkWorkflow -benchmem ./pkg/plugin/...
+# Reproduce the explicit pre-fix benchmark paths
+go test -run '^$' -bench='^BenchmarkDecodeAvroMessage_NoCache$' -benchmem ./pkg/kafka_client/...
+go test -run '^$' -bench='^BenchmarkDecodeProtobufMessage_Plain_NoCache$' -benchmem ./pkg/kafka_client/...
+go test -run '^$' -bench='^BenchmarkProcessMessage_JSON_Wide100_FieldOrderCacheDisabled$' -benchmem ./pkg/plugin/...
+go test -run '^$' -bench='^BenchmarkWorkflow_NoOptimizations$' -benchmem ./pkg/plugin/...
 
 # Compare statistically (install benchstat once: go install golang.org/x/perf/cmd/benchstat@latest)
-# Use the same -bench filter for both runs so before/after only differ in the
-# one flag under comparison - mixing in other benchmarks (e.g. Protobuf's,
-# which stay optimized in both runs) would make the aggregate comparison
-# misleading rather than a like-for-like measurement of this one fix.
-go test -bench='^BenchmarkDecodeAvroMessage$' -benchmem -run='^$' -count=6 ./pkg/kafka_client/... > after.txt
-KAFKA_DS_PERF_DISABLE_AVRO_CODEC_CACHE=true go test -bench='^BenchmarkDecodeAvroMessage$' -benchmem -run='^$' -count=6 ./pkg/kafka_client/... > before.txt
-benchstat before.txt after.txt
+# Normalize the explicit pre-fix benchmark name so benchstat can pair it with
+# the optimized benchmark.
+go test -run '^$' -bench='^BenchmarkDecodeAvroMessage$' -benchmem -count=6 ./pkg/kafka_client/... > after.txt
+go test -run '^$' -bench='^BenchmarkDecodeAvroMessage_NoCache$' -benchmem -count=6 ./pkg/kafka_client/... > before.txt
+sed 's/BenchmarkDecodeAvroMessage_NoCache/BenchmarkDecodeAvroMessage/' before.txt > before.norm.txt
+benchstat before.norm.txt after.txt
 
 # Generate load and inspect it in Grafana
 cd example/go/loadgen
@@ -448,6 +430,6 @@ go run . -broker localhost:9094 -topic loadgen -format protobuf -duration 30s -w
 
 - Two schema-recompilation bugs (Avro, Protobuf) accounted for the overwhelming majority of decode cost - cheap to fix, huge payoff (4.3x-12.5x on affected paths), and only obvious once profiled.
 - Field-order caching helps both typical and wide schemas, but wide schemas still benefit more.
-- Bounded caches and explicit feature flags make optimization safer operationally: fast by default, reproducible pre-fix behavior on demand, and controlled memory growth under schema churn.
+- Bounded caches and explicit benchmark variants make optimization safer operationally: fast by default in production, reproducible pre-fix behavior in tests, and controlled memory growth under schema churn.
 
 If you maintain a Grafana datasource plugin (or any hot-path message-processing service), the same recipe applies: benchmark before touching anything, profile to find the _actual_ line costing time, fix only what the data justifies, and keep a way to switch back.
