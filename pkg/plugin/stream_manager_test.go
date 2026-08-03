@@ -3,7 +3,6 @@ package plugin
 import (
 	"context"
 	"errors"
-	"net/http"
 	"testing"
 	"time"
 
@@ -69,7 +68,6 @@ func (m *mockStreamClient) GetSchemaRegistryUrl() string      { return "" }
 func (m *mockStreamClient) GetSchemaRegistryUsername() string { return "" }
 func (m *mockStreamClient) GetSchemaRegistryPassword() string { return "" }
 func (m *mockStreamClient) GetSubjectNamingStrategy() string  { return "recordName" }
-func (m *mockStreamClient) GetHTTPClient() *http.Client       { return &http.Client{} }
 
 func TestStreamManager_ValidateAndGetPartitions(t *testing.T) {
 	tests := []struct {

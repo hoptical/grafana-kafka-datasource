@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
+	"net"
 	"strings"
 	"time"
 
@@ -43,13 +43,14 @@ const txnControlTypeCommit int16 = 1
 //
 // If Timeout <= 0, sensible defaults are used.
 type Options struct {
-	BootstrapServers string `json:"bootstrapServers"`
-	ClientId         string `json:"clientId"`
-	SecurityProtocol string `json:"securityProtocol"`
-	SaslMechanisms   string `json:"saslMechanisms"`
-	SaslUsername     string `json:"saslUsername"`
-	SaslPassword     string `json:"saslPassword"`
-	LogLevel         string `json:"logLevel"`
+	BootstrapServers       string `json:"bootstrapServers"`
+	ClientId               string `json:"clientId"`
+	SecurityProtocol       string `json:"securityProtocol"`
+	SaslMechanisms         string `json:"saslMechanisms"`
+	SaslUsername           string `json:"saslUsername"`
+	SaslPassword           string `json:"saslPassword"`
+	EnableSecureSocksProxy bool   `json:"enableSecureSocksProxy"`
+	LogLevel               string `json:"logLevel"`
 	// TLS Configuration
 	TLSAuthWithCACert bool   `json:"tlsAuthWithCACert"`
 	TLSAuth           bool   `json:"tlsAuth"`
@@ -72,6 +73,7 @@ type Options struct {
 
 type KafkaClient struct {
 	Dialer           *kafka.Dialer
+	DialFunc         func(context.Context, string, string) (net.Conn, error)
 	Reader           *kafka.Reader
 	Conn             *kafka.Client
 	Transport        *kafka.Transport
@@ -95,18 +97,14 @@ type KafkaClient struct {
 	// Advanced settings
 	Timeout            int32 // effective timeout (ms)
 	HealthcheckTimeout int32 // health check specific timeout (ms)
-	// Avro Configuration
+	// Message decoding configuration
 	MessageFormat          string
 	SchemaRegistryUrl      string
 	SchemaRegistryUsername string
 	SchemaRegistryPassword string
-	HTTPClient             *http.Client // HTTP client for Schema Registry (from grafana-plugin-sdk-go)
 }
 
-// GetHTTPClient returns the HTTP client used for Schema Registry connections
-func (client *KafkaClient) GetHTTPClient() *http.Client {
-	return client.HTTPClient
-}
+type DialFunc func(context.Context, string, string) (net.Conn, error)
 
 type KafkaMessage struct {
 	Value     interface{} `json:"value,omitempty"` // Can be map[string]interface{} or []interface{}
@@ -242,9 +240,18 @@ func isTransactionControlRecord(key, value []byte) bool {
 }
 
 // NewKafkaClient creates a new KafkaClient instance.
-// The httpClient parameter should be created using grafana-plugin-sdk-go/backend/httpclient
-// to support Private Data Source Connect (PDC) with automatic SOCKS proxy handling.
-func NewKafkaClient(options Options, httpClient *http.Client) KafkaClient {
+func NewKafkaClient(options Options) KafkaClient {
+	return newKafkaClient(options, nil)
+}
+
+// NewKafkaClientWithDialFunc creates a Kafka client using the supplied broker dial function.
+func NewKafkaClientWithDialFunc(options Options, dialFunc DialFunc) KafkaClient {
+	return newKafkaClient(options, dialFunc)
+}
+
+// newKafkaClient builds a KafkaClient. A non-nil dialFunc routes broker
+// connections through Grafana PDC; nil uses direct connections.
+func newKafkaClient(options Options, dialFunc DialFunc) KafkaClient {
 	// Build broker slice once
 	raw := strings.Split(options.BootstrapServers, ",")
 	brokers := make([]string, 0, len(raw))
@@ -268,29 +275,28 @@ func NewKafkaClient(options Options, httpClient *http.Client) KafkaClient {
 	}
 
 	return KafkaClient{
-		BootstrapServers:   options.BootstrapServers,
-		Brokers:            brokers,
-		ClientId:           options.ClientId,
-		SecurityProtocol:   options.SecurityProtocol,
-		SaslMechanisms:     options.SaslMechanisms,
-		SaslUsername:       options.SaslUsername,
-		SaslPassword:       options.SaslPassword,
-		LogLevel:           options.LogLevel,
-		TLSAuthWithCACert:  options.TLSAuthWithCACert,
-		TLSAuth:            options.TLSAuth,
-		TLSSkipVerify:      options.TLSSkipVerify,
-		ServerName:         options.ServerName,
-		TLSCACert:          options.TLSCACert,
-		TLSClientCert:      options.TLSClientCert,
-		TLSClientKey:       options.TLSClientKey,
-		Timeout:            effectiveTimeoutMs,
-		HealthcheckTimeout: effectiveHealthcheckMs,
-		// Avro Configuration
+		BootstrapServers:       options.BootstrapServers,
+		Brokers:                brokers,
+		ClientId:               options.ClientId,
+		SecurityProtocol:       options.SecurityProtocol,
+		SaslMechanisms:         options.SaslMechanisms,
+		SaslUsername:           options.SaslUsername,
+		SaslPassword:           options.SaslPassword,
+		DialFunc:               dialFunc,
+		LogLevel:               options.LogLevel,
+		TLSAuthWithCACert:      options.TLSAuthWithCACert,
+		TLSAuth:                options.TLSAuth,
+		TLSSkipVerify:          options.TLSSkipVerify,
+		ServerName:             options.ServerName,
+		TLSCACert:              options.TLSCACert,
+		TLSClientCert:          options.TLSClientCert,
+		TLSClientKey:           options.TLSClientKey,
+		Timeout:                effectiveTimeoutMs,
+		HealthcheckTimeout:     effectiveHealthcheckMs,
 		MessageFormat:          options.MessageFormat,
 		SchemaRegistryUrl:      options.SchemaRegistryUrl,
 		SchemaRegistryUsername: options.SchemaRegistryUsername,
 		SchemaRegistryPassword: options.SchemaRegistryPassword,
-		HTTPClient:             httpClient,
 	}
 }
 
@@ -321,11 +327,13 @@ func (client *KafkaClient) NewConnection() error {
 		Timeout:       effectiveTimeout,
 		SASLMechanism: mechanism,
 		ClientID:      client.ClientId,
+		DialFunc:      client.DialFunc,
 	}
 
 	transport := &kafka.Transport{
 		SASL:     mechanism,
 		ClientID: client.ClientId,
+		Dial:     client.DialFunc,
 	}
 	if client.Transport != nil {
 		client.Transport.CloseIdleConnections()

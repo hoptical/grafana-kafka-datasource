@@ -7,11 +7,17 @@ import { deepFreeze } from '../test-utils/test-helpers';
 
 // Mock @grafana/ui components
 jest.mock('@grafana/ui', () => ({
-  InlineField: ({ children, label, required }: any) => (
-    <div data-testid="inline-field" aria-label={label} data-required={required}>
+  InlineField: ({ children, label, required, tooltip }: any) => (
+    <div data-testid="inline-field" aria-label={label} data-required={required} data-tooltip={tooltip}>
       {children}
     </div>
   ),
+  Tooltip: ({ children, content }: any) => (
+    <span data-testid="pdc-tooltip" data-content={content}>
+      {children}
+    </span>
+  ),
+  Icon: ({ name }: any) => <span data-testid={`icon-${name}`} />,
   Input: (props: any) => <input {...props} />,
   Divider: ({ spacing }: any) => <div data-testid="divider" data-spacing={spacing} />,
   SecretInput: ({ value, onChange, onReset, isConfigured, placeholder, id }: any) => (
@@ -24,8 +30,8 @@ jest.mock('@grafana/ui', () => ({
       )}
     </div>
   ),
-  Checkbox: ({ value, onChange }: any) => (
-    <input type="checkbox" checked={value} onChange={onChange} data-testid="checkbox" />
+  Checkbox: ({ value, onChange, ...props }: any) => (
+    <input type="checkbox" checked={value} onChange={onChange} data-testid="checkbox" {...props} />
   ),
   SecretTextArea: ({ value, onChange, onReset, isConfigured, placeholder, id, rows }: any) => (
     <div>
@@ -211,6 +217,26 @@ describe('ConfigEditor', () => {
     );
   });
 
+  it('calls onOptionsChange when PDC is enabled', () => {
+    renderConfigEditor();
+    const checkbox = screen.getAllByTestId('checkbox')[0];
+
+    expect(screen.getByTestId('pdc-tooltip')).toHaveAttribute(
+      'data-content',
+      'Routes Kafka broker and Schema Registry traffic through Grafana PDC. PDC must be configured and available in Grafana.'
+    );
+
+    fireEvent.click(checkbox);
+
+    expect(mockOnOptionsChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jsonData: expect.objectContaining({
+          enableSecureSocksProxy: true,
+        }),
+      })
+    );
+  });
+
   it('calls onOptionsChange when security protocol changes', () => {
     renderConfigEditor();
     const select = screen.getByTestId('select');
@@ -311,7 +337,7 @@ describe('ConfigEditor', () => {
 
   it('calls onOptionsChange when TLS skip verify changes', () => {
     renderConfigEditor({ securityProtocol: 'SSL' });
-    const checkbox = screen.getAllByTestId('checkbox')[0]; // First checkbox is skip verify
+    const checkbox = screen.getAllByTestId('checkbox')[1]; // PDC checkbox is first
 
     fireEvent.click(checkbox);
 
@@ -326,7 +352,7 @@ describe('ConfigEditor', () => {
 
   it('calls onOptionsChange when TLS auth with CA cert changes', () => {
     renderConfigEditor({ securityProtocol: 'SSL' });
-    const checkbox = screen.getAllByTestId('checkbox')[1]; // Second checkbox is CA cert
+    const checkbox = screen.getAllByTestId('checkbox')[2]; // PDC checkbox is first
 
     fireEvent.click(checkbox);
 
@@ -347,7 +373,7 @@ describe('ConfigEditor', () => {
 
   it('calls onOptionsChange when TLS client auth changes', () => {
     renderConfigEditor({ securityProtocol: 'SSL' });
-    const checkbox = screen.getAllByTestId('checkbox')[2]; // Third checkbox is client auth
+    const checkbox = screen.getAllByTestId('checkbox')[3]; // PDC checkbox is first
 
     fireEvent.click(checkbox);
 
