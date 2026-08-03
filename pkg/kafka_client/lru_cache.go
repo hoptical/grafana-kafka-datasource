@@ -2,8 +2,6 @@ package kafka_client
 
 import (
 	"container/list"
-	"os"
-	"strconv"
 	"sync"
 )
 
@@ -70,19 +68,4 @@ func (c *lruCache[T]) removeOldest() {
 	entry := tail.Value.(*lruCacheEntry[T])
 	delete(c.items, entry.key)
 	c.order.Remove(tail)
-}
-
-func cacheSizeFromEnv(envVar string, fallback int) int {
-	if fallback < 1 {
-		fallback = 1
-	}
-	raw, ok := os.LookupEnv(envVar)
-	if !ok || raw == "" {
-		return fallback
-	}
-	n, err := strconv.Atoi(raw)
-	if err != nil || n < 1 {
-		return fallback
-	}
-	return n
 }

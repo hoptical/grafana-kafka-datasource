@@ -8,15 +8,14 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/dynamicpb"
-
-	"github.com/hoptical/grafana-kafka-datasource/pkg/perfflags"
 )
 
 // buildBenchProtobufPayload encodes a fixture message once (outside the timed
 // benchmark loop) against simpleProtoSchema (defined in protobuf_utils_test.go).
 func buildBenchProtobufPayload(b *testing.B) []byte {
 	b.Helper()
-	parsed, err := ParseProtobufSchema(simpleProtoSchema)
+	decoder := NewMessageDecoder(MessageDecoderOptions{})
+	parsed, err := decoder.ParseProtobufSchema(simpleProtoSchema)
 	if err != nil {
 		b.Fatalf("failed to parse schema: %v", err)
 	}
@@ -50,41 +49,47 @@ func buildBenchConfluentProtobufPayload(b *testing.B) []byte {
 // currently runs on EVERY message (the schema string is cached upstream in
 // StreamManager, but the compiled descriptor is not).
 func BenchmarkDecodeProtobufMessage_Plain(b *testing.B) {
+	decoder := NewMessageDecoder(MessageDecoderOptions{})
 	payload := buildBenchProtobufPayload(b)
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if _, err := DecodeProtobufMessage(payload, simpleProtoSchema); err != nil {
+		if _, err := decoder.DecodeProtobufMessage(payload, simpleProtoSchema); err != nil {
+			b.Fatalf("DecodeProtobufMessage failed: %v", err)
+		}
+	}
+}
+
+func BenchmarkDecodeProtobufMessage_Plain_NoCache(b *testing.B) {
+	decoder := NewMessageDecoder(MessageDecoderOptions{DisableProtobufSchemaCache: true})
+	payload := buildBenchProtobufPayload(b)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, err := decoder.DecodeProtobufMessage(payload, simpleProtoSchema); err != nil {
 			b.Fatalf("DecodeProtobufMessage failed: %v", err)
 		}
 	}
 }
 
 func BenchmarkDecodeProtobufMessage_ConfluentWireFormat(b *testing.B) {
+	decoder := NewMessageDecoder(MessageDecoderOptions{})
 	payload := buildBenchConfluentProtobufPayload(b)
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if _, err := DecodeProtobufMessage(payload, simpleProtoSchema); err != nil {
+		if _, err := decoder.DecodeProtobufMessage(payload, simpleProtoSchema); err != nil {
 			b.Fatalf("DecodeProtobufMessage failed: %v", err)
 		}
 	}
 }
 
-// BenchmarkParseProtobufSchema isolates just the schema compilation cost, to
-// quantify how much of BenchmarkDecodeProtobufMessage_Plain's cost is
-// recompilation vs. actual unmarshal + map conversion. Caching is disabled
-// for the duration of the benchmark, since with it enabled only the first
-// b.N iteration would actually compile - the rest would measure cache-hit
-// cost instead of the compilation cost this benchmark is meant to isolate.
 func BenchmarkParseProtobufSchema(b *testing.B) {
-	wasDisabled := perfflags.ProtobufSchemaCache.Disabled()
-	perfflags.ProtobufSchemaCache.SetDisabledForTest(true)
-	defer perfflags.ProtobufSchemaCache.SetDisabledForTest(wasDisabled)
+	decoder := NewMessageDecoder(MessageDecoderOptions{DisableProtobufSchemaCache: true})
 
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		if _, err := ParseProtobufSchema(simpleProtoSchema); err != nil {
+		if _, err := decoder.ParseProtobufSchema(simpleProtoSchema); err != nil {
 			b.Fatalf("ParseProtobufSchema failed: %v", err)
 		}
 	}
@@ -95,7 +100,8 @@ func BenchmarkParseProtobufSchema(b *testing.B) {
 // simulating what decode cost would look like if the descriptor were cached.
 func BenchmarkDecodeProtobufMessage_DecodeOnly(b *testing.B) {
 	payload := buildBenchProtobufPayload(b)
-	parsed, err := ParseProtobufSchema(simpleProtoSchema)
+	decoder := NewMessageDecoder(MessageDecoderOptions{})
+	parsed, err := decoder.ParseProtobufSchema(simpleProtoSchema)
 	if err != nil {
 		b.Fatalf("failed to parse schema: %v", err)
 	}
