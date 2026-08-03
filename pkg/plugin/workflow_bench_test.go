@@ -10,7 +10,6 @@ import (
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 	"github.com/grafana/grafana-plugin-sdk-go/data"
 	"github.com/hoptical/grafana-kafka-datasource/pkg/kafka_client"
-	"github.com/hoptical/grafana-kafka-datasource/pkg/perfflags"
 	"github.com/linkedin/goavro/v2"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -165,7 +164,30 @@ func buildWorkflowFixtureLineProtocol() workflowFixture {
 	}
 }
 
+type workflowBenchOptions struct {
+	streamManagerOptions []StreamManagerOption
+	microBatchEnabled    bool
+}
+
 func BenchmarkWorkflow(b *testing.B) {
+	runWorkflowBenchmark(b, workflowBenchOptions{microBatchEnabled: true})
+}
+
+func BenchmarkWorkflow_NoOptimizations(b *testing.B) {
+	decoder := kafka_client.NewMessageDecoder(kafka_client.MessageDecoderOptions{
+		DisableAvroCodecCache:      true,
+		DisableProtobufSchemaCache: true,
+	})
+	runWorkflowBenchmark(b, workflowBenchOptions{
+		streamManagerOptions: []StreamManagerOption{
+			WithFieldOrderCacheDisabled(),
+			WithMessageDecoder(decoder),
+		},
+		microBatchEnabled: false,
+	})
+}
+
+func runWorkflowBenchmark(b *testing.B, options workflowBenchOptions) {
 	fixtures := []workflowFixture{
 		buildWorkflowFixturePlaintext(),
 		buildWorkflowFixtureLineProtocol(),
@@ -196,21 +218,21 @@ func BenchmarkWorkflow(b *testing.B) {
 			for _, fixture := range fixtures {
 				fixture := fixture
 				b.Run(fixture.name, func(b *testing.B) {
-					runWorkflowBenchCase(b, fixture, mode.newSink())
+					runWorkflowBenchCase(b, fixture, mode.newSink(), options)
 				})
 			}
 		})
 	}
 }
 
-func runWorkflowBenchCase(b *testing.B, fixture workflowFixture, sink frameSink) {
-	sm := newBenchStreamManager()
+func runWorkflowBenchCase(b *testing.B, fixture workflowFixture, sink frameSink, options workflowBenchOptions) {
+	sm := newBenchStreamManager(options.streamManagerOptions...)
 	partitions := []int32{0}
 	msgWithPartition := messageWithPartition{msg: fixture.message, partition: 0}
 	messagesCh := make(chan messageWithPartition, streamMessageBuffer)
 
 	var batcher *frameMicroBatcher
-	if !perfflags.StreamMicroBatch.Disabled() {
+	if options.microBatchEnabled {
 		if _, ok := sink.(*streamSenderFrameSink); !ok || fixture.config.MessageFormat == "lineprotocol" {
 			batcher = nil
 		} else {

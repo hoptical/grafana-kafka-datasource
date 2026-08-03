@@ -229,21 +229,31 @@ More screenshots and recordings (click to open):
 
 Want to test the plugin with realistic Kafka messages? Use the included sample producers to generate JSON, Avro, or Protobuf messages with various structures and schema configurations. For detailed usage, see the [example README](https://github.com/hoptical/grafana-kafka-datasource/blob/main/example/README.md). To test Plaintext mode, produce any bytes (for example JSON bytes) and select `Plaintext` in the query editor to view raw payload text.
 
-## Performance Flags
+## Performance Benchmarks
 
-Performance optimizations are enabled by default. You can disable each optimization independently with environment variables (truthy values such as `true`, `1`, `t`):
+Production builds always use the optimized path. The old pre-fix behavior is still available for measurement through dedicated benchmark variants instead of runtime environment variables.
 
-- `KAFKA_DS_PERF_DISABLE_AVRO_CODEC_CACHE`: disable Avro codec caching
-- `KAFKA_DS_PERF_DISABLE_PROTOBUF_SCHEMA_CACHE`: disable Protobuf schema caching
-- `KAFKA_DS_PERF_DISABLE_FIELD_ORDER_CACHE`: disable cached flattened-field ordering
-- `KAFKA_DS_PERF_DISABLE_STREAM_MICROBATCH`: disable stream micro-batching
+Useful benchmark pairs:
 
-Schema caches are bounded. Optional tuning knobs:
+- `BenchmarkDecodeAvroMessage` vs `BenchmarkDecodeAvroMessage_NoCache`
+- `BenchmarkDecodeProtobufMessage_Plain` vs `BenchmarkDecodeProtobufMessage_Plain_NoCache`
+- `BenchmarkProcessMessage_JSON_Wide100` vs `BenchmarkProcessMessage_JSON_Wide100_FieldOrderCacheDisabled`
+- `BenchmarkWorkflow` vs `BenchmarkWorkflow_NoOptimizations`
 
-- `KAFKA_DS_PERF_AVRO_CODEC_CACHE_MAX_ENTRIES` (default: `256`)
-- `KAFKA_DS_PERF_PROTOBUF_SCHEMA_CACHE_MAX_ENTRIES` (default: `256`)
+Example commands:
 
-For benchmark methodology, before/after numbers, profiling commands, and architecture notes, see [Performance Optimizations](https://github.com/hoptical/grafana-kafka-datasource/blob/main/docs/PERFORMANCE_OPTIMIZATIONS.md).
+```bash
+# Run all focused performance benchmarks
+go test -run '^$' -bench 'BenchmarkDecodeAvroMessage|BenchmarkDecodeProtobufMessage_Plain|BenchmarkProcessMessage_JSON_Wide100|BenchmarkWorkflow' -benchmem ./pkg/kafka_client/... ./pkg/plugin/...
+
+# Compare cached Avro decode vs the explicit no-cache benchmark path
+go test -run '^$' -bench '^BenchmarkDecodeAvroMessage$' -benchmem -count=6 ./pkg/kafka_client/... > after.txt
+go test -run '^$' -bench '^BenchmarkDecodeAvroMessage_NoCache$' -benchmem -count=6 ./pkg/kafka_client/... > before.txt
+sed 's/BenchmarkDecodeAvroMessage_NoCache/BenchmarkDecodeAvroMessage/' before.txt > before.norm.txt
+benchstat before.norm.txt after.txt
+```
+
+The Avro and Protobuf schema caches remain bounded with a hardcoded default size of `256` entries. For benchmark methodology, before/after numbers, profiling commands, and architecture notes, see [Performance Optimizations](https://github.com/hoptical/grafana-kafka-datasource/blob/main/docs/PERFORMANCE_OPTIMIZATIONS.md).
 
 ## FAQ & Troubleshooting
 

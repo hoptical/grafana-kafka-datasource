@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/hoptical/grafana-kafka-datasource/pkg/kafka_client"
-	"github.com/hoptical/grafana-kafka-datasource/pkg/perfflags"
 	"github.com/linkedin/goavro/v2"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -36,8 +35,8 @@ message SensorReading {
 
 // newBenchStreamManager returns a StreamManager wired to a no-op mockStreamClient,
 // suitable for benchmarking ProcessMessage/ProcessMessageFrames without any network I/O.
-func newBenchStreamManager() *StreamManager {
-	return NewStreamManager(&mockStreamClient{}, defaultFlattenMaxDepth, defaultFlattenFieldCap)
+func newBenchStreamManager(options ...StreamManagerOption) *StreamManager {
+	return NewStreamManager(&mockStreamClient{}, defaultFlattenMaxDepth, defaultFlattenFieldCap, options...)
 }
 
 func benchKafkaMessage(value interface{}, rawValue []byte) kafka_client.KafkaMessage {
@@ -67,17 +66,8 @@ func BenchmarkProcessMessage_JSON(b *testing.B) {
 	runProcessMessageBench(b, sm, msg, config)
 }
 
-// BenchmarkProcessMessage_JSON_FieldOrderCacheDisabled reproduces the pre-fix
-// behavior (always collect+sort keys from scratch) via perfflags.FieldOrderCache,
-// for before/after comparison against BenchmarkProcessMessage_JSON without
-// needing a separate git checkout. Run both with `-benchmem` and compare with
-// benchstat, or set KAFKA_DS_PERF_DISABLE_FIELD_ORDER_CACHE=true out-of-process.
 func BenchmarkProcessMessage_JSON_FieldOrderCacheDisabled(b *testing.B) {
-	wasDisabled := perfflags.FieldOrderCache.Disabled()
-	perfflags.FieldOrderCache.SetDisabledForTest(true)
-	defer perfflags.FieldOrderCache.SetDisabledForTest(wasDisabled)
-
-	sm := newBenchStreamManager()
+	sm := newBenchStreamManager(WithFieldOrderCacheDisabled())
 	config := &StreamConfig{MessageFormat: "json", TimestampMode: "message"}
 	msg := benchKafkaMessage(buildFlatJSON(20), nil)
 	runProcessMessageBench(b, sm, msg, config)
@@ -139,19 +129,44 @@ func BenchmarkProcessMessage_Protobuf(b *testing.B) {
 	runProcessMessageBench(b, sm, msg, config)
 }
 
+func BenchmarkProcessMessage_Protobuf_NoSchemaCache(b *testing.B) {
+	decoder := kafka_client.NewMessageDecoder(kafka_client.MessageDecoderOptions{DisableProtobufSchemaCache: true})
+	sm := newBenchStreamManager(WithMessageDecoder(decoder))
+	config := &StreamConfig{
+		MessageFormat:        "protobuf",
+		ProtobufSchemaSource: "inlineSchema",
+		ProtobufSchema:       benchProtoSchema,
+		TimestampMode:        "message",
+	}
+
+	parsed, err := kafka_client.DefaultMessageDecoder().ParseProtobufSchema(benchProtoSchema)
+	if err != nil {
+		b.Fatalf("failed to parse protobuf schema: %v", err)
+	}
+	dm := dynamicpb.NewMessage(parsed.Message)
+	dm.Set(parsed.Message.Fields().ByName("id"), protoreflect.ValueOfString("sensor-01"))
+	dm.Set(parsed.Message.Fields().ByName("value"), protoreflect.ValueOfFloat64(21.5))
+	dm.Set(parsed.Message.Fields().ByName("count"), protoreflect.ValueOfInt64(42))
+	payload, err := proto.Marshal(dm)
+	if err != nil {
+		b.Fatalf("failed to marshal protobuf fixture: %v", err)
+	}
+
+	msg := benchKafkaMessage(nil, payload)
+	runProcessMessageBench(b, sm, msg, config)
+}
+
 // BenchmarkProcessMessage_ParseProtobufSchemaOnly isolates the schema
 // compilation cost alone (protocompile.Compiler.Compile), to quantify how much
 // of BenchmarkProcessMessage_Protobuf's cost is recompilation vs. actual decode.
 // Caching is disabled for the duration so every iteration actually compiles,
 // instead of only the first one and cache lookups thereafter.
 func BenchmarkProcessMessage_ParseProtobufSchemaOnly(b *testing.B) {
-	wasDisabled := perfflags.ProtobufSchemaCache.Disabled()
-	perfflags.ProtobufSchemaCache.SetDisabledForTest(true)
-	defer perfflags.ProtobufSchemaCache.SetDisabledForTest(wasDisabled)
+	decoder := kafka_client.NewMessageDecoder(kafka_client.MessageDecoderOptions{DisableProtobufSchemaCache: true})
 
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		if _, err := kafka_client.ParseProtobufSchema(benchProtoSchema); err != nil {
+		if _, err := decoder.ParseProtobufSchema(benchProtoSchema); err != nil {
 			b.Fatalf("ParseProtobufSchema failed: %v", err)
 		}
 	}
@@ -206,11 +221,7 @@ func BenchmarkProcessMessage_JSON_Wide100(b *testing.B) {
 }
 
 func BenchmarkProcessMessage_JSON_Wide100_FieldOrderCacheDisabled(b *testing.B) {
-	wasDisabled := perfflags.FieldOrderCache.Disabled()
-	perfflags.FieldOrderCache.SetDisabledForTest(true)
-	defer perfflags.FieldOrderCache.SetDisabledForTest(wasDisabled)
-
-	sm := newBenchStreamManager()
+	sm := newBenchStreamManager(WithFieldOrderCacheDisabled())
 	config := &StreamConfig{MessageFormat: "json", TimestampMode: "message"}
 	msg := benchKafkaMessage(buildFlatJSON(100), nil)
 	runProcessMessageBench(b, sm, msg, config)

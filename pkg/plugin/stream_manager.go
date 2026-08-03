@@ -20,7 +20,6 @@ import (
 	"github.com/grafana/grafana-plugin-sdk-go/data"
 
 	"github.com/hoptical/grafana-kafka-datasource/pkg/kafka_client"
-	"github.com/hoptical/grafana-kafka-datasource/pkg/perfflags"
 )
 
 // StreamManager handles the streaming logic for Kafka messages.
@@ -39,7 +38,33 @@ type StreamManager struct {
 	schemaRegistryHTTPClient *http.Client
 	flatKeyOrder             []string            // Sorted value-field key order from the last ProcessMessage call
 	flatKeySet               map[string]struct{} // Key set matching flatKeyOrder, used to detect a schema change (see sortedFlatKeys)
+	fieldOrderCacheEnabled   bool
+	messageDecoder           *kafka_client.MessageDecoder
 	mu                       sync.RWMutex
+}
+
+type StreamManagerOption func(*StreamManager)
+
+func WithFieldOrderCacheDisabled() StreamManagerOption {
+	return func(sm *StreamManager) {
+		sm.fieldOrderCacheEnabled = false
+	}
+}
+
+func WithMessageDecoder(decoder *kafka_client.MessageDecoder) StreamManagerOption {
+	return func(sm *StreamManager) {
+		if decoder != nil {
+			sm.messageDecoder = decoder
+		}
+	}
+}
+
+func WithSchemaRegistryHTTPClient(client *http.Client) StreamManagerOption {
+	return func(sm *StreamManager) {
+		if client != nil {
+			sm.schemaRegistryHTTPClient = client
+		}
+	}
 }
 
 // createErrorFrame creates a data frame containing error information
@@ -155,15 +180,8 @@ type StreamConfig struct {
 }
 
 // NewStreamManager creates a new StreamManager instance.
-func NewStreamManager(client KafkaClientAPI, flattenMaxDepth, flattenFieldCap int, schemaRegistryHTTPClient ...*http.Client) *StreamManager {
-	var httpClient *http.Client
-	if len(schemaRegistryHTTPClient) > 0 {
-		httpClient = schemaRegistryHTTPClient[0]
-	}
-	if httpClient == nil {
-		httpClient = &http.Client{Timeout: 30 * time.Second}
-	}
-	return &StreamManager{
+func NewStreamManager(client KafkaClientAPI, flattenMaxDepth, flattenFieldCap int, options ...StreamManagerOption) *StreamManager {
+	sm := &StreamManager{
 		client:                   client,
 		flattenMaxDepth:          flattenMaxDepth,
 		flattenFieldCap:          flattenFieldCap,
@@ -171,8 +189,14 @@ func NewStreamManager(client KafkaClientAPI, flattenMaxDepth, flattenFieldCap in
 		lpTagKeys:                make(map[string]struct{}),
 		lpTagKeyOrder:            make([]string, 0),
 		schemaCache:              make(map[string]string),
-		schemaRegistryHTTPClient: httpClient,
+		schemaRegistryHTTPClient: &http.Client{Timeout: 30 * time.Second},
+		fieldOrderCacheEnabled:   true,
+		messageDecoder:           kafka_client.DefaultMessageDecoder(),
 	}
+	for _, option := range options {
+		option(sm)
+	}
+	return sm
 }
 
 // ProcessMessageToFrame converts a Kafka message into a Grafana data frame.
@@ -530,7 +554,11 @@ func decodeAvroMessage(sm *StreamManager, client KafkaClientAPI, data []byte, co
 
 	// Decode the Avro message
 	log.DefaultLogger.Debug("Decoding Avro message with schema")
-	decoded, err := kafka_client.DecodeAvroMessage(data, schema)
+	decoder := kafka_client.DefaultMessageDecoder()
+	if sm != nil && sm.messageDecoder != nil {
+		decoder = sm.messageDecoder
+	}
+	decoded, err := decoder.DecodeAvroMessage(data, schema)
 	if err != nil {
 		log.DefaultLogger.Error("Avro decoding failed", "error", err)
 		return nil, err
@@ -597,7 +625,11 @@ func decodeProtobufMessage(sm *StreamManager, client KafkaClientAPI, data []byte
 		}
 	}
 
-	decoded, err := kafka_client.DecodeProtobufMessage(data, schema)
+	decoder := kafka_client.DefaultMessageDecoder()
+	if sm != nil && sm.messageDecoder != nil {
+		decoder = sm.messageDecoder
+	}
+	decoded, err := decoder.DecodeProtobufMessage(data, schema)
 	if err != nil {
 		return nil, err
 	}
@@ -827,16 +859,14 @@ func (sm *StreamManager) getSchemaRegistryClient(registryUrl, username, password
 }
 
 // sortedFlatKeys returns the flattened value-field keys from flat in sorted
-// order. When perfflags.FieldOrderCache is enabled (default) and this
-// message's key set is identical to the previous ProcessMessage call's, the
-// previously computed sorted order is reused instead of being recomputed:
-// profiling showed collecting and sorting keys accounts for a meaningful
-// share of ProcessMessage's own time, and topics typically have a stable
-// field set from message to message. Set
-// KAFKA_DS_PERF_DISABLE_FIELD_ORDER_CACHE=true to always recompute, matching
-// the plugin's pre-fix behavior (see pkg/perfflags).
+// order. When field-order caching is enabled (default) and this message's key
+// set is identical to the previous ProcessMessage call's, the previously
+// computed sorted order is reused instead of being recomputed: profiling
+// showed collecting and sorting keys accounts for a meaningful share of
+// ProcessMessage's own time, and topics typically have a stable field set from
+// message to message.
 func (sm *StreamManager) sortedFlatKeys(flat map[string]interface{}) []string {
-	if !perfflags.FieldOrderCache.Disabled() {
+	if sm.fieldOrderCacheEnabled {
 		sm.mu.RLock()
 		hit := sm.flatKeySetMatchesLocked(flat)
 		cached := sm.flatKeyOrder
@@ -852,7 +882,7 @@ func (sm *StreamManager) sortedFlatKeys(flat map[string]interface{}) []string {
 	}
 	sort.Strings(keys)
 
-	if !perfflags.FieldOrderCache.Disabled() {
+	if sm.fieldOrderCacheEnabled {
 		sm.mu.Lock()
 		// keys is a freshly allocated slice that nothing mutates after this
 		// point, so it can be published directly and handed back as-is on
