@@ -95,6 +95,11 @@ func getDatasourceSettings(s backend.DataSourceInstanceSettings) (*kafka_client.
 		settings.SaslPassword = saslPassword
 	}
 
+	// OAUTHBEARER (KIP-255) client secret from secure JSON data
+	if saslOauthClientSecret, exists := s.DecryptedSecureJSONData["saslOauthClientSecret"]; exists {
+		settings.SaslOauthClientSecret = saslOauthClientSecret
+	}
+
 	// TLS certificate fields from secure JSON data
 	if caCert, exists := s.DecryptedSecureJSONData["tlsCACert"]; exists {
 		settings.TLSCACert = caCert

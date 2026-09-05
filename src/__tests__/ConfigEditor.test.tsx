@@ -335,6 +335,107 @@ describe('ConfigEditor', () => {
     );
   });
 
+  it('shows OAuth fields and hides username/password when OAUTHBEARER is selected', () => {
+    renderConfigEditor({ securityProtocol: 'SASL_SSL', saslMechanisms: 'OAUTHBEARER' });
+
+    expect(screen.getByPlaceholderText('https://idp.example.com/oauth2/token')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('OAuth Client ID')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('OAuth Client Secret')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('kafka')).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('SASL Username')).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('SASL Password')).not.toBeInTheDocument();
+  });
+
+  it('hides OAuth fields when a non-OAUTHBEARER mechanism is selected', () => {
+    renderConfigEditor({ securityProtocol: 'SASL_SSL', saslMechanisms: 'PLAIN' });
+
+    expect(screen.queryByPlaceholderText('https://idp.example.com/oauth2/token')).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('OAuth Client ID')).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('OAuth Client Secret')).not.toBeInTheDocument();
+  });
+
+  it('calls onOptionsChange when OAuth token endpoint changes', () => {
+    renderConfigEditor({ securityProtocol: 'SASL_SSL', saslMechanisms: 'OAUTHBEARER' });
+    const input = screen.getByPlaceholderText('https://idp.example.com/oauth2/token');
+
+    fireEvent.change(input, { target: { value: 'https://idp.example.com/token' } });
+
+    expect(mockOnOptionsChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jsonData: expect.objectContaining({
+          saslOauthTokenEndpoint: 'https://idp.example.com/token',
+        }),
+      })
+    );
+  });
+
+  it('calls onOptionsChange when OAuth client ID changes', () => {
+    renderConfigEditor({ securityProtocol: 'SASL_SSL', saslMechanisms: 'OAUTHBEARER' });
+    const input = screen.getByPlaceholderText('OAuth Client ID');
+
+    fireEvent.change(input, { target: { value: 'my-client-id' } });
+
+    expect(mockOnOptionsChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jsonData: expect.objectContaining({
+          saslOauthClientId: 'my-client-id',
+        }),
+      })
+    );
+  });
+
+  it('calls onOptionsChange when OAuth scope changes', () => {
+    renderConfigEditor({ securityProtocol: 'SASL_SSL', saslMechanisms: 'OAUTHBEARER' });
+    const input = screen.getByPlaceholderText('kafka');
+
+    fireEvent.change(input, { target: { value: 'kafka.read' } });
+
+    expect(mockOnOptionsChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jsonData: expect.objectContaining({
+          saslOauthScope: 'kafka.read',
+        }),
+      })
+    );
+  });
+
+  it('calls onOptionsChange when OAuth client secret changes', () => {
+    renderConfigEditor({ securityProtocol: 'SASL_SSL', saslMechanisms: 'OAUTHBEARER' });
+    const input = screen.getByPlaceholderText('OAuth Client Secret');
+
+    fireEvent.change(input, { target: { value: 'my-secret' } });
+
+    expect(mockOnOptionsChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        secureJsonData: expect.objectContaining({
+          saslOauthClientSecret: 'my-secret',
+        }),
+      })
+    );
+  });
+
+  it('handles OAuth client secret reset', () => {
+    renderConfigEditor(
+      { securityProtocol: 'SASL_SSL', saslMechanisms: 'OAUTHBEARER' },
+      { saslOauthClientSecret: 'existing-secret' },
+      { saslOauthClientSecret: true }
+    );
+
+    const resetButton = screen.getByTestId('reset-button');
+    fireEvent.click(resetButton);
+
+    expect(mockOnOptionsChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        secureJsonFields: expect.objectContaining({
+          saslOauthClientSecret: false,
+        }),
+        secureJsonData: expect.objectContaining({
+          saslOauthClientSecret: '',
+        }),
+      })
+    );
+  });
+
   it('calls onOptionsChange when TLS skip verify changes', () => {
     renderConfigEditor({ securityProtocol: 'SSL' });
     const checkbox = screen.getAllByTestId('checkbox')[1]; // PDC checkbox is first
@@ -707,5 +808,21 @@ describe('ConfigEditor', () => {
     expect(screen.getByDisplayValue('10000')).toBeInTheDocument();
     expect(screen.getByDisplayValue('8')).toBeInTheDocument();
     expect(screen.getByDisplayValue('1500')).toBeInTheDocument();
+  });
+
+  it('preserves existing OAUTHBEARER configuration values', () => {
+    const existingConfig = {
+      securityProtocol: 'SASL_SSL',
+      saslMechanisms: 'OAUTHBEARER',
+      saslOauthTokenEndpoint: 'https://idp.example.com/token',
+      saslOauthClientId: 'existing-client-id',
+      saslOauthScope: 'kafka.read',
+    };
+
+    renderConfigEditor(existingConfig);
+
+    expect(screen.getByDisplayValue('https://idp.example.com/token')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('existing-client-id')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('kafka.read')).toBeInTheDocument();
   });
 });

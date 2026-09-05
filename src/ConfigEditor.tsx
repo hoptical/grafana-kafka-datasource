@@ -32,6 +32,7 @@ const SASL_MECHANISM_OPTIONS = [
   { label: 'PLAIN', value: 'PLAIN', description: 'Simple username/password authentication' },
   { label: 'SCRAM-SHA-256', value: 'SCRAM-SHA-256', description: 'SCRAM with SHA-256' },
   { label: 'SCRAM-SHA-512', value: 'SCRAM-SHA-512', description: 'SCRAM with SHA-512' },
+  { label: 'OAUTHBEARER', value: 'OAUTHBEARER', description: 'OAuth 2.0 client credentials (KIP-255)' },
 ];
 
 const getStyles = (theme: GrafanaTheme2) => {
@@ -99,6 +100,36 @@ export const ConfigEditor = (props: Props) => {
       ...options,
       secureJsonFields: { ...options.secureJsonFields, saslPassword: false },
       secureJsonData: { ...options.secureJsonData, saslPassword: '' },
+    });
+  };
+
+  const onSaslOauthTokenEndpointChange = (event: ChangeEvent<HTMLInputElement>) => {
+    onOptionsChange({
+      ...options,
+      jsonData: { ...options.jsonData, saslOauthTokenEndpoint: event.target.value },
+    });
+  };
+
+  const onSaslOauthClientIdChange = (event: ChangeEvent<HTMLInputElement>) => {
+    onOptionsChange({ ...options, jsonData: { ...options.jsonData, saslOauthClientId: event.target.value } });
+  };
+
+  const onSaslOauthScopeChange = (event: ChangeEvent<HTMLInputElement>) => {
+    onOptionsChange({ ...options, jsonData: { ...options.jsonData, saslOauthScope: event.target.value } });
+  };
+
+  const onSaslOauthClientSecretChange = (event: ChangeEvent<HTMLInputElement>) => {
+    onOptionsChange({
+      ...options,
+      secureJsonData: { ...options.secureJsonData, saslOauthClientSecret: event.target.value },
+    });
+  };
+
+  const onResetSaslOauthClientSecret = () => {
+    onOptionsChange({
+      ...options,
+      secureJsonFields: { ...options.secureJsonFields, saslOauthClientSecret: false },
+      secureJsonData: { ...options.secureJsonData, saslOauthClientSecret: '' },
     });
   };
 
@@ -315,27 +346,102 @@ export const ConfigEditor = (props: Props) => {
               />
             </InlineField>
 
-            <InlineField label="SASL Username" labelWidth={20} tooltip="SASL username for authentication" grow required>
-              <Input
-                id="config-editor-sasl-username"
-                onChange={onSaslUsernameChange}
-                value={jsonData.saslUsername}
-                placeholder="SASL Username"
-                width={40}
-              />
-            </InlineField>
+            {jsonData.saslMechanisms === 'OAUTHBEARER' ? (
+              <>
+                <InlineField
+                  label="Token Endpoint"
+                  labelWidth={20}
+                  tooltip="OAuth 2.0 token endpoint URL used for the client_credentials grant"
+                  grow
+                  required
+                >
+                  <Input
+                    id="config-editor-oauth-token-endpoint"
+                    data-testid="oauth-token-endpoint"
+                    onChange={onSaslOauthTokenEndpointChange}
+                    value={jsonData.saslOauthTokenEndpoint || ''}
+                    placeholder="https://idp.example.com/oauth2/token"
+                    width={40}
+                  />
+                </InlineField>
 
-            <InlineField label="SASL Password" labelWidth={20} tooltip="SASL password for authentication" grow required>
-              <SecretInput
-                id="config-editor-sasl-password"
-                isConfigured={(secureJsonFields && secureJsonFields.saslPassword) as boolean}
-                value={secureJsonData.saslPassword || ''}
-                placeholder="SASL Password"
-                width={40}
-                onReset={onResetSaslPassword}
-                onChange={onSaslPasswordChange}
-              />
-            </InlineField>
+                <InlineField label="Client ID" labelWidth={20} tooltip="OAuth 2.0 client identifier" grow required>
+                  <Input
+                    id="config-editor-oauth-client-id"
+                    data-testid="oauth-client-id"
+                    onChange={onSaslOauthClientIdChange}
+                    value={jsonData.saslOauthClientId || ''}
+                    placeholder="OAuth Client ID"
+                    width={40}
+                  />
+                </InlineField>
+
+                <InlineField label="Client Secret" labelWidth={20} tooltip="OAuth 2.0 client secret" grow required>
+                  <SecretInput
+                    id="config-editor-oauth-client-secret"
+                    data-testid="oauth-client-secret"
+                    isConfigured={(secureJsonFields && secureJsonFields.saslOauthClientSecret) as boolean}
+                    value={secureJsonData.saslOauthClientSecret || ''}
+                    placeholder="OAuth Client Secret"
+                    width={40}
+                    onReset={onResetSaslOauthClientSecret}
+                    onChange={onSaslOauthClientSecretChange}
+                  />
+                </InlineField>
+
+                <InlineField
+                  label="Scope"
+                  labelWidth={20}
+                  tooltip="OAuth 2.0 scope requested from the token endpoint (optional)"
+                  grow
+                >
+                  <Input
+                    id="config-editor-oauth-scope"
+                    data-testid="oauth-scope"
+                    onChange={onSaslOauthScopeChange}
+                    value={jsonData.saslOauthScope || ''}
+                    placeholder="kafka"
+                    width={40}
+                  />
+                </InlineField>
+              </>
+            ) : (
+              <>
+                <InlineField
+                  label="SASL Username"
+                  labelWidth={20}
+                  tooltip="SASL username for authentication"
+                  grow
+                  required
+                >
+                  <Input
+                    id="config-editor-sasl-username"
+                    onChange={onSaslUsernameChange}
+                    value={jsonData.saslUsername}
+                    placeholder="SASL Username"
+                    width={40}
+                  />
+                </InlineField>
+
+                <InlineField
+                  label="SASL Password"
+                  labelWidth={20}
+                  tooltip="SASL password for authentication"
+                  grow
+                  required
+                >
+                  <SecretInput
+                    id="config-editor-sasl-password"
+                    isConfigured={(secureJsonFields && secureJsonFields.saslPassword) as boolean}
+                    value={secureJsonData.saslPassword || ''}
+                    placeholder="SASL Password"
+                    width={40}
+                    onReset={onResetSaslPassword}
+                    onChange={onSaslPasswordChange}
+                  />
+                </InlineField>
+              </>
+            )}
           </>
         )}
 

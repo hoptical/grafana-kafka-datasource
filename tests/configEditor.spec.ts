@@ -399,6 +399,53 @@ test.describe('Kafka Config Editor', () => {
     await expect(configPage.saveAndTest()).toBeOK();
   });
 
+  test('should allow configuring datasource with SASL_SSL and OAUTHBEARER', async ({
+    createDataSourceConfigPage,
+    readProvisionedDataSource,
+    page,
+  }) => {
+    const ds = await readProvisionedDataSource({ fileName: 'datasource.yaml' });
+    const configPage = await createDataSourceConfigPage({ type: ds.type });
+
+    // NOTE: this test only verifies that the OAUTHBEARER config fields render,
+    // accept input, and persist across a save. It does not exercise a live
+    // SASL/OAUTHBEARER handshake against a real broker, because the local
+    // docker-compose Kafka stack has no OAUTHBEARER/OIDC listener configured
+    // (Kafka's default OAUTHBEARER callback handler only validates unsecured
+    // self-signed JWTs, not a real client_credentials exchange). Wire-protocol
+    // level coverage (token fetch, caching, refresh) lives in
+    // pkg/kafka_client/oauth_mechanism_test.go.
+    await page.getByRole('textbox', { name: 'Bootstrap Servers' }).fill('kafka:39092');
+
+    await page
+      .locator('div')
+      .filter({ hasText: /^PLAINTEXT$/ })
+      .nth(2)
+      .click();
+    await page.getByText('SASL_SSL', { exact: true }).click();
+    await page.waitForTimeout(500);
+
+    await page
+      .locator('div')
+      .filter({ hasText: /^PLAIN$/ })
+      .nth(2)
+      .click();
+    await page.getByText('OAUTHBEARER', { exact: true }).click();
+
+    await page.getByTestId('oauth-token-endpoint').fill('https://idp.example.com/oauth2/token');
+    await page.getByTestId('oauth-client-id').fill('my-oauth-client');
+    await page.getByTestId('oauth-client-secret').fill('my-oauth-secret');
+    await page.getByTestId('oauth-scope').fill('kafka');
+
+    // Save & test the data source - not expected to succeed (see note above).
+    await expect(configPage.saveAndTest()).not.toBeOK();
+
+    // Verify the configuration values are preserved.
+    await expect(page.getByTestId('oauth-token-endpoint')).toHaveValue('https://idp.example.com/oauth2/token');
+    await expect(page.getByTestId('oauth-client-id')).toHaveValue('my-oauth-client');
+    await expect(page.getByTestId('oauth-scope')).toHaveValue('kafka');
+  });
+
   test('should allow configuring Schema Registry for Avro support', async ({
     createDataSourceConfigPage,
     readProvisionedDataSource,
