@@ -64,6 +64,7 @@ export type ProtobufSchemaSourceInterface = {
 export interface KafkaDataSourceOptions extends DataSourceJsonData {
   bootstrapServers: string;
   clientId?: string;
+  enableSecureSocksProxy?: boolean;
   securityProtocol: string;
   saslMechanisms: string;
   saslUsername: string;
@@ -88,6 +89,7 @@ export interface KafkaDataSourceOptions extends DataSourceJsonData {
 export const defaultDataSourceOptions: Partial<KafkaDataSourceOptions> = {
   bootstrapServers: '',
   clientId: '',
+  enableSecureSocksProxy: false,
   securityProtocol: 'PLAINTEXT',
   saslMechanisms: '',
   saslUsername: '',

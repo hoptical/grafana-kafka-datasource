@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"net/http"
 	"testing"
 	"time"
 
@@ -88,7 +87,6 @@ func (m *mockKafkaClient) GetSchemaRegistryUrl() string      { return m.schemaRe
 func (m *mockKafkaClient) GetSchemaRegistryUsername() string { return m.schemaRegistryUsername }
 func (m *mockKafkaClient) GetSchemaRegistryPassword() string { return m.schemaRegistryPassword }
 func (m *mockKafkaClient) GetSubjectNamingStrategy() string  { return m.avroSubjectNamingStrategy }
-func (m *mockKafkaClient) GetHTTPClient() *http.Client       { return &http.Client{} }
 
 func TestQueryData(t *testing.T) {
 	ds := plugin.NewWithClient(&mockKafkaClient{})

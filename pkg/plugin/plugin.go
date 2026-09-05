@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
-	"github.com/grafana/grafana-plugin-sdk-go/backend/httpclient"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/instancemgmt"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 	"github.com/grafana/grafana-plugin-sdk-go/data"
@@ -54,7 +53,6 @@ type KafkaClientAPI interface {
 	GetSchemaRegistryUsername() string
 	GetSchemaRegistryPassword() string
 	GetSubjectNamingStrategy() string
-	GetHTTPClient() *http.Client
 }
 
 var (
@@ -71,21 +69,18 @@ func NewKafkaInstance(ctx context.Context, s backend.DataSourceInstanceSettings)
 		return nil, err
 	}
 
-	// Create HTTP client using Grafana Plugin SDK to support Private Data Source Connect (PDC)
-	// This enables automatic SOCKS proxy handling for secure connections to private networks
-	opts, err := s.HTTPClientOptions(ctx)
+	clients, err := newConnectionClients(ctx, s, settings.EnableSecureSocksProxy)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get HTTP client options: %w", err)
+		return nil, err
 	}
 
-	httpClient, err := httpclient.New(opts)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create HTTP client: %w", err)
+	var kc kafka_client.KafkaClient
+	if clients.kafkaDialFunc == nil {
+		kc = kafka_client.NewKafkaClient(*settings)
+	} else {
+		kc = kafka_client.NewKafkaClientWithDialFunc(*settings, clients.kafkaDialFunc)
 	}
-
-	kc := kafka_client.NewKafkaClient(*settings, httpClient)
-
-	return &KafkaDatasource{client: &kc, settings: settings}, nil
+	return &KafkaDatasource{client: &kc, settings: settings, schemaRegistryHTTPClient: clients.schemaRegistryHTTPClient}, nil
 }
 
 func getDatasourceSettings(s backend.DataSourceInstanceSettings) (*kafka_client.Options, error) {
@@ -167,16 +162,22 @@ func getDatasourceSettings(s backend.DataSourceInstanceSettings) (*kafka_client.
 }
 
 type KafkaDatasource struct {
-	client   KafkaClientAPI
-	settings *kafka_client.Options
+	client                   KafkaClientAPI
+	settings                 *kafka_client.Options
+	schemaRegistryHTTPClient *http.Client
 }
 
 func (d *KafkaDatasource) Dispose() { d.client.Dispose() }
 
 // NewWithClient allows injecting a custom KafkaClientAPI (primarily for tests).
-func NewWithClient(c KafkaClientAPI) *KafkaDatasource {
+func NewWithClient(c KafkaClientAPI, schemaRegistryHTTPClient ...*http.Client) *KafkaDatasource {
+	var httpClient *http.Client
+	if len(schemaRegistryHTTPClient) > 0 {
+		httpClient = schemaRegistryHTTPClient[0]
+	}
 	return &KafkaDatasource{
-		client: c,
+		client:                   c,
+		schemaRegistryHTTPClient: httpClient,
 		settings: &kafka_client.Options{
 			FlattenMaxDepth: defaultFlattenMaxDepth,
 			FlattenFieldCap: defaultFlattenFieldCap,
@@ -438,8 +439,7 @@ func (d *KafkaDatasource) ValidateSchemaRegistry(ctx context.Context) (*backend.
 	// Try to connect to schema registry by attempting to get a schema
 	// Use a dummy subject that likely doesn't exist to test connectivity
 
-	// Get HTTP client from KafkaClient
-	httpClient := d.client.GetHTTPClient()
+	httpClient := d.schemaRegistryHTTPClient
 	if httpClient == nil {
 		return &backend.CheckHealthResult{
 			Status:  backend.HealthStatusError,
@@ -647,7 +647,8 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 	}
 
 	// Create stream manager and validate partitions
-	streamManager := NewStreamManager(d.client, d.settings.FlattenMaxDepth, d.settings.FlattenFieldCap)
+	streamManager := NewStreamManager(d.client, d.settings.FlattenMaxDepth, d.settings.FlattenFieldCap,
+		WithSchemaRegistryHTTPClient(d.schemaRegistryHTTPClient))
 	partitions, err := streamManager.ValidateAndGetPartitions(ctx, qm)
 	if err != nil {
 		return err
