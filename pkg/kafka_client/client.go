@@ -48,11 +48,11 @@ type Options struct {
 	SecurityProtocol       string `json:"securityProtocol"`
 	SaslMechanisms         string `json:"saslMechanisms"`
 	SaslUsername           string `json:"saslUsername"`
-	SaslPassword           string `json:"saslPassword"`
+	SaslPassword           string `json:"-"` // secret: populated only from DecryptedSecureJSONData
 	// OAUTHBEARER (KIP-255) Configuration
 	SaslOauthTokenEndpoint string `json:"saslOauthTokenEndpoint"`
 	SaslOauthClientId      string `json:"saslOauthClientId"`
-	SaslOauthClientSecret  string `json:"saslOauthClientSecret"`
+	SaslOauthClientSecret  string `json:"-"` // secret: populated only from DecryptedSecureJSONData
 	SaslOauthScope         string `json:"saslOauthScope"`
 	EnableSecureSocksProxy bool   `json:"enableSecureSocksProxy"`
 	LogLevel               string `json:"logLevel"`
@@ -63,15 +63,15 @@ type Options struct {
 	ServerName        string `json:"serverName"`
 	TLSCACert         string `json:"tlsCACert"`
 	TLSClientCert     string `json:"tlsClientCert"`
-	TLSClientKey      string `json:"tlsClientKey"`
+	TLSClientKey      string `json:"-"` // secret: populated only from DecryptedSecureJSONData
 	// Advanced settings
 	Timeout            int32 `json:"timeout"`            // ms; primary timeout
 	HealthcheckTimeout int32 `json:"healthcheckTimeout"` // ms; health check specific timeout
 	// Avro Configuration
 	MessageFormat          string `json:"messageFormat"`
 	SchemaRegistryUrl      string `json:"schemaRegistryUrl"`
-	SchemaRegistryUsername string `json:"schemaRegistryUsername"`
-	SchemaRegistryPassword string `json:"schemaRegistryPassword"`
+	SchemaRegistryUsername string `json:"-"` // secret: populated only from DecryptedSecureJSONData
+	SchemaRegistryPassword string `json:"-"` // secret: populated only from DecryptedSecureJSONData
 	FlattenMaxDepth        int    `json:"flattenMaxDepth"`
 	FlattenFieldCap        int    `json:"flattenFieldCap"`
 }

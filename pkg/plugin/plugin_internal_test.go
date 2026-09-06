@@ -93,6 +93,38 @@ func TestGetDatasourceSettings_ParsesSecureJSONAndBounds(t *testing.T) {
 	}
 }
 
+func TestGetDatasourceSettings_SecretsIgnoredFromPlainJSONData(t *testing.T) {
+	settings, err := getDatasourceSettings(backend.DataSourceInstanceSettings{
+		JSONData: []byte(`{
+			"bootstrapServers": "localhost:9092",
+			"saslPassword": "leaked-password",
+			"saslOauthClientSecret": "leaked-oauth-secret",
+			"tlsClientKey": "leaked-client-key",
+			"schemaRegistryUsername": "leaked-registry-user",
+			"schemaRegistryPassword": "leaked-registry-password"
+		}`),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if settings.SaslPassword != "" {
+		t.Fatalf("expected SaslPassword to ignore plain JSONData, got %q", settings.SaslPassword)
+	}
+	if settings.SaslOauthClientSecret != "" {
+		t.Fatalf("expected SaslOauthClientSecret to ignore plain JSONData, got %q", settings.SaslOauthClientSecret)
+	}
+	if settings.TLSClientKey != "" {
+		t.Fatalf("expected TLSClientKey to ignore plain JSONData, got %q", settings.TLSClientKey)
+	}
+	if settings.SchemaRegistryUsername != "" {
+		t.Fatalf("expected SchemaRegistryUsername to ignore plain JSONData, got %q", settings.SchemaRegistryUsername)
+	}
+	if settings.SchemaRegistryPassword != "" {
+		t.Fatalf("expected SchemaRegistryPassword to ignore plain JSONData, got %q", settings.SchemaRegistryPassword)
+	}
+}
+
 func TestGetDatasourceSettings_InvalidJSON(t *testing.T) {
 	_, err := getDatasourceSettings(backend.DataSourceInstanceSettings{JSONData: []byte("{invalid")})
 	if err == nil {
