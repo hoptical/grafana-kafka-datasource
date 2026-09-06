@@ -68,6 +68,10 @@ export interface KafkaDataSourceOptions extends DataSourceJsonData {
   securityProtocol: string;
   saslMechanisms: string;
   saslUsername: string;
+  // OAUTHBEARER (KIP-255) Configuration
+  saslOauthTokenEndpoint?: string;
+  saslOauthClientId?: string;
+  saslOauthScope?: string;
   logLevel: string;
   healthcheckTimeout: number;
   // TLS Configuration
@@ -93,6 +97,9 @@ export const defaultDataSourceOptions: Partial<KafkaDataSourceOptions> = {
   securityProtocol: 'PLAINTEXT',
   saslMechanisms: '',
   saslUsername: '',
+  saslOauthTokenEndpoint: '',
+  saslOauthClientId: '',
+  saslOauthScope: '',
   logLevel: '',
   healthcheckTimeout: 2000,
   tlsAuthWithCACert: false,
@@ -107,6 +114,7 @@ export const defaultDataSourceOptions: Partial<KafkaDataSourceOptions> = {
 export interface KafkaSecureJsonData {
   apiKey?: string; // Deprecated
   saslPassword?: string;
+  saslOauthClientSecret?: string;
   // TLS Certificates
   tlsCACert?: string;
   tlsClientCert?: string;

@@ -49,6 +49,11 @@ type Options struct {
 	SaslMechanisms         string `json:"saslMechanisms"`
 	SaslUsername           string `json:"saslUsername"`
 	SaslPassword           string `json:"saslPassword"`
+	// OAUTHBEARER (KIP-255) Configuration
+	SaslOauthTokenEndpoint string `json:"saslOauthTokenEndpoint"`
+	SaslOauthClientId      string `json:"saslOauthClientId"`
+	SaslOauthClientSecret  string `json:"saslOauthClientSecret"`
+	SaslOauthScope         string `json:"saslOauthScope"`
 	EnableSecureSocksProxy bool   `json:"enableSecureSocksProxy"`
 	LogLevel               string `json:"logLevel"`
 	// TLS Configuration
@@ -85,7 +90,12 @@ type KafkaClient struct {
 	SaslMechanisms   string
 	SaslUsername     string
 	SaslPassword     string
-	LogLevel         string
+	// OAUTHBEARER (KIP-255) Configuration
+	SaslOauthTokenEndpoint string
+	SaslOauthClientId      string
+	SaslOauthClientSecret  string
+	SaslOauthScope         string
+	LogLevel               string
 	// TLS Configuration
 	TLSAuthWithCACert bool
 	TLSAuth           bool
@@ -282,6 +292,10 @@ func newKafkaClient(options Options, dialFunc DialFunc) KafkaClient {
 		SaslMechanisms:         options.SaslMechanisms,
 		SaslUsername:           options.SaslUsername,
 		SaslPassword:           options.SaslPassword,
+		SaslOauthTokenEndpoint: options.SaslOauthTokenEndpoint,
+		SaslOauthClientId:      options.SaslOauthClientId,
+		SaslOauthClientSecret:  options.SaslOauthClientSecret,
+		SaslOauthScope:         options.SaslOauthScope,
 		DialFunc:               dialFunc,
 		LogLevel:               options.LogLevel,
 		TLSAuthWithCACert:      options.TLSAuthWithCACert,
@@ -307,8 +321,16 @@ func (client *KafkaClient) NewConnection() error {
 	// Check if SASL is enabled based on security protocol
 	isSASL := client.SecurityProtocol == "SASL_PLAINTEXT" || client.SecurityProtocol == "SASL_SSL"
 	if isSASL {
-		// Validate SASL credentials are provided
-		if client.SaslUsername == "" || client.SaslPassword == "" {
+		mech := client.SaslMechanisms
+		if mech == "" {
+			mech = "PLAIN"
+		}
+		// Validate SASL credentials are provided for the selected mechanism
+		if mech == "OAUTHBEARER" {
+			if client.SaslOauthTokenEndpoint == "" || client.SaslOauthClientId == "" || client.SaslOauthClientSecret == "" {
+				return fmt.Errorf("OAUTHBEARER authentication requires token endpoint, client ID, and client secret")
+			}
+		} else if client.SaslUsername == "" || client.SaslPassword == "" {
 			return fmt.Errorf("SASL authentication requires both username and password")
 		}
 		mechanism, err = getSASLMechanism(client)
@@ -639,6 +661,8 @@ func getSASLMechanism(client *KafkaClient) (sasl.Mechanism, error) {
 		return scram.Mechanism(scram.SHA256, client.SaslUsername, client.SaslPassword)
 	case "SCRAM-SHA-512":
 		return scram.Mechanism(scram.SHA512, client.SaslUsername, client.SaslPassword)
+	case "OAUTHBEARER":
+		return newOAuthBearerMechanism(client), nil
 	default:
 		return nil, fmt.Errorf("unsupported SASL mechanism: %s", mechanism)
 	}

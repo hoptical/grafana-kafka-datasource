@@ -138,6 +138,75 @@ func TestKafkaClient_NewConnection_CustomDialFuncPreservesSASLAndTLS(t *testing.
 	}
 }
 
+func TestKafkaClient_NewConnection_CustomDialFuncPreservesOAuthBearerAndTLS(t *testing.T) {
+	client := NewKafkaClientWithDialFunc(Options{
+		BootstrapServers:       "broker:9092",
+		SecurityProtocol:       "SASL_SSL",
+		SaslMechanisms:         "OAUTHBEARER",
+		SaslOauthTokenEndpoint: "https://idp.example.com/token",
+		SaslOauthClientId:      "client-id",
+		SaslOauthClientSecret:  "client-secret",
+		TLSSkipVerify:          true,
+	}, func(context.Context, string, string) (net.Conn, error) {
+		return nil, errors.New("dial test")
+	})
+
+	if err := client.NewConnection(); err != nil {
+		t.Fatalf("NewConnection() error = %v", err)
+	}
+
+	if client.Dialer.DialFunc == nil || client.Transport.Dial == nil {
+		t.Fatal("expected custom dial function on both Kafka connection paths")
+	}
+	if client.Dialer.SASLMechanism == nil || client.Transport.SASL == nil {
+		t.Fatal("expected SASL configuration to be preserved")
+	}
+	if client.Dialer.SASLMechanism.Name() != "OAUTHBEARER" {
+		t.Fatalf("expected OAUTHBEARER mechanism, got %s", client.Dialer.SASLMechanism.Name())
+	}
+	if client.Dialer.TLS == nil || client.Transport.TLS == nil || !client.Dialer.TLS.InsecureSkipVerify {
+		t.Fatal("expected TLS configuration to be preserved")
+	}
+}
+
+func TestNewConnection_OAuthBearer_RequiresTokenEndpointAndClientCredentials(t *testing.T) {
+	tests := []struct {
+		name    string
+		options Options
+	}{
+		{"missing token endpoint", Options{SecurityProtocol: "SASL_SSL", SaslMechanisms: "OAUTHBEARER", SaslOauthClientId: "id", SaslOauthClientSecret: "secret"}},
+		{"missing client id", Options{SecurityProtocol: "SASL_SSL", SaslMechanisms: "OAUTHBEARER", SaslOauthTokenEndpoint: "https://idp.example.com/token", SaslOauthClientSecret: "secret"}},
+		{"missing client secret", Options{SecurityProtocol: "SASL_SSL", SaslMechanisms: "OAUTHBEARER", SaslOauthTokenEndpoint: "https://idp.example.com/token", SaslOauthClientId: "id"}},
+		{"nothing set", Options{SecurityProtocol: "SASL_SSL", SaslMechanisms: "OAUTHBEARER"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.options.BootstrapServers = "localhost:9092"
+			client := NewKafkaClient(tt.options)
+			if err := client.NewConnection(); err == nil {
+				t.Error("expected error for incomplete OAUTHBEARER configuration, got none")
+			}
+		})
+	}
+}
+
+func TestNewConnection_OAuthBearer_ValidConfiguration(t *testing.T) {
+	client := NewKafkaClient(Options{
+		BootstrapServers:       "localhost:9092",
+		SecurityProtocol:       "SASL_SSL",
+		SaslMechanisms:         "OAUTHBEARER",
+		SaslOauthTokenEndpoint: "https://idp.example.com/token",
+		SaslOauthClientId:      "client-id",
+		SaslOauthClientSecret:  "client-secret",
+	})
+	if err := client.NewConnection(); err != nil {
+		t.Fatalf("NewConnection() error = %v", err)
+	}
+	if client.Dialer.SASLMechanism == nil || client.Dialer.SASLMechanism.Name() != "OAUTHBEARER" {
+		t.Fatal("expected OAUTHBEARER mechanism to be configured")
+	}
+}
+
 func TestKafkaClient_Dispose(t *testing.T) {
 	client := NewKafkaClient(Options{BootstrapServers: "localhost:9092"})
 	client.Dispose() // Should not panic
@@ -159,6 +228,7 @@ func TestGetSASLMechanism_Supported(t *testing.T) {
 		{"PLAIN", "PLAIN"},
 		{"SCRAM-SHA-256", "SCRAM-SHA-256"},
 		{"SCRAM-SHA-512", "SCRAM-SHA-512"},
+		{"OAUTHBEARER", "OAUTHBEARER"},
 		{"", "PLAIN"},
 	}
 	for _, c := range cases {
