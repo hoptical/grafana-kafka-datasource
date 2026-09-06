@@ -55,3 +55,6 @@ ci/
 # Commitlint and Husky
 .husky/
 commitlint.config.js
+
+# AI Assistant
+.mcp.json
