@@ -1,6 +1,6 @@
 module github.com/hoptical/grafana-kafka-datasource
 
-go 1.26.5
+go 1.26.8
 
 require (
 	github.com/bufbuild/protocompile v0.14.1
@@ -90,6 +90,6 @@ require (
 	golang.org/x/sys v0.46.0 // indirect
 	golang.org/x/text v0.39.0 // indirect
 	google.golang.org/genproto v0.0.0-20220503193339-ba3ae3f07e29 // indirect
-	google.golang.org/grpc v1.82.1 // indirect
+	google.golang.org/grpc v1.83.1 // indirect
 	gopkg.in/fsnotify/fsnotify.v1 v1.4.7 // indirect
 )

@@ -1,6 +1,6 @@
 module github.com/hoptical/grafana-kafka-datasource-example-go
 
-go 1.26.5
+go 1.26.8
 
 require (
 	github.com/IBM/sarama v1.46.1
@@ -8,7 +8,7 @@ require (
 	github.com/hoptical/grafana-kafka-datasource v0.0.0
 	github.com/linkedin/goavro/v2 v2.14.0
 	github.com/segmentio/kafka-go v0.4.47
-	google.golang.org/protobuf v1.36.11
+	google.golang.org/protobuf v1.36.12
 )
 
 require (
@@ -34,12 +34,12 @@ require (
 	github.com/xdg-go/pbkdf2 v1.0.0 // indirect
 	github.com/xdg-go/scram v1.1.2 // indirect
 	github.com/xdg-go/stringprep v1.0.4 // indirect
-	golang.org/x/crypto v0.53.0 // indirect
-	golang.org/x/net v0.56.0 // indirect
-	golang.org/x/sync v0.21.0 // indirect
-	golang.org/x/sys v0.46.0 // indirect
-	golang.org/x/text v0.39.0 // indirect
-	google.golang.org/grpc v1.82.1 // indirect
+	golang.org/x/crypto v0.56.0 // indirect
+	golang.org/x/net v0.57.0 // indirect
+	golang.org/x/sync v0.22.0 // indirect
+	golang.org/x/sys v0.47.0 // indirect
+	golang.org/x/text v0.41.0 // indirect
+	google.golang.org/grpc v1.83.1 // indirect
 )
 
 replace github.com/hoptical/grafana-kafka-datasource => ../..
