@@ -1,5 +1,14 @@
 # Changelog
 
+## [v1.8.0](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.8.0)
+
+[Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v1.7.2...v1.8.0)
+
+- Feat: Add Grafana PDC support for Kafka connections ([#162](https://github.com/hoptical/grafana-kafka-datasource/pull/162))
+- Feat: Add SASL/OAUTHBEARER (KIP-255) authentication support ([#165](https://github.com/hoptical/grafana-kafka-datasource/pull/165))
+- Fix: Prevent secret fields from being deserialized via plain JSONData ([#167](https://github.com/hoptical/grafana-kafka-datasource/pull/167))
+- Fix: Resolve high-severity vulnerabilities from osv-scanner and govulncheck ([#168](https://github.com/hoptical/grafana-kafka-datasource/pull/168))
+
 ## [v1.7.2](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.7.2)
 
 [Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v1.7.1...v1.7.2)
