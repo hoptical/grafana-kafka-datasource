@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -17,7 +18,7 @@ func newTestOAuthMechanism(tokenEndpoint string) *oauthBearerMechanism {
 		clientID:      "client-id",
 		clientSecret:  "client-secret",
 		scope:         "kafka",
-		httpClient:    &http.Client{Timeout: 5 * time.Second},
+		httpClient:    &http.Client{Timeout: 5 * time.Second, CheckRedirect: rejectRedirects},
 		nowFunc:       time.Now,
 	}
 }
@@ -211,6 +212,61 @@ func TestOAuthBearerMechanism_MissingExpiresIn(t *testing.T) {
 	m := newTestOAuthMechanism(server.URL)
 	if _, _, err := m.Start(context.Background()); err == nil {
 		t.Fatal("expected error for missing expires_in")
+	}
+}
+
+func TestOAuthBearerMechanism_RejectsNonLoopbackHTTP(t *testing.T) {
+	m := newTestOAuthMechanism("http://idp.example.com/token")
+	_, _, err := m.Start(context.Background())
+	if err == nil {
+		t.Fatal("expected error for non-HTTPS, non-loopback token endpoint")
+	}
+	if !strings.Contains(err.Error(), "must use https") {
+		t.Fatalf("expected https requirement error, got %v", err)
+	}
+}
+
+func TestOAuthBearerMechanism_AllowsLoopbackHTTP(t *testing.T) {
+	server := httptest.NewServer(tokenHandler("loopback-token", 600))
+	defer server.Close()
+
+	m := newTestOAuthMechanism(server.URL)
+	if _, _, err := m.Start(context.Background()); err != nil {
+		t.Fatalf("expected loopback http token endpoint to be allowed, got error: %v", err)
+	}
+}
+
+func TestOAuthBearerMechanism_RejectsRedirect(t *testing.T) {
+	target := httptest.NewServer(tokenHandler("redirected-token", 600))
+	defer target.Close()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL, http.StatusTemporaryRedirect)
+	}))
+	defer server.Close()
+
+	m := newTestOAuthMechanism(server.URL)
+	_, _, err := m.Start(context.Background())
+	if err == nil {
+		t.Fatal("expected error when token endpoint issues a redirect")
+	}
+}
+
+func TestOAuthBearerMechanism_RejectsOversizedResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		oversized := strings.Repeat("a", maxTokenResponseBytes+1)
+		_, _ = fmt.Fprintf(w, `{"access_token":"%s","expires_in":600}`, oversized)
+	}))
+	defer server.Close()
+
+	m := newTestOAuthMechanism(server.URL)
+	_, _, err := m.Start(context.Background())
+	if err == nil {
+		t.Fatal("expected error for oversized token endpoint response")
+	}
+	if !strings.Contains(err.Error(), "exceeds maximum size") {
+		t.Fatalf("expected size-limit error, got %v", err)
 	}
 }
 

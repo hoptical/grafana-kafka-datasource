@@ -3,8 +3,10 @@ package kafka_client
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -23,6 +25,13 @@ const maxRefreshSkew = 30 * time.Second
 // refreshSkewFraction is the fraction of a token's TTL reserved as refresh
 // skew when the TTL is shorter than 2*maxRefreshSkew.
 const refreshSkewFraction = 0.2
+
+// maxTokenResponseBytes bounds how much of the token endpoint's response body
+// is read, so a misbehaving or malicious endpoint can't exhaust memory with an
+// oversized response.
+const maxTokenResponseBytes = 1 << 20 // 1MB
+
+var errRedirectNotAllowed = errors.New("redirects are not followed for OAuth token requests")
 
 // oauthBearerMechanism implements the SASL/OAUTHBEARER (KIP-255, RFC 7628)
 // mechanism using an OAuth2 client_credentials grant. kafka-go v0.4.47 does
@@ -57,9 +66,33 @@ func newOAuthBearerMechanism(client *KafkaClient) *oauthBearerMechanism {
 		clientID:      client.SaslOauthClientId,
 		clientSecret:  client.SaslOauthClientSecret,
 		scope:         client.SaslOauthScope,
-		httpClient:    &http.Client{Timeout: timeout},
+		httpClient:    &http.Client{Timeout: timeout, CheckRedirect: rejectRedirects},
 		nowFunc:       time.Now,
 	}
+}
+
+func rejectRedirects(req *http.Request, via []*http.Request) error {
+	return errRedirectNotAllowed
+}
+
+// validateTokenEndpoint requires HTTPS for the token endpoint, since the
+// request carries the client secret in its body. Plaintext HTTP is allowed
+// only against loopback addresses, so local/test token servers (e.g.
+// httptest.NewServer) keep working without weakening the real-world
+// requirement.
+func validateTokenEndpoint(rawURL string) error {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid token endpoint URL: %w", err)
+	}
+	if u.Scheme == "https" {
+		return nil
+	}
+	host := u.Hostname()
+	if host == "localhost" || net.ParseIP(host).IsLoopback() {
+		return nil
+	}
+	return fmt.Errorf("token endpoint must use https (got %q); plaintext http is only allowed for localhost", rawURL)
 }
 
 func (m *oauthBearerMechanism) Name() string {
@@ -99,6 +132,10 @@ func (m *oauthBearerMechanism) getToken(ctx context.Context) (string, error) {
 		return m.token, nil
 	}
 
+	if err := validateTokenEndpoint(m.tokenEndpoint); err != nil {
+		return "", err
+	}
+
 	form := url.Values{}
 	form.Set("grant_type", "client_credentials")
 	form.Set("client_id", m.clientID)
@@ -123,9 +160,12 @@ func (m *oauthBearerMechanism) getToken(ctx context.Context) (string, error) {
 		}
 	}()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxTokenResponseBytes+1))
 	if err != nil {
 		return "", fmt.Errorf("failed to read token endpoint response: %w", err)
+	}
+	if len(body) > maxTokenResponseBytes {
+		return "", fmt.Errorf("token endpoint response exceeds maximum size of %d bytes", maxTokenResponseBytes)
 	}
 
 	if resp.StatusCode != http.StatusOK {

@@ -12,7 +12,9 @@ setup.
 
 This is generic OIDC client-credentials support and works with Keycloak, Okta, Azure AD,
 Ping, and any other OIDC-compliant identity provider that implements the
-`client_credentials` grant.
+`client_credentials` grant using the `client_secret_post` client authentication method
+(credentials sent in the POST body). Providers that require `client_secret_basic` (HTTP
+Basic auth) or a client assertion (e.g. private_key_jwt) are not currently supported.
 
 `segmentio/kafka-go` (the Kafka client library this plugin uses) does not implement
 OAUTHBEARER itself — only PLAIN and SCRAM-SHA-256/512 — so this mechanism is implemented
@@ -29,7 +31,9 @@ In the datasource's **Authentication** section:
    recommended, since credentials and tokens should not be sent over plaintext).
 2. Set **SASL Mechanism** to `OAUTHBEARER`.
 3. Fill in:
-   - **Token Endpoint**: your identity provider's OAuth 2.0 token URL.
+   - **Token Endpoint**: your identity provider's OAuth 2.0 token URL. Must be `https://`
+     (plaintext `http://` is only permitted for `localhost`/loopback addresses, to support
+     local testing).
    - **Client ID**: the OAuth client identifier (not secret).
    - **Client Secret**: the OAuth client secret (stored encrypted).
    - **Scope** (optional): a space-delimited scope string requested from the token
@@ -75,6 +79,16 @@ same way as `saslPassword` and other encrypted datasource fields.
 - There is no internal retry on a failed token fetch; retries happen naturally through
   the existing health check polling and the Kafka reader's own reconnect behavior.
 
+### Token endpoint security
+
+- The token endpoint must be `https://`; plaintext `http://` is rejected unless the host
+  is `localhost` or a loopback address (this exception exists solely so local/dev token
+  servers work — real deployments should always use HTTPS).
+- The token-fetch HTTP client does not follow redirects, so a token endpoint cannot
+  forward the client secret to a different host or scheme via a 3xx response.
+- The token endpoint's response body is capped at 1MB; larger responses are rejected
+  before being parsed.
+
 ### Error surfacing
 
 Token-fetch failures are wrapped as `failed to fetch OAuth token: <cause>` (for example,
@@ -102,8 +116,8 @@ Unit tests (no live broker required):
 
 - `pkg/kafka_client/oauth_mechanism_test.go`: wire-format (`Start()`'s GS2 initial
   response), cache-hit behavior, refresh-after-expiry, concurrent-fetch de-duplication,
-  and token endpoint error handling — using `httptest.NewServer` to fake the OIDC token
-  endpoint.
+  token endpoint error handling, HTTPS/loopback enforcement, redirect rejection, and the
+  response size cap — using `httptest.NewServer` to fake the OIDC token endpoint.
 - `pkg/kafka_client/client_test.go`: `getSASLMechanism` OAUTHBEARER selection, connection
   validation (missing token endpoint/client id/secret), and composition with TLS and the
   Grafana PDC dial function.
