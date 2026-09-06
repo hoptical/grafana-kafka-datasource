@@ -70,7 +70,7 @@ type Options struct {
 	// Avro Configuration
 	MessageFormat          string `json:"messageFormat"`
 	SchemaRegistryUrl      string `json:"schemaRegistryUrl"`
-	SchemaRegistryUsername string `json:"-"` // secret: populated only from DecryptedSecureJSONData
+	SchemaRegistryUsername string `json:"schemaRegistryUsername"`
 	SchemaRegistryPassword string `json:"-"` // secret: populated only from DecryptedSecureJSONData
 	FlattenMaxDepth        int    `json:"flattenMaxDepth"`
 	FlattenFieldCap        int    `json:"flattenFieldCap"`

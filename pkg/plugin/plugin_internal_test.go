@@ -100,7 +100,7 @@ func TestGetDatasourceSettings_SecretsIgnoredFromPlainJSONData(t *testing.T) {
 			"saslPassword": "leaked-password",
 			"saslOauthClientSecret": "leaked-oauth-secret",
 			"tlsClientKey": "leaked-client-key",
-			"schemaRegistryUsername": "leaked-registry-user",
+			"schemaRegistryUsername": "not-a-secret-username",
 			"schemaRegistryPassword": "leaked-registry-password"
 		}`),
 	})
@@ -117,8 +117,10 @@ func TestGetDatasourceSettings_SecretsIgnoredFromPlainJSONData(t *testing.T) {
 	if settings.TLSClientKey != "" {
 		t.Fatalf("expected TLSClientKey to ignore plain JSONData, got %q", settings.TLSClientKey)
 	}
-	if settings.SchemaRegistryUsername != "" {
-		t.Fatalf("expected SchemaRegistryUsername to ignore plain JSONData, got %q", settings.SchemaRegistryUsername)
+	// SchemaRegistryUsername is not a secret: the Config Editor stores it in
+	// plain jsonData (see ConfigEditor.tsx), so it must still round-trip here.
+	if settings.SchemaRegistryUsername != "not-a-secret-username" {
+		t.Fatalf("expected SchemaRegistryUsername to be read from plain JSONData, got %q", settings.SchemaRegistryUsername)
 	}
 	if settings.SchemaRegistryPassword != "" {
 		t.Fatalf("expected SchemaRegistryPassword to ignore plain JSONData, got %q", settings.SchemaRegistryPassword)
