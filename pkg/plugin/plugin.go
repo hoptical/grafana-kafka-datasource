@@ -100,6 +100,14 @@ func getDatasourceSettings(s backend.DataSourceInstanceSettings) (*kafka_client.
 		settings.SaslOauthClientSecret = saslOauthClientSecret
 	}
 
+	// SASL/GSSAPI (Kerberos) password and keytab from secure JSON data
+	if saslGssapiPassword, exists := s.DecryptedSecureJSONData["saslGssapiPassword"]; exists {
+		settings.SaslGssapiPassword = saslGssapiPassword
+	}
+	if saslGssapiKeytab, exists := s.DecryptedSecureJSONData["saslGssapiKeytab"]; exists {
+		settings.SaslGssapiKeytab = saslGssapiKeytab
+	}
+
 	// TLS certificate fields from secure JSON data
 	if caCert, exists := s.DecryptedSecureJSONData["tlsCACert"]; exists {
 		settings.TLSCACert = caCert

@@ -169,6 +169,113 @@ func TestKafkaClient_NewConnection_CustomDialFuncPreservesOAuthBearerAndTLS(t *t
 	}
 }
 
+func TestKafkaClient_NewConnection_CustomDialFuncPreservesGSSAPIAndTLS(t *testing.T) {
+	client := NewKafkaClientWithDialFunc(Options{
+		BootstrapServers:     "broker:9092",
+		SecurityProtocol:     "SASL_SSL",
+		SaslMechanisms:       "GSSAPI",
+		SaslGssapiRealm:      "EXAMPLE.COM",
+		SaslGssapiUsername:   "grafana",
+		SaslGssapiAuthType:   "password",
+		SaslGssapiKrb5Config: testKrb5Conf,
+		SaslGssapiPassword:   "grafana-password",
+		TLSSkipVerify:        true,
+	}, func(context.Context, string, string) (net.Conn, error) {
+		return nil, errors.New("dial test")
+	})
+
+	if err := client.NewConnection(); err != nil {
+		t.Fatalf("NewConnection() error = %v", err)
+	}
+
+	if client.Dialer.DialFunc == nil || client.Transport.Dial == nil {
+		t.Fatal("expected custom dial function on both Kafka connection paths")
+	}
+	if client.Dialer.SASLMechanism == nil || client.Transport.SASL == nil {
+		t.Fatal("expected SASL configuration to be preserved")
+	}
+	if client.Dialer.SASLMechanism.Name() != "GSSAPI" {
+		t.Fatalf("expected GSSAPI mechanism, got %s", client.Dialer.SASLMechanism.Name())
+	}
+	if client.Dialer.TLS == nil || client.Transport.TLS == nil || !client.Dialer.TLS.InsecureSkipVerify {
+		t.Fatal("expected TLS configuration to be preserved")
+	}
+}
+
+func TestNewConnection_GSSAPI_RequiresConfiguration(t *testing.T) {
+	tests := []struct {
+		name    string
+		options Options
+	}{
+		{"missing realm", Options{SecurityProtocol: "SASL_SSL", SaslMechanisms: "GSSAPI", SaslGssapiUsername: "grafana", SaslGssapiKrb5Config: testKrb5Conf, SaslGssapiPassword: "pw"}},
+		{"missing username", Options{SecurityProtocol: "SASL_SSL", SaslMechanisms: "GSSAPI", SaslGssapiRealm: "EXAMPLE.COM", SaslGssapiKrb5Config: testKrb5Conf, SaslGssapiPassword: "pw"}},
+		{"missing krb5 config", Options{SecurityProtocol: "SASL_SSL", SaslMechanisms: "GSSAPI", SaslGssapiRealm: "EXAMPLE.COM", SaslGssapiUsername: "grafana", SaslGssapiPassword: "pw"}},
+		{"missing password for password auth", Options{SecurityProtocol: "SASL_SSL", SaslMechanisms: "GSSAPI", SaslGssapiRealm: "EXAMPLE.COM", SaslGssapiUsername: "grafana", SaslGssapiKrb5Config: testKrb5Conf}},
+		{"missing keytab for keytab auth", Options{SecurityProtocol: "SASL_SSL", SaslMechanisms: "GSSAPI", SaslGssapiRealm: "EXAMPLE.COM", SaslGssapiUsername: "grafana", SaslGssapiKrb5Config: testKrb5Conf, SaslGssapiAuthType: gssapiAuthTypeKeytab}},
+		{"nothing set", Options{SecurityProtocol: "SASL_SSL", SaslMechanisms: "GSSAPI"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.options.BootstrapServers = "localhost:9092"
+			client := NewKafkaClient(tt.options)
+			if err := client.NewConnection(); err == nil {
+				t.Error("expected error for incomplete GSSAPI configuration, got none")
+			}
+		})
+	}
+}
+
+func TestNewConnection_GSSAPI_ValidConfiguration(t *testing.T) {
+	client := NewKafkaClient(Options{
+		BootstrapServers:     "localhost:9092",
+		SecurityProtocol:     "SASL_SSL",
+		SaslMechanisms:       "GSSAPI",
+		SaslGssapiRealm:      "EXAMPLE.COM",
+		SaslGssapiUsername:   "grafana",
+		SaslGssapiAuthType:   "password",
+		SaslGssapiKrb5Config: testKrb5Conf,
+		SaslGssapiPassword:   "grafana-password",
+	})
+	if err := client.NewConnection(); err != nil {
+		t.Fatalf("NewConnection() error = %v", err)
+	}
+	if client.Dialer.SASLMechanism == nil || client.Dialer.SASLMechanism.Name() != "GSSAPI" {
+		t.Fatal("expected GSSAPI mechanism to be configured")
+	}
+}
+
+func TestNewConnection_ClosesPreviousMechanismOnReconnect(t *testing.T) {
+	client := NewKafkaClient(Options{
+		BootstrapServers:     "localhost:9092",
+		SecurityProtocol:     "SASL_SSL",
+		SaslMechanisms:       "GSSAPI",
+		SaslGssapiRealm:      "EXAMPLE.COM",
+		SaslGssapiUsername:   "grafana",
+		SaslGssapiAuthType:   "password",
+		SaslGssapiKrb5Config: testKrb5Conf,
+		SaslGssapiPassword:   "grafana-password",
+	})
+	if err := client.NewConnection(); err != nil {
+		t.Fatalf("first NewConnection() error = %v", err)
+	}
+	first, ok := client.saslMechanism.(*gssapiMechanism)
+	if !ok {
+		t.Fatalf("expected *gssapiMechanism, got %T", client.saslMechanism)
+	}
+	fake := &fakeKerberosClient{}
+	first.krb = fake
+
+	if err := client.NewConnection(); err != nil {
+		t.Fatalf("second NewConnection() error = %v", err)
+	}
+	if !fake.destroyed {
+		t.Error("expected the previous mechanism's Kerberos client to be destroyed on reconnect")
+	}
+	if second, ok := client.saslMechanism.(*gssapiMechanism); ok && second == first {
+		t.Error("expected a fresh mechanism to be installed on reconnect")
+	}
+}
+
 func TestNewConnection_OAuthBearer_RequiresTokenEndpointAndClientCredentials(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -210,6 +317,37 @@ func TestNewConnection_OAuthBearer_ValidConfiguration(t *testing.T) {
 func TestKafkaClient_Dispose(t *testing.T) {
 	client := NewKafkaClient(Options{BootstrapServers: "localhost:9092"})
 	client.Dispose() // Should not panic
+}
+
+func TestKafkaClient_Dispose_ClosesGSSAPIMechanism(t *testing.T) {
+	client := NewKafkaClient(Options{
+		BootstrapServers:     "localhost:9092",
+		SecurityProtocol:     "SASL_SSL",
+		SaslMechanisms:       "GSSAPI",
+		SaslGssapiRealm:      "EXAMPLE.COM",
+		SaslGssapiUsername:   "grafana",
+		SaslGssapiAuthType:   "password",
+		SaslGssapiKrb5Config: testKrb5Conf,
+		SaslGssapiPassword:   "grafana-password",
+	})
+	if err := client.NewConnection(); err != nil {
+		t.Fatalf("NewConnection() error = %v", err)
+	}
+	mech, ok := client.saslMechanism.(*gssapiMechanism)
+	if !ok {
+		t.Fatalf("expected *gssapiMechanism, got %T", client.saslMechanism)
+	}
+	fake := &fakeKerberosClient{}
+	mech.krb = fake
+
+	client.Dispose()
+
+	if !fake.destroyed {
+		t.Error("expected Dispose to destroy the GSSAPI mechanism's Kerberos client")
+	}
+	if client.saslMechanism != nil {
+		t.Error("expected Dispose to clear the retained SASL mechanism")
+	}
 }
 
 func TestGetSASLMechanism_Unsupported(t *testing.T) {

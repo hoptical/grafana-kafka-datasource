@@ -446,6 +446,54 @@ test.describe('Kafka Config Editor', () => {
     await expect(page.getByTestId('oauth-scope')).toHaveValue('kafka');
   });
 
+  test('should allow configuring datasource with SASL_SSL and GSSAPI', async ({
+    createDataSourceConfigPage,
+    readProvisionedDataSource,
+    page,
+  }) => {
+    const ds = await readProvisionedDataSource({ fileName: 'datasource.yaml' });
+    const configPage = await createDataSourceConfigPage({ type: ds.type });
+
+    // NOTE: this test only verifies that the GSSAPI config fields render,
+    // accept input, and persist across a save. It does not exercise a live
+    // SASL/GSSAPI (Kerberos) handshake against a real broker, because the
+    // local docker-compose Kafka stack has no KDC or GSSAPI listener
+    // configured. Wire-protocol level coverage (AP_REQ construction, the
+    // security-layer negotiation handshake, config/keytab parsing) lives in
+    // pkg/kafka_client/gssapi_mechanism_test.go.
+    await page.getByRole('textbox', { name: 'Bootstrap Servers' }).fill('kafka:39092');
+
+    await page
+      .locator('div')
+      .filter({ hasText: /^PLAINTEXT$/ })
+      .nth(2)
+      .click();
+    await page.getByText('SASL_SSL', { exact: true }).click();
+    await page.waitForTimeout(500);
+
+    await page
+      .locator('div')
+      .filter({ hasText: /^PLAIN$/ })
+      .nth(2)
+      .click();
+    await page.getByText('GSSAPI', { exact: true }).click();
+
+    await page.getByTestId('gssapi-service-name').fill('kafka');
+    await page.getByTestId('gssapi-realm').fill('EXAMPLE.COM');
+    await page.getByTestId('gssapi-username').fill('grafana');
+    await page.getByTestId('gssapi-krb5-config').fill('[libdefaults]\ndefault_realm = EXAMPLE.COM');
+    await page.getByTestId('gssapi-password').fill('my-kerberos-password');
+
+    // Save & test the data source - not expected to succeed (see note above).
+    await expect(configPage.saveAndTest()).not.toBeOK();
+
+    // Verify the configuration values are preserved.
+    await expect(page.getByTestId('gssapi-service-name')).toHaveValue('kafka');
+    await expect(page.getByTestId('gssapi-realm')).toHaveValue('EXAMPLE.COM');
+    await expect(page.getByTestId('gssapi-username')).toHaveValue('grafana');
+    await expect(page.getByTestId('gssapi-krb5-config')).toHaveValue('[libdefaults]\ndefault_realm = EXAMPLE.COM');
+  });
+
   test('should allow configuring Schema Registry for Avro support', async ({
     createDataSourceConfigPage,
     readProvisionedDataSource,

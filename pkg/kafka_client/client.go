@@ -43,19 +43,30 @@ const txnControlTypeCommit int16 = 1
 //
 // If Timeout <= 0, sensible defaults are used.
 type Options struct {
-	BootstrapServers       string `json:"bootstrapServers"`
-	ClientId               string `json:"clientId"`
-	SecurityProtocol       string `json:"securityProtocol"`
-	SaslMechanisms         string `json:"saslMechanisms"`
-	SaslUsername           string `json:"saslUsername"`
-	SaslPassword           string `json:"-"` // secret: populated only from DecryptedSecureJSONData
+	BootstrapServers string `json:"bootstrapServers"`
+	ClientId         string `json:"clientId"`
+	SecurityProtocol string `json:"securityProtocol"`
+	SaslMechanisms   string `json:"saslMechanisms"`
+	SaslUsername     string `json:"saslUsername"`
+	SaslPassword     string `json:"-"` // secret: populated only from DecryptedSecureJSONData
 	// OAUTHBEARER (KIP-255) Configuration
 	SaslOauthTokenEndpoint string `json:"saslOauthTokenEndpoint"`
 	SaslOauthClientId      string `json:"saslOauthClientId"`
 	SaslOauthClientSecret  string `json:"-"` // secret: populated only from DecryptedSecureJSONData
 	SaslOauthScope         string `json:"saslOauthScope"`
-	EnableSecureSocksProxy bool   `json:"enableSecureSocksProxy"`
-	LogLevel               string `json:"logLevel"`
+	// SASL/GSSAPI (Kerberos) Configuration
+	SaslGssapiServiceName     string `json:"saslGssapiServiceName"`
+	SaslGssapiRealm           string `json:"saslGssapiRealm"`
+	SaslGssapiUsername        string `json:"saslGssapiUsername"`
+	SaslGssapiAuthType        string `json:"saslGssapiAuthType"` // "password" | "keytab"
+	SaslGssapiKrb5Config      string `json:"saslGssapiKrb5Config"`
+	SaslGssapiKrb5ConfigPath  string `json:"saslGssapiKrb5ConfigPath"`
+	SaslGssapiKeytabPath      string `json:"saslGssapiKeytabPath"`
+	SaslGssapiDisablePAFXFAST bool   `json:"saslGssapiDisablePAFXFAST"`
+	SaslGssapiPassword        string `json:"-"` // secret: populated only from DecryptedSecureJSONData
+	SaslGssapiKeytab          string `json:"-"` // secret: base64 keytab content, populated only from DecryptedSecureJSONData
+	EnableSecureSocksProxy    bool   `json:"enableSecureSocksProxy"`
+	LogLevel                  string `json:"logLevel"`
 	// TLS Configuration
 	TLSAuthWithCACert bool   `json:"tlsAuthWithCACert"`
 	TLSAuth           bool   `json:"tlsAuth"`
@@ -95,7 +106,22 @@ type KafkaClient struct {
 	SaslOauthClientId      string
 	SaslOauthClientSecret  string
 	SaslOauthScope         string
-	LogLevel               string
+	// SASL/GSSAPI (Kerberos) Configuration
+	SaslGssapiServiceName     string
+	SaslGssapiRealm           string
+	SaslGssapiUsername        string
+	SaslGssapiAuthType        string
+	SaslGssapiKrb5Config      string
+	SaslGssapiKrb5ConfigPath  string
+	SaslGssapiKeytabPath      string
+	SaslGssapiDisablePAFXFAST bool
+	SaslGssapiPassword        string
+	SaslGssapiKeytab          string
+	// saslMechanism retains the constructed SASL mechanism (when it holds
+	// state that must be released, e.g. GSSAPI's Kerberos client) so Dispose
+	// and later calls to NewConnection can close it.
+	saslMechanism sasl.Mechanism
+	LogLevel      string
 	// TLS Configuration
 	TLSAuthWithCACert bool
 	TLSAuth           bool
@@ -285,32 +311,42 @@ func newKafkaClient(options Options, dialFunc DialFunc) KafkaClient {
 	}
 
 	return KafkaClient{
-		BootstrapServers:       options.BootstrapServers,
-		Brokers:                brokers,
-		ClientId:               options.ClientId,
-		SecurityProtocol:       options.SecurityProtocol,
-		SaslMechanisms:         options.SaslMechanisms,
-		SaslUsername:           options.SaslUsername,
-		SaslPassword:           options.SaslPassword,
-		SaslOauthTokenEndpoint: options.SaslOauthTokenEndpoint,
-		SaslOauthClientId:      options.SaslOauthClientId,
-		SaslOauthClientSecret:  options.SaslOauthClientSecret,
-		SaslOauthScope:         options.SaslOauthScope,
-		DialFunc:               dialFunc,
-		LogLevel:               options.LogLevel,
-		TLSAuthWithCACert:      options.TLSAuthWithCACert,
-		TLSAuth:                options.TLSAuth,
-		TLSSkipVerify:          options.TLSSkipVerify,
-		ServerName:             options.ServerName,
-		TLSCACert:              options.TLSCACert,
-		TLSClientCert:          options.TLSClientCert,
-		TLSClientKey:           options.TLSClientKey,
-		Timeout:                effectiveTimeoutMs,
-		HealthcheckTimeout:     effectiveHealthcheckMs,
-		MessageFormat:          options.MessageFormat,
-		SchemaRegistryUrl:      options.SchemaRegistryUrl,
-		SchemaRegistryUsername: options.SchemaRegistryUsername,
-		SchemaRegistryPassword: options.SchemaRegistryPassword,
+		BootstrapServers:          options.BootstrapServers,
+		Brokers:                   brokers,
+		ClientId:                  options.ClientId,
+		SecurityProtocol:          options.SecurityProtocol,
+		SaslMechanisms:            options.SaslMechanisms,
+		SaslUsername:              options.SaslUsername,
+		SaslPassword:              options.SaslPassword,
+		SaslOauthTokenEndpoint:    options.SaslOauthTokenEndpoint,
+		SaslOauthClientId:         options.SaslOauthClientId,
+		SaslOauthClientSecret:     options.SaslOauthClientSecret,
+		SaslOauthScope:            options.SaslOauthScope,
+		SaslGssapiServiceName:     options.SaslGssapiServiceName,
+		SaslGssapiRealm:           options.SaslGssapiRealm,
+		SaslGssapiUsername:        options.SaslGssapiUsername,
+		SaslGssapiAuthType:        options.SaslGssapiAuthType,
+		SaslGssapiKrb5Config:      options.SaslGssapiKrb5Config,
+		SaslGssapiKrb5ConfigPath:  options.SaslGssapiKrb5ConfigPath,
+		SaslGssapiKeytabPath:      options.SaslGssapiKeytabPath,
+		SaslGssapiDisablePAFXFAST: options.SaslGssapiDisablePAFXFAST,
+		SaslGssapiPassword:        options.SaslGssapiPassword,
+		SaslGssapiKeytab:          options.SaslGssapiKeytab,
+		DialFunc:                  dialFunc,
+		LogLevel:                  options.LogLevel,
+		TLSAuthWithCACert:         options.TLSAuthWithCACert,
+		TLSAuth:                   options.TLSAuth,
+		TLSSkipVerify:             options.TLSSkipVerify,
+		ServerName:                options.ServerName,
+		TLSCACert:                 options.TLSCACert,
+		TLSClientCert:             options.TLSClientCert,
+		TLSClientKey:              options.TLSClientKey,
+		Timeout:                   effectiveTimeoutMs,
+		HealthcheckTimeout:        effectiveHealthcheckMs,
+		MessageFormat:             options.MessageFormat,
+		SchemaRegistryUrl:         options.SchemaRegistryUrl,
+		SchemaRegistryUsername:    options.SchemaRegistryUsername,
+		SchemaRegistryPassword:    options.SchemaRegistryPassword,
 	}
 }
 
@@ -326,18 +362,45 @@ func (client *KafkaClient) NewConnection() error {
 			mech = "PLAIN"
 		}
 		// Validate SASL credentials are provided for the selected mechanism
-		if mech == "OAUTHBEARER" {
+		switch mech {
+		case "OAUTHBEARER":
 			if client.SaslOauthTokenEndpoint == "" || client.SaslOauthClientId == "" || client.SaslOauthClientSecret == "" {
 				return fmt.Errorf("OAUTHBEARER authentication requires token endpoint, client ID, and client secret")
 			}
-		} else if client.SaslUsername == "" || client.SaslPassword == "" {
-			return fmt.Errorf("SASL authentication requires both username and password")
+		case "GSSAPI":
+			if client.SaslGssapiRealm == "" || client.SaslGssapiUsername == "" {
+				return fmt.Errorf("GSSAPI authentication requires a Kerberos realm and principal")
+			}
+			if client.SaslGssapiKrb5Config == "" && client.SaslGssapiKrb5ConfigPath == "" {
+				return fmt.Errorf("GSSAPI authentication requires krb5.conf content or a krb5.conf file path")
+			}
+			if client.SaslGssapiAuthType == gssapiAuthTypeKeytab {
+				if client.SaslGssapiKeytab == "" && client.SaslGssapiKeytabPath == "" {
+					return fmt.Errorf("GSSAPI keytab authentication requires keytab content or a keytab file path")
+				}
+			} else if client.SaslGssapiPassword == "" {
+				return fmt.Errorf("GSSAPI password authentication requires a password")
+			}
+		default:
+			if client.SaslUsername == "" || client.SaslPassword == "" {
+				return fmt.Errorf("SASL authentication requires both username and password")
+			}
 		}
 		mechanism, err = getSASLMechanism(client)
 		if err != nil {
 			return fmt.Errorf("unable to get SASL mechanism: %w", err)
 		}
 	}
+
+	// Release any previously constructed mechanism's resources (e.g. a
+	// GSSAPI mechanism's Kerberos client and its background TGT-renewal
+	// goroutine) before installing the new one. NewConnection can be called
+	// more than once on the same KafkaClient; without this, each call would
+	// leak the previous mechanism's state.
+	if closer, ok := client.saslMechanism.(interface{ Close() }); ok {
+		closer.Close()
+	}
+	client.saslMechanism = mechanism
 
 	// Determine dialer timeout
 	effectiveTimeout := dialerTimeout
@@ -631,6 +694,10 @@ func (client *KafkaClient) HealthCheck(ctx context.Context) error {
 }
 
 func (client *KafkaClient) Dispose() {
+	if closer, ok := client.saslMechanism.(interface{ Close() }); ok {
+		closer.Close()
+	}
+	client.saslMechanism = nil
 	if client.Reader != nil {
 		if err := client.Reader.Close(); err != nil {
 			grafanalog.DefaultLogger.Error("failed to close reader", "error", err)
@@ -663,6 +730,8 @@ func getSASLMechanism(client *KafkaClient) (sasl.Mechanism, error) {
 		return scram.Mechanism(scram.SHA512, client.SaslUsername, client.SaslPassword)
 	case "OAUTHBEARER":
 		return newOAuthBearerMechanism(client), nil
+	case "GSSAPI":
+		return newGSSAPIMechanism(client)
 	default:
 		return nil, fmt.Errorf("unsupported SASL mechanism: %s", mechanism)
 	}
