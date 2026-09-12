@@ -1,5 +1,11 @@
 # Changelog
 
+## [v1.8.1](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.8.1)
+
+[Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v1.8.0...v1.8.1)
+
+- Fix: resolve high-severity osv-scanner vulnerabilities (grpc, js-yaml, smol-toml) ([#170](https://github.com/hoptical/grafana-kafka-datasource/pull/170))
+
 ## [v1.8.0](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.8.0)
 
 [Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v1.7.2...v1.8.0)
