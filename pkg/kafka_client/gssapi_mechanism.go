@@ -41,8 +41,10 @@ import (
 //  2. The broker's GSS acceptor verifies the AP_REQ and, having established
 //     a security context, sends a security-layer negotiation WrapToken
 //     (4-byte payload: supported layers + max buffer size) as the first
-//     challenge. Next echoes that payload back in an initiator WrapToken,
-//     authenticated with the ticket's session key, and returns done=false.
+//     challenge. Next validates the offer and replies, in an initiator
+//     WrapToken authenticated with the ticket's session key, with a fixed
+//     selection of "no security layer" (the only one Kafka implements),
+//     and returns done=false.
 //  3. The broker sends an empty final challenge; Next returns done=true.
 //
 // Mutual authentication (an AP_REP from the broker before step 2) is
@@ -479,14 +481,36 @@ func appendGSSAPIHeader(apReqBytes []byte) ([]byte, error) {
 	return asn1tools.AddASNAppTag(b, 0), nil
 }
 
+// noSecurityLayerBit is bit 0 of the security-layer offer/selection byte in
+// RFC 4752 §3.1's 4-byte negotiation payload: "no security layer" (Kafka's
+// "auth" QOP). This plugin never selects integrity (bit 1) or
+// confidentiality (bit 2), since Kafka's SASL/GSSAPI acceptor only ever
+// implements "no security layer".
+const noSecurityLayerBit = 0x01
+
+// noSecurityLayerSelection is the fixed response payload selecting "no
+// security layer" with a client max-receive-size of 0. Per the JDK GSSAPI
+// SASL client (which is what this response format matches, since Kafka's
+// acceptor is built on it), bytes 2-4 of a "no security layer" selection
+// are always zero — they are not a size the client should propose, unlike
+// for the integrity/confidentiality layers this plugin doesn't use.
+var noSecurityLayerSelection = []byte{noSecurityLayerBit, 0x00, 0x00, 0x00}
+
 // buildWrapTokenResponse answers the acceptor's security-layer negotiation
-// WrapToken (challenge) with an initiator WrapToken that echoes the same
-// payload, per RFC 4752 §3.1: Kafka's GSS acceptor advertises its supported
-// security layers and maximum buffer size as a 4-byte payload once the
-// security context is established, and expects the initiator to select one
-// by echoing the payload back, authenticated with the ticket's session key.
+// WrapToken (challenge), per RFC 4752 §3.1: Kafka's GSS acceptor advertises
+// its supported security layers and its own max receive buffer size as a
+// 4-byte payload once the security context is established, and expects the
+// initiator to select exactly one of the offered layers.
+//
 // This plugin only ever needs "no security layer" (the only one Kafka
-// implements), so the payload is always echoed unchanged.
+// implements), so the response is always the fixed noSecurityLayerSelection
+// - not an echo of the acceptor's payload. Echoing would be wrong even
+// though it happens to produce the same bytes against a default Kafka
+// broker (whose offer already is exactly noSecurityLayerSelection): bytes
+// 2-4 of the *offer* are the acceptor's own buffer size for the higher
+// layers, not something to reflect back as the initiator's own selection,
+// and a multi-bit offer echoed back would be an invalid multi-layer
+// "selection" instead of a single one.
 func buildWrapTokenResponse(challenge []byte, key types.EncryptionKey) ([]byte, error) {
 	var wt gssapi.WrapToken
 	if err := wt.Unmarshal(challenge, true); err != nil {
@@ -495,8 +519,14 @@ func buildWrapTokenResponse(challenge []byte, key types.EncryptionKey) ([]byte, 
 	if _, err := wt.Verify(key, keyusage.GSSAPI_ACCEPTOR_SEAL); err != nil {
 		return nil, fmt.Errorf("failed to verify security layer negotiation token: %w", err)
 	}
+	if len(wt.Payload) != 4 {
+		return nil, fmt.Errorf("security layer negotiation offer has unexpected length %d (want 4)", len(wt.Payload))
+	}
+	if wt.Payload[0]&noSecurityLayerBit == 0 {
+		return nil, fmt.Errorf("broker did not offer the \"no security layer\" option this plugin requires (offer byte: 0x%02x)", wt.Payload[0])
+	}
 
-	resp, err := gssapi.NewInitiatorWrapToken(wt.Payload, key)
+	resp, err := gssapi.NewInitiatorWrapToken(noSecurityLayerSelection, key)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build security layer negotiation response: %w", err)
 	}

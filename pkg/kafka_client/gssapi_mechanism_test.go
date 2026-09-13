@@ -563,7 +563,11 @@ func TestGSSAPIHandshake_Offline(t *testing.T) {
 	}
 
 	// --- Step 1: acceptor's security-layer negotiation challenge ---
-	acceptorPayload := []byte{0x01, 0x01, 0x00, 0x00} // "no security layer", max size 0
+	// Deliberately offer more than "no security layer" (bits for integrity
+	// and confidentiality too) with a non-zero buffer size, to prove the
+	// response is a fixed "no security layer" selection rather than an
+	// echo of whatever the acceptor happened to send.
+	acceptorPayload := []byte{0x07, 0x01, 0x02, 0x03}
 	challenge := buildAcceptorWrapTokenForTest(t, sessionKey, acceptorPayload, 1)
 
 	done, resp, err := sess.Next(ctx, challenge)
@@ -585,8 +589,10 @@ func TestGSSAPIHandshake_Offline(t *testing.T) {
 	if ok, err := respToken.Verify(sessionKey, keyusage.GSSAPI_INITIATOR_SEAL); !ok || err != nil {
 		t.Fatalf("initiator WrapToken failed verification: ok=%v err=%v", ok, err)
 	}
-	if string(respToken.Payload) != string(acceptorPayload) {
-		t.Errorf("response payload = %x, want the acceptor's payload echoed back %x", respToken.Payload, acceptorPayload)
+	wantSelection := []byte{0x01, 0x00, 0x00, 0x00} // fixed "no security layer" selection
+	if string(respToken.Payload) != string(wantSelection) {
+		t.Errorf("response payload = %x, want the fixed no-security-layer selection %x (not an echo of the acceptor's offer %x)",
+			respToken.Payload, wantSelection, acceptorPayload)
 	}
 
 	// --- Step 2: broker's empty final challenge ---
@@ -605,6 +611,52 @@ func TestGSSAPIHandshake_Offline(t *testing.T) {
 	if _, _, err := sess.Next(ctx, nil); err == nil {
 		t.Error("expected an error on a Next() call beyond the handshake's two steps")
 	}
+}
+
+func TestBuildWrapTokenResponse(t *testing.T) {
+	et, err := crypto.GetEtype(etypeID.AES256_CTS_HMAC_SHA1_96)
+	if err != nil {
+		t.Fatalf("failed to resolve etype: %v", err)
+	}
+	key, err := types.GenerateEncryptionKey(et)
+	if err != nil {
+		t.Fatalf("failed to generate test key: %v", err)
+	}
+
+	t.Run("valid offer always yields the fixed no-security-layer selection", func(t *testing.T) {
+		for _, offer := range [][]byte{
+			{0x01, 0x00, 0x00, 0x00}, // exactly "no security layer", zero size
+			{0x01, 0x01, 0x02, 0x03}, // "no security layer" plus a non-zero (and irrelevant) size
+			{0x07, 0x00, 0x00, 0x00}, // all three layers offered; client still only wants "no security layer"
+		} {
+			challenge := buildAcceptorWrapTokenForTest(t, key, offer, 1)
+			resp, err := buildWrapTokenResponse(challenge, key)
+			if err != nil {
+				t.Fatalf("offer %x: unexpected error: %v", offer, err)
+			}
+			var wt gssapi.WrapToken
+			if err := wt.Unmarshal(resp, false); err != nil {
+				t.Fatalf("offer %x: failed to unmarshal response: %v", offer, err)
+			}
+			if string(wt.Payload) != string(noSecurityLayerSelection) {
+				t.Errorf("offer %x: response payload = %x, want %x", offer, wt.Payload, noSecurityLayerSelection)
+			}
+		}
+	})
+
+	t.Run("offer without the no-security-layer bit is rejected", func(t *testing.T) {
+		challenge := buildAcceptorWrapTokenForTest(t, key, []byte{0x06, 0x00, 0x00, 0x00}, 1) // integrity+confidentiality only
+		if _, err := buildWrapTokenResponse(challenge, key); err == nil {
+			t.Fatal("expected an error for an offer that does not include \"no security layer\"")
+		}
+	})
+
+	t.Run("offer with the wrong length is rejected", func(t *testing.T) {
+		challenge := buildAcceptorWrapTokenForTest(t, key, []byte{0x01, 0x00, 0x00}, 1) // 3 bytes, not 4
+		if _, err := buildWrapTokenResponse(challenge, key); err == nil {
+			t.Fatal("expected an error for a non-4-byte offer")
+		}
+	})
 }
 
 func TestGSSAPIStart_MissingBrokerHost(t *testing.T) {
