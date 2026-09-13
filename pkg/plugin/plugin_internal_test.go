@@ -62,6 +62,8 @@ func TestGetDatasourceSettings_ParsesSecureJSONAndBounds(t *testing.T) {
 		}`),
 		DecryptedSecureJSONData: map[string]string{
 			"saslPassword":           "secret",
+			"saslGssapiPassword":     "krb-secret",
+			"saslGssapiKeytab":       "base64-keytab-content",
 			"tlsCACert":              "ca-cert",
 			"tlsClientCert":          "client-cert",
 			"tlsClientKey":           "client-key",
@@ -85,6 +87,9 @@ func TestGetDatasourceSettings_ParsesSecureJSONAndBounds(t *testing.T) {
 	if settings.SaslPassword != "secret" || settings.TLSCACert != "ca-cert" || settings.TLSClientCert != "client-cert" || settings.TLSClientKey != "client-key" {
 		t.Fatalf("expected secure TLS/SASL fields to be loaded")
 	}
+	if settings.SaslGssapiPassword != "krb-secret" || settings.SaslGssapiKeytab != "base64-keytab-content" {
+		t.Fatalf("expected secure GSSAPI fields to be loaded")
+	}
 	if settings.SchemaRegistryUsername != "sr-user" || settings.SchemaRegistryPassword != "sr-pass" {
 		t.Fatalf("expected schema registry credentials to be loaded")
 	}
@@ -99,6 +104,8 @@ func TestGetDatasourceSettings_SecretsIgnoredFromPlainJSONData(t *testing.T) {
 			"bootstrapServers": "localhost:9092",
 			"saslPassword": "leaked-password",
 			"saslOauthClientSecret": "leaked-oauth-secret",
+			"saslGssapiPassword": "leaked-krb-password",
+			"saslGssapiKeytab": "leaked-keytab-content",
 			"tlsClientKey": "leaked-client-key",
 			"schemaRegistryUsername": "not-a-secret-username",
 			"schemaRegistryPassword": "leaked-registry-password"
@@ -113,6 +120,12 @@ func TestGetDatasourceSettings_SecretsIgnoredFromPlainJSONData(t *testing.T) {
 	}
 	if settings.SaslOauthClientSecret != "" {
 		t.Fatalf("expected SaslOauthClientSecret to ignore plain JSONData, got %q", settings.SaslOauthClientSecret)
+	}
+	if settings.SaslGssapiPassword != "" {
+		t.Fatalf("expected SaslGssapiPassword to ignore plain JSONData, got %q", settings.SaslGssapiPassword)
+	}
+	if settings.SaslGssapiKeytab != "" {
+		t.Fatalf("expected SaslGssapiKeytab to ignore plain JSONData, got %q", settings.SaslGssapiKeytab)
 	}
 	if settings.TLSClientKey != "" {
 		t.Fatalf("expected TLSClientKey to ignore plain JSONData, got %q", settings.TLSClientKey)

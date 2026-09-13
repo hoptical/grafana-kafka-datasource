@@ -50,6 +50,25 @@ jest.mock('@grafana/ui', () => ({
       )}
     </div>
   ),
+  TextArea: (props: any) => <textarea {...props} />,
+  RadioButtonGroup: ({ options, value, onChange, ...rest }: any) => (
+    <select
+      {...rest}
+      value={value ?? ''}
+      onChange={(e) => {
+        const selected = options.find((opt: any) => String(opt.value) === e.target.value);
+        if (selected && onChange) {
+          onChange(selected.value);
+        }
+      }}
+    >
+      {options?.map((option: any) => (
+        <option key={option.value} value={String(option.value)}>
+          {option.label}
+        </option>
+      ))}
+    </select>
+  ),
   Select: ({ value, onChange, options, placeholder }: any) => (
     <select
       value={value?.value ? String(value.value) : ''}
@@ -824,5 +843,232 @@ describe('ConfigEditor', () => {
     expect(screen.getByDisplayValue('https://idp.example.com/token')).toBeInTheDocument();
     expect(screen.getByDisplayValue('existing-client-id')).toBeInTheDocument();
     expect(screen.getByDisplayValue('kafka.read')).toBeInTheDocument();
+  });
+
+  it('shows GSSAPI fields and hides username/password when GSSAPI is selected', () => {
+    renderConfigEditor({ securityProtocol: 'SASL_SSL', saslMechanisms: 'GSSAPI' });
+
+    expect(screen.getByTestId('gssapi-service-name')).toBeInTheDocument();
+    expect(screen.getByTestId('gssapi-realm')).toBeInTheDocument();
+    expect(screen.getByTestId('gssapi-username')).toBeInTheDocument();
+    expect(screen.getByTestId('gssapi-krb5-config')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Kerberos Password')).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('SASL Username')).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('SASL Password')).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('https://idp.example.com/oauth2/token')).not.toBeInTheDocument();
+  });
+
+  it('hides GSSAPI fields when a non-GSSAPI mechanism is selected', () => {
+    renderConfigEditor({ securityProtocol: 'SASL_SSL', saslMechanisms: 'PLAIN' });
+
+    expect(screen.queryByTestId('gssapi-service-name')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('gssapi-realm')).not.toBeInTheDocument();
+  });
+
+  it('defaults to the krb5.conf paste-content field and switches to a path field', () => {
+    renderConfigEditor({ securityProtocol: 'SASL_SSL', saslMechanisms: 'GSSAPI' });
+
+    expect(screen.getByTestId('gssapi-krb5-config')).toBeInTheDocument();
+    expect(screen.queryByTestId('gssapi-krb5-config-path')).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByTestId('gssapi-krb5-config-source'), { target: { value: 'path' } });
+
+    expect(screen.queryByTestId('gssapi-krb5-config')).not.toBeInTheDocument();
+    expect(screen.getByTestId('gssapi-krb5-config-path')).toBeInTheDocument();
+  });
+
+  it('clears the stale krb5.conf path when switching to pasted content', () => {
+    renderConfigEditor({
+      securityProtocol: 'SASL_SSL',
+      saslMechanisms: 'GSSAPI',
+      saslGssapiKrb5Config: '',
+      saslGssapiKrb5ConfigPath: '/etc/krb5.conf',
+    });
+
+    fireEvent.change(screen.getByTestId('gssapi-krb5-config-source'), { target: { value: 'inline' } });
+
+    expect(mockOnOptionsChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jsonData: expect.objectContaining({ saslGssapiKrb5ConfigPath: '' }),
+      })
+    );
+  });
+
+  it('clears the stale inline krb5.conf content when switching to a file path', () => {
+    renderConfigEditor({
+      securityProtocol: 'SASL_SSL',
+      saslMechanisms: 'GSSAPI',
+      saslGssapiKrb5Config: '[libdefaults]\ndefault_realm = EXAMPLE.COM',
+    });
+
+    fireEvent.change(screen.getByTestId('gssapi-krb5-config-source'), { target: { value: 'path' } });
+
+    expect(mockOnOptionsChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jsonData: expect.objectContaining({ saslGssapiKrb5Config: '' }),
+      })
+    );
+  });
+
+  it('shows the password field and hides the keytab field for password auth (the default)', () => {
+    renderConfigEditor({ securityProtocol: 'SASL_SSL', saslMechanisms: 'GSSAPI' });
+
+    expect(screen.getByPlaceholderText('Kerberos Password')).toBeInTheDocument();
+    expect(screen.queryByTestId('secret-textarea')).not.toBeInTheDocument();
+  });
+
+  it('shows the keytab field and hides password when keytab auth is selected', () => {
+    renderConfigEditor({ securityProtocol: 'SASL_SSL', saslMechanisms: 'GSSAPI', saslGssapiAuthType: 'keytab' as any });
+
+    expect(screen.queryByPlaceholderText('Kerberos Password')).not.toBeInTheDocument();
+    expect(screen.getByTestId('secret-textarea')).toBeInTheDocument();
+  });
+
+  it('calls onOptionsChange when the authentication method changes', () => {
+    renderConfigEditor({ securityProtocol: 'SASL_SSL', saslMechanisms: 'GSSAPI' });
+
+    fireEvent.change(screen.getByTestId('gssapi-auth-type'), { target: { value: 'keytab' } });
+
+    expect(mockOnOptionsChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jsonData: expect.objectContaining({ saslGssapiAuthType: 'keytab' }),
+      })
+    );
+  });
+
+  it('switches the keytab source from pasted content to a file path', () => {
+    renderConfigEditor({ securityProtocol: 'SASL_SSL', saslMechanisms: 'GSSAPI', saslGssapiAuthType: 'keytab' as any });
+
+    expect(screen.getByTestId('secret-textarea')).toBeInTheDocument();
+    expect(screen.queryByTestId('gssapi-keytab-path')).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByTestId('gssapi-keytab-source'), { target: { value: 'path' } });
+
+    expect(screen.queryByTestId('secret-textarea')).not.toBeInTheDocument();
+    expect(screen.getByTestId('gssapi-keytab-path')).toBeInTheDocument();
+  });
+
+  it('resets the inline keytab secret when switching keytab auth to a file path', () => {
+    renderConfigEditor(
+      { securityProtocol: 'SASL_SSL', saslMechanisms: 'GSSAPI', saslGssapiAuthType: 'keytab' as any },
+      { saslGssapiKeytab: 'existing-keytab' },
+      { saslGssapiKeytab: true }
+    );
+
+    fireEvent.change(screen.getByTestId('gssapi-keytab-source'), { target: { value: 'path' } });
+
+    expect(mockOnOptionsChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        secureJsonFields: expect.objectContaining({ saslGssapiKeytab: false }),
+        secureJsonData: expect.objectContaining({ saslGssapiKeytab: '' }),
+      })
+    );
+  });
+
+  it('clears the stale keytab path when switching back to pasted content', () => {
+    renderConfigEditor({
+      securityProtocol: 'SASL_SSL',
+      saslMechanisms: 'GSSAPI',
+      saslGssapiAuthType: 'keytab' as any,
+      saslGssapiKeytabPath: '/etc/security/keytabs/grafana.keytab',
+    });
+
+    fireEvent.change(screen.getByTestId('gssapi-keytab-source'), { target: { value: 'inline' } });
+
+    expect(mockOnOptionsChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jsonData: expect.objectContaining({ saslGssapiKeytabPath: '' }),
+      })
+    );
+  });
+
+  it('calls onOptionsChange when the GSSAPI realm changes', () => {
+    renderConfigEditor({ securityProtocol: 'SASL_SSL', saslMechanisms: 'GSSAPI' });
+    fireEvent.change(screen.getByTestId('gssapi-realm'), { target: { value: 'EXAMPLE.COM' } });
+
+    expect(mockOnOptionsChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jsonData: expect.objectContaining({ saslGssapiRealm: 'EXAMPLE.COM' }),
+      })
+    );
+  });
+
+  it('handles GSSAPI password change and reset', () => {
+    renderConfigEditor(
+      { securityProtocol: 'SASL_SSL', saslMechanisms: 'GSSAPI' },
+      { saslGssapiPassword: 'existing-password' },
+      { saslGssapiPassword: true }
+    );
+
+    const input = screen.getByPlaceholderText('Kerberos Password');
+    fireEvent.change(input, { target: { value: 'new-password' } });
+    expect(mockOnOptionsChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        secureJsonData: expect.objectContaining({ saslGssapiPassword: 'new-password' }),
+      })
+    );
+
+    const resetButton = screen.getByTestId('reset-button');
+    fireEvent.click(resetButton);
+    expect(mockOnOptionsChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        secureJsonFields: expect.objectContaining({ saslGssapiPassword: false }),
+        secureJsonData: expect.objectContaining({ saslGssapiPassword: '' }),
+      })
+    );
+  });
+
+  it('handles GSSAPI keytab change and reset', () => {
+    renderConfigEditor(
+      { securityProtocol: 'SASL_SSL', saslMechanisms: 'GSSAPI', saslGssapiAuthType: 'keytab' as any },
+      { saslGssapiKeytab: 'existing-keytab' },
+      { saslGssapiKeytab: true }
+    );
+
+    const textarea = screen.getByTestId('secret-textarea');
+    fireEvent.change(textarea, { target: { value: 'bmV3LWtleXRhYg==' } });
+    expect(mockOnOptionsChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        secureJsonData: expect.objectContaining({ saslGssapiKeytab: 'bmV3LWtleXRhYg==' }),
+      })
+    );
+
+    const resetButton = screen.getByTestId('reset-textarea-button');
+    fireEvent.click(resetButton);
+    expect(mockOnOptionsChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        secureJsonFields: expect.objectContaining({ saslGssapiKeytab: false }),
+        secureJsonData: expect.objectContaining({ saslGssapiKeytab: '' }),
+      })
+    );
+  });
+
+  it('preserves existing GSSAPI configuration values', () => {
+    const existingConfig = {
+      securityProtocol: 'SASL_SSL',
+      saslMechanisms: 'GSSAPI',
+      saslGssapiServiceName: 'kafka',
+      saslGssapiRealm: 'EXAMPLE.COM',
+      saslGssapiUsername: 'grafana',
+      saslGssapiKrb5Config: '[libdefaults]\ndefault_realm = EXAMPLE.COM',
+    };
+
+    renderConfigEditor(existingConfig);
+
+    expect(screen.getByDisplayValue('EXAMPLE.COM')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('grafana')).toBeInTheDocument();
+    expect(screen.getByTestId('gssapi-krb5-config')).toHaveValue('[libdefaults]\ndefault_realm = EXAMPLE.COM');
+  });
+
+  it('toggling krb5.conf source defaults to path when only a path is already configured', () => {
+    renderConfigEditor({
+      securityProtocol: 'SASL_SSL',
+      saslMechanisms: 'GSSAPI',
+      saslGssapiKrb5Config: '',
+      saslGssapiKrb5ConfigPath: '/etc/krb5.conf',
+    });
+
+    expect(screen.getByTestId('gssapi-krb5-config-path')).toBeInTheDocument();
+    expect(screen.queryByTestId('gssapi-krb5-config')).not.toBeInTheDocument();
   });
 });

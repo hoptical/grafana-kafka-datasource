@@ -15,6 +15,7 @@ import { DataSourcePluginOptionsEditorProps, GrafanaTheme2 } from '@grafana/data
 import { css } from '@emotion/css';
 import { ConfigSection, DataSourceDescription } from '@grafana/plugin-ui';
 import { KafkaDataSourceOptions, defaultDataSourceOptions, KafkaSecureJsonData } from './types';
+import { GssapiFields } from './GssapiFields';
 import { isEqual } from 'lodash';
 
 interface Props extends DataSourcePluginOptionsEditorProps<KafkaDataSourceOptions> {}
@@ -33,6 +34,7 @@ const SASL_MECHANISM_OPTIONS = [
   { label: 'SCRAM-SHA-256', value: 'SCRAM-SHA-256', description: 'SCRAM with SHA-256' },
   { label: 'SCRAM-SHA-512', value: 'SCRAM-SHA-512', description: 'SCRAM with SHA-512' },
   { label: 'OAUTHBEARER', value: 'OAUTHBEARER', description: 'OAuth 2.0 client credentials (KIP-255)' },
+  { label: 'GSSAPI', value: 'GSSAPI', description: 'Kerberos authentication (SASL/GSSAPI)' },
 ];
 
 const getStyles = (theme: GrafanaTheme2) => {
@@ -405,6 +407,8 @@ export const ConfigEditor = (props: Props) => {
                   />
                 </InlineField>
               </>
+            ) : jsonData.saslMechanisms === 'GSSAPI' ? (
+              <GssapiFields options={options} onOptionsChange={onOptionsChange} />
             ) : (
               <>
                 <InlineField
