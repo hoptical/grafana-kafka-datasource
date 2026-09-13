@@ -374,12 +374,17 @@ func (client *KafkaClient) NewConnection() error {
 			if client.SaslGssapiKrb5Config == "" && client.SaslGssapiKrb5ConfigPath == "" {
 				return fmt.Errorf("GSSAPI authentication requires krb5.conf content or a krb5.conf file path")
 			}
-			if client.SaslGssapiAuthType == gssapiAuthTypeKeytab {
+			switch client.SaslGssapiAuthType {
+			case "", gssapiAuthTypePassword:
+				if client.SaslGssapiPassword == "" {
+					return fmt.Errorf("GSSAPI password authentication requires a password")
+				}
+			case gssapiAuthTypeKeytab:
 				if client.SaslGssapiKeytab == "" && client.SaslGssapiKeytabPath == "" {
 					return fmt.Errorf("GSSAPI keytab authentication requires keytab content or a keytab file path")
 				}
-			} else if client.SaslGssapiPassword == "" {
-				return fmt.Errorf("GSSAPI password authentication requires a password")
+			default:
+				return fmt.Errorf("unsupported GSSAPI authentication type: %s", client.SaslGssapiAuthType)
 			}
 		default:
 			if client.SaslUsername == "" || client.SaslPassword == "" {

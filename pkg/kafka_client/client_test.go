@@ -212,6 +212,7 @@ func TestNewConnection_GSSAPI_RequiresConfiguration(t *testing.T) {
 		{"missing krb5 config", Options{SecurityProtocol: "SASL_SSL", SaslMechanisms: "GSSAPI", SaslGssapiRealm: "EXAMPLE.COM", SaslGssapiUsername: "grafana", SaslGssapiPassword: "pw"}},
 		{"missing password for password auth", Options{SecurityProtocol: "SASL_SSL", SaslMechanisms: "GSSAPI", SaslGssapiRealm: "EXAMPLE.COM", SaslGssapiUsername: "grafana", SaslGssapiKrb5Config: testKrb5Conf}},
 		{"missing keytab for keytab auth", Options{SecurityProtocol: "SASL_SSL", SaslMechanisms: "GSSAPI", SaslGssapiRealm: "EXAMPLE.COM", SaslGssapiUsername: "grafana", SaslGssapiKrb5Config: testKrb5Conf, SaslGssapiAuthType: gssapiAuthTypeKeytab}},
+		{"unsupported auth type", Options{SecurityProtocol: "SASL_SSL", SaslMechanisms: "GSSAPI", SaslGssapiRealm: "EXAMPLE.COM", SaslGssapiUsername: "grafana", SaslGssapiKrb5Config: testKrb5Conf, SaslGssapiPassword: "pw", SaslGssapiAuthType: "keytabb"}},
 		{"nothing set", Options{SecurityProtocol: "SASL_SSL", SaslMechanisms: "GSSAPI"}},
 	}
 	for _, tt := range tests {

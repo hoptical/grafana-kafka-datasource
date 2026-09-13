@@ -87,6 +87,7 @@ type gssapiMechanism struct {
 }
 
 const defaultKerberosServiceName = "kafka"
+const gssapiAuthTypePassword = "password"
 const gssapiAuthTypeKeytab = "keytab"
 
 // Negative-cache TTLs for GetServiceTicket failures. HealthCheck retries on
@@ -144,6 +145,13 @@ func newGSSAPIMechanism(c *KafkaClient) (*gssapiMechanism, error) {
 	serviceName := c.SaslGssapiServiceName
 	if serviceName == "" {
 		serviceName = defaultKerberosServiceName
+	}
+
+	switch c.SaslGssapiAuthType {
+	case "", gssapiAuthTypePassword, gssapiAuthTypeKeytab:
+		// valid
+	default:
+		return nil, fmt.Errorf("unsupported GSSAPI authentication type: %s", c.SaslGssapiAuthType)
 	}
 
 	m := &gssapiMechanism{

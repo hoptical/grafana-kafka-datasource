@@ -127,6 +127,13 @@ func TestNewGSSAPIMechanism_Errors(t *testing.T) {
 			},
 			wantErr: "keytab content or a keytab file path",
 		},
+		{
+			name: "unsupported auth type is rejected rather than silently treated as password",
+			overrides: func(c *KafkaClient) {
+				c.SaslGssapiAuthType = "keytabb" // typo of "keytab"
+			},
+			wantErr: "unsupported GSSAPI authentication type",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
