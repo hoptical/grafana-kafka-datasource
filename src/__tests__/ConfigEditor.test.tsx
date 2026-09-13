@@ -877,6 +877,39 @@ describe('ConfigEditor', () => {
     expect(screen.getByTestId('gssapi-krb5-config-path')).toBeInTheDocument();
   });
 
+  it('clears the stale krb5.conf path when switching to pasted content', () => {
+    renderConfigEditor({
+      securityProtocol: 'SASL_SSL',
+      saslMechanisms: 'GSSAPI',
+      saslGssapiKrb5Config: '',
+      saslGssapiKrb5ConfigPath: '/etc/krb5.conf',
+    });
+
+    fireEvent.change(screen.getByTestId('gssapi-krb5-config-source'), { target: { value: 'inline' } });
+
+    expect(mockOnOptionsChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jsonData: expect.objectContaining({ saslGssapiKrb5ConfigPath: '' }),
+      })
+    );
+  });
+
+  it('clears the stale inline krb5.conf content when switching to a file path', () => {
+    renderConfigEditor({
+      securityProtocol: 'SASL_SSL',
+      saslMechanisms: 'GSSAPI',
+      saslGssapiKrb5Config: '[libdefaults]\ndefault_realm = EXAMPLE.COM',
+    });
+
+    fireEvent.change(screen.getByTestId('gssapi-krb5-config-source'), { target: { value: 'path' } });
+
+    expect(mockOnOptionsChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jsonData: expect.objectContaining({ saslGssapiKrb5Config: '' }),
+      })
+    );
+  });
+
   it('shows the password field and hides the keytab field for password auth (the default)', () => {
     renderConfigEditor({ securityProtocol: 'SASL_SSL', saslMechanisms: 'GSSAPI' });
 
@@ -913,6 +946,40 @@ describe('ConfigEditor', () => {
 
     expect(screen.queryByTestId('secret-textarea')).not.toBeInTheDocument();
     expect(screen.getByTestId('gssapi-keytab-path')).toBeInTheDocument();
+  });
+
+  it('resets the inline keytab secret when switching keytab auth to a file path', () => {
+    renderConfigEditor(
+      { securityProtocol: 'SASL_SSL', saslMechanisms: 'GSSAPI', saslGssapiAuthType: 'keytab' as any },
+      { saslGssapiKeytab: 'existing-keytab' },
+      { saslGssapiKeytab: true }
+    );
+
+    fireEvent.change(screen.getByTestId('gssapi-keytab-source'), { target: { value: 'path' } });
+
+    expect(mockOnOptionsChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        secureJsonFields: expect.objectContaining({ saslGssapiKeytab: false }),
+        secureJsonData: expect.objectContaining({ saslGssapiKeytab: '' }),
+      })
+    );
+  });
+
+  it('clears the stale keytab path when switching back to pasted content', () => {
+    renderConfigEditor({
+      securityProtocol: 'SASL_SSL',
+      saslMechanisms: 'GSSAPI',
+      saslGssapiAuthType: 'keytab' as any,
+      saslGssapiKeytabPath: '/etc/security/keytabs/grafana.keytab',
+    });
+
+    fireEvent.change(screen.getByTestId('gssapi-keytab-source'), { target: { value: 'inline' } });
+
+    expect(mockOnOptionsChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jsonData: expect.objectContaining({ saslGssapiKeytabPath: '' }),
+      })
+    );
   });
 
   it('calls onOptionsChange when the GSSAPI realm changes', () => {

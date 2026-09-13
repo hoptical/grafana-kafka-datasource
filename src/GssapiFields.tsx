@@ -84,6 +84,34 @@ export function GssapiFields({ options, onOptionsChange }: Props) {
   const onDisablePAFXFASTChange = (e: ChangeEvent<HTMLInputElement>) =>
     updateJsonData({ saslGssapiDisablePAFXFAST: e.target.checked });
 
+  // The backend (parseKrb5Config/parseKeytab) prefers inline content over a
+  // path whenever both are set. Switching the source toggle only changes
+  // what's rendered here, so without clearing the field being switched
+  // away from, a stale value left over from the other source would keep
+  // silently winning on save regardless of what the user just configured.
+  const onKrb5ConfigSourceChange = (value: 'inline' | 'path') => {
+    setKrb5ConfigSource(value);
+    updateJsonData(value === 'inline' ? { saslGssapiKrb5ConfigPath: '' } : { saslGssapiKrb5Config: '' });
+  };
+
+  const onKeytabSourceChange = (value: 'inline' | 'path') => {
+    setKeytabSource(value);
+    if (value === 'inline') {
+      updateJsonData({ saslGssapiKeytabPath: '' });
+    } else {
+      // The inline keytab is a secret: once saved, its value is invisible
+      // to this UI (only secureJsonFields.saslGssapiKeytab says whether one
+      // is configured server-side). Switching to "path" has to explicitly
+      // reset it the same way the reset button does, or a previously-saved
+      // keytab would keep silently winning over the new path.
+      onOptionsChange({
+        ...options,
+        secureJsonFields: { ...secureJsonFields, saslGssapiKeytab: false },
+        secureJsonData: { ...secureJsonData, saslGssapiKeytab: '' },
+      });
+    }
+  };
+
   const authType = jsonData.saslGssapiAuthType || GssapiAuthType.PASSWORD;
 
   return (
@@ -143,7 +171,7 @@ export function GssapiFields({ options, onOptionsChange }: Props) {
           data-testid="gssapi-krb5-config-source"
           options={SOURCE_OPTIONS}
           value={krb5ConfigSource}
-          onChange={(value) => value && setKrb5ConfigSource(value)}
+          onChange={(value) => value && onKrb5ConfigSourceChange(value)}
         />
       </InlineField>
 
@@ -201,7 +229,7 @@ export function GssapiFields({ options, onOptionsChange }: Props) {
               data-testid="gssapi-keytab-source"
               options={SOURCE_OPTIONS}
               value={keytabSource}
-              onChange={(value) => value && setKeytabSource(value)}
+              onChange={(value) => value && onKeytabSourceChange(value)}
             />
           </InlineField>
 
