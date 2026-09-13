@@ -397,16 +397,6 @@ func (client *KafkaClient) NewConnection() error {
 		}
 	}
 
-	// Release any previously constructed mechanism's resources (e.g. a
-	// GSSAPI mechanism's Kerberos client and its background TGT-renewal
-	// goroutine) before installing the new one. NewConnection can be called
-	// more than once on the same KafkaClient; without this, each call would
-	// leak the previous mechanism's state.
-	if closer, ok := client.saslMechanism.(interface{ Close() }); ok {
-		closer.Close()
-	}
-	client.saslMechanism = mechanism
-
 	// Determine dialer timeout
 	effectiveTimeout := dialerTimeout
 	if client.Timeout > 0 {
@@ -425,10 +415,13 @@ func (client *KafkaClient) NewConnection() error {
 		ClientID: client.ClientId,
 		Dial:     client.DialFunc,
 	}
-	if client.Transport != nil {
-		client.Transport.CloseIdleConnections()
-	}
 
+	// Everything below this point can still fail (TLS certificate parsing),
+	// so client state is not mutated until the new dialer/transport are
+	// fully built. Swapping client.saslMechanism (and closing the old one)
+	// before a later failure would leave client.Dialer/Transport/Conn
+	// pointing at the now-closed old mechanism, while Dispose would only
+	// ever be able to close the new, never-installed one instead.
 	if client.SecurityProtocol == "SASL_SSL" || client.SecurityProtocol == "SSL" {
 		tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12, InsecureSkipVerify: client.TLSSkipVerify} // #nosec G402 -- datasource option is explicit and required for user-managed/self-signed deployments.
 		if client.ServerName != "" {
@@ -452,6 +445,19 @@ func (client *KafkaClient) NewConnection() error {
 		transport.TLS = tlsConfig
 	}
 
+	// All validation and setup above succeeded: it is now safe to release
+	// the previous mechanism's resources (e.g. a GSSAPI mechanism's
+	// Kerberos client and its background TGT-renewal goroutine) and install
+	// the new connection state. NewConnection can be called more than once
+	// on the same KafkaClient; without closing the old mechanism here, each
+	// call would leak the previous one's state.
+	if closer, ok := client.saslMechanism.(interface{ Close() }); ok {
+		closer.Close()
+	}
+	client.saslMechanism = mechanism
+	if client.Transport != nil {
+		client.Transport.CloseIdleConnections()
+	}
 	client.Dialer = dialer
 	client.Transport = transport
 	client.Conn = &kafka.Client{Addr: kafka.TCP(client.Brokers...), Timeout: effectiveTimeout, Transport: transport}

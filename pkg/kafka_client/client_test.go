@@ -277,6 +277,57 @@ func TestNewConnection_ClosesPreviousMechanismOnReconnect(t *testing.T) {
 	}
 }
 
+func TestNewConnection_PreservesPreviousStateWhenTLSSetupFails(t *testing.T) {
+	client := NewKafkaClient(Options{
+		BootstrapServers:     "localhost:9092",
+		SecurityProtocol:     "SASL_SSL",
+		SaslMechanisms:       "GSSAPI",
+		SaslGssapiRealm:      "EXAMPLE.COM",
+		SaslGssapiUsername:   "grafana",
+		SaslGssapiAuthType:   "password",
+		SaslGssapiKrb5Config: testKrb5Conf,
+		SaslGssapiPassword:   "grafana-password",
+	})
+	if err := client.NewConnection(); err != nil {
+		t.Fatalf("first NewConnection() error = %v", err)
+	}
+	firstMechanism := client.saslMechanism
+	firstDialer := client.Dialer
+	firstTransport := client.Transport
+	firstConn := client.Conn
+	fake := &fakeKerberosClient{}
+	firstMechanism.(*gssapiMechanism).krb = fake
+
+	// Force TLS client-certificate parsing to fail on the second call.
+	client.TLSAuth = true
+	client.TLSClientCert = "not a valid certificate"
+	client.TLSClientKey = "not a valid key"
+
+	if err := client.NewConnection(); err == nil {
+		t.Fatal("expected NewConnection() to fail on invalid TLS client certificate")
+	}
+
+	// The old mechanism, dialer, transport, and connection must all still be
+	// intact and in use: a failed reconnect must not close the mechanism
+	// still referenced by client.Dialer/Transport, nor leave any of them
+	// pointing at inconsistent state.
+	if fake.destroyed {
+		t.Error("expected the previous mechanism to survive a failed reconnect, but it was destroyed")
+	}
+	if client.saslMechanism != firstMechanism {
+		t.Error("expected client.saslMechanism to be unchanged after a failed reconnect")
+	}
+	if client.Dialer != firstDialer {
+		t.Error("expected client.Dialer to be unchanged after a failed reconnect")
+	}
+	if client.Transport != firstTransport {
+		t.Error("expected client.Transport to be unchanged after a failed reconnect")
+	}
+	if client.Conn != firstConn {
+		t.Error("expected client.Conn to be unchanged after a failed reconnect")
+	}
+}
+
 func TestNewConnection_OAuthBearer_RequiresTokenEndpointAndClientCredentials(t *testing.T) {
 	tests := []struct {
 		name    string
