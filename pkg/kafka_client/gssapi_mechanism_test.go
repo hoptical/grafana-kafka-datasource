@@ -378,6 +378,42 @@ func TestGssapiMechanism_NegativeCache(t *testing.T) {
 	}
 }
 
+// TestGssapiMechanism_ServiceTicketFailuresAreScopedPerSPN is a regression
+// test for a bug where a service-ticket failure for one broker's SPN (e.g.
+// an unknown-principal error because that broker's keytab entry is missing)
+// was cached mechanism-wide, causing every *other* broker's otherwise-
+// healthy ticket requests to fail too until the cache entry expired. Broker
+// A failing must not block broker B from succeeding within the same TTL
+// window.
+func TestGssapiMechanism_ServiceTicketFailuresAreScopedPerSPN(t *testing.T) {
+	const spnA = "kafka/broker-a.example.com"
+	const spnB = "kafka/broker-b.example.com"
+
+	fake := &fakeKerberosClient{
+		failSPNs: map[string]error{
+			spnA: errString("KDC_ERR_S_PRINCIPAL_UNKNOWN: server not found"),
+		},
+	}
+	now := time.Now()
+	m := &gssapiMechanism{nowFunc: func() time.Time { return now }}
+	m.newClient = func() (kerberosClient, error) { return fake, nil }
+
+	if _, _, _, err := m.serviceTicket(spnA); err == nil {
+		t.Fatal("expected broker A's request to fail")
+	}
+
+	// Well within broker A's cached-failure TTL, broker B must still
+	// succeed: its SPN is healthy and was never asked to fail.
+	if _, _, _, err := m.serviceTicket(spnB); err != nil {
+		t.Fatalf("expected broker B to succeed despite broker A's cached failure, got: %v", err)
+	}
+
+	// Broker A's failure is still cached (still within its TTL).
+	if _, _, _, err := m.serviceTicket(spnA); err == nil {
+		t.Fatal("expected broker A's cached failure to still apply")
+	}
+}
+
 func TestGssapiMechanism_ConcurrentStart(t *testing.T) {
 	kt, cname, sname, realm := testKeytabAndPrincipals()
 	tkt, sessionKey, err := messages.NewTicket(
@@ -439,9 +475,16 @@ type fakeKerberosClient struct {
 	ticket     messages.Ticket
 	sessionKey types.EncryptionKey
 	destroyed  bool
+
+	// failSPNs, when set, makes GetServiceTicket fail for the listed SPNs
+	// with the given error instead of returning ticket/sessionKey.
+	failSPNs map[string]error
 }
 
 func (f *fakeKerberosClient) GetServiceTicket(spn string) (messages.Ticket, types.EncryptionKey, error) {
+	if err, ok := f.failSPNs[spn]; ok {
+		return messages.Ticket{}, types.EncryptionKey{}, err
+	}
 	return f.ticket, f.sessionKey, nil
 }
 func (f *fakeKerberosClient) Realm() string              { return f.realm }

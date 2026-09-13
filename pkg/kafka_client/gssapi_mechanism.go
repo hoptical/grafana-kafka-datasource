@@ -79,11 +79,30 @@ type gssapiMechanism struct {
 	newClient func() (kerberosClient, error) // seam: production uses newGokrb5Client
 	nowFunc   func() time.Time               // seam: negative-cache TTL in tests
 
-	mu         sync.Mutex
-	krb        kerberosClient
-	lastErr    error
-	lastErrAt  time.Time
-	lastErrTTL time.Duration
+	mu  sync.Mutex
+	krb kerberosClient
+
+	// loginErr caches a Kerberos client-construction (AS-exchange) failure.
+	// This is scoped to the whole mechanism, not any one broker, because
+	// login depends only on the configured principal/credentials - it is
+	// the same regardless of which broker's SPN is being requested.
+	loginErr    error
+	loginErrAt  time.Time
+	loginErrTTL time.Duration
+
+	// ticketFailures caches GetServiceTicket failures per SPN (one entry
+	// per broker). Unlike login, a service-ticket failure can be specific
+	// to a single broker's principal (e.g. one broker's SPN doesn't match
+	// any keytab entry), so it must not be applied to every other broker's
+	// otherwise-healthy ticket requests.
+	ticketFailures map[string]gssapiCachedFailure
+}
+
+// gssapiCachedFailure is one entry in gssapiMechanism.ticketFailures.
+type gssapiCachedFailure struct {
+	err error
+	at  time.Time
+	ttl time.Duration
 }
 
 const defaultKerberosServiceName = "kafka"
@@ -272,41 +291,61 @@ func (m *gssapiMechanism) newGokrb5Client() (kerberosClient, error) {
 // Kerberos client on first use. Login and ticket requests are serialized
 // under m.mu — dial volume here is a handful of broker connections per
 // datasource, and serializing avoids concurrent cold AS-exchanges hammering
-// the KDC and keeps the failure cache coherent.
+// the KDC and keeps the failure caches coherent.
 func (m *gssapiMechanism) serviceTicket(spn string) (messages.Ticket, types.EncryptionKey, kerberosClient, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if m.lastErr != nil && m.nowFunc().Before(m.lastErrAt.Add(m.lastErrTTL)) {
-		return messages.Ticket{}, types.EncryptionKey{}, nil, m.lastErr
+	if m.loginErr != nil && m.nowFunc().Before(m.loginErrAt.Add(m.loginErrTTL)) {
+		return messages.Ticket{}, types.EncryptionKey{}, nil, m.loginErr
+	}
+	if failure, ok := m.ticketFailures[spn]; ok && m.nowFunc().Before(failure.at.Add(failure.ttl)) {
+		return messages.Ticket{}, types.EncryptionKey{}, nil, failure.err
 	}
 
 	if m.krb == nil {
 		krb, err := m.newClient()
 		if err != nil {
-			m.recordFailure(fmt.Errorf("kerberos login failed for %s@%s: %w", m.username, m.realm, err))
-			return messages.Ticket{}, types.EncryptionKey{}, nil, m.lastErr
+			wrapped := fmt.Errorf("kerberos login failed for %s@%s: %w", m.username, m.realm, err)
+			m.recordLoginFailure(wrapped)
+			return messages.Ticket{}, types.EncryptionKey{}, nil, wrapped
 		}
 		m.krb = krb
 	}
 
 	tkt, key, err := m.krb.GetServiceTicket(spn)
 	if err != nil {
-		m.recordFailure(fmt.Errorf("kerberos service ticket request failed for SPN %s: %w", spn, err))
-		return messages.Ticket{}, types.EncryptionKey{}, nil, m.lastErr
+		wrapped := fmt.Errorf("kerberos service ticket request failed for SPN %s: %w", spn, err)
+		m.recordTicketFailure(spn, wrapped)
+		return messages.Ticket{}, types.EncryptionKey{}, nil, wrapped
 	}
 
-	m.lastErr = nil
+	delete(m.ticketFailures, spn)
+	m.loginErr = nil
 	return tkt, key, m.krb, nil
 }
 
-func (m *gssapiMechanism) recordFailure(err error) {
-	m.lastErr = err
-	m.lastErrAt = m.nowFunc()
-	m.lastErrTTL = gssapiTransientFailureTTL
-	if isCredentialError(err) {
-		m.lastErrTTL = gssapiCredentialFailureTTL
+func (m *gssapiMechanism) recordLoginFailure(err error) {
+	m.loginErr = err
+	m.loginErrAt = m.nowFunc()
+	m.loginErrTTL = failureTTL(err)
+}
+
+func (m *gssapiMechanism) recordTicketFailure(spn string, err error) {
+	if m.ticketFailures == nil {
+		m.ticketFailures = make(map[string]gssapiCachedFailure)
 	}
+	m.ticketFailures[spn] = gssapiCachedFailure{err: err, at: m.nowFunc(), ttl: failureTTL(err)}
+}
+
+// failureTTL picks the negative-cache TTL for a Kerberos failure: a long,
+// sticky TTL for credential errors (see the constants' doc comment above),
+// and a short one for anything else (e.g. a transiently unreachable KDC).
+func failureTTL(err error) time.Duration {
+	if isCredentialError(err) {
+		return gssapiCredentialFailureTTL
+	}
+	return gssapiTransientFailureTTL
 }
 
 // isCredentialError reports whether a Kerberos error indicates the
