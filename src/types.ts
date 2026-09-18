@@ -61,6 +61,11 @@ export type ProtobufSchemaSourceInterface = {
   [key in ProtobufSchemaSource]: string;
 };
 
+export enum GssapiAuthType {
+  PASSWORD = 'password',
+  KEYTAB = 'keytab',
+}
+
 export interface KafkaDataSourceOptions extends DataSourceJsonData {
   bootstrapServers: string;
   clientId?: string;
@@ -72,6 +77,15 @@ export interface KafkaDataSourceOptions extends DataSourceJsonData {
   saslOauthTokenEndpoint?: string;
   saslOauthClientId?: string;
   saslOauthScope?: string;
+  // SASL/GSSAPI (Kerberos) Configuration
+  saslGssapiServiceName?: string;
+  saslGssapiRealm?: string;
+  saslGssapiUsername?: string;
+  saslGssapiAuthType?: GssapiAuthType;
+  saslGssapiKrb5Config?: string;
+  saslGssapiKrb5ConfigPath?: string;
+  saslGssapiKeytabPath?: string;
+  saslGssapiDisablePAFXFAST?: boolean;
   logLevel: string;
   healthcheckTimeout: number;
   // TLS Configuration
@@ -100,6 +114,14 @@ export const defaultDataSourceOptions: Partial<KafkaDataSourceOptions> = {
   saslOauthTokenEndpoint: '',
   saslOauthClientId: '',
   saslOauthScope: '',
+  saslGssapiServiceName: 'kafka',
+  saslGssapiRealm: '',
+  saslGssapiUsername: '',
+  saslGssapiAuthType: GssapiAuthType.PASSWORD,
+  saslGssapiKrb5Config: '',
+  saslGssapiKrb5ConfigPath: '',
+  saslGssapiKeytabPath: '',
+  saslGssapiDisablePAFXFAST: false,
   logLevel: '',
   healthcheckTimeout: 2000,
   tlsAuthWithCACert: false,
@@ -115,6 +137,8 @@ export interface KafkaSecureJsonData {
   apiKey?: string; // Deprecated
   saslPassword?: string;
   saslOauthClientSecret?: string;
+  saslGssapiPassword?: string;
+  saslGssapiKeytab?: string; // base64-encoded keytab content
   // TLS Certificates
   tlsCACert?: string;
   tlsClientCert?: string;

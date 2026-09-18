@@ -20,7 +20,7 @@
 - **Avro support:** Integrates with Schema Registry for Avro messages.
 - **Plaintext support:** Reads raw Kafka payload bytes without schema decoding.
 - **Line Protocol support:** Parses InfluxDB Line Protocol messages into a single long-format Grafana frame per message, with tags carried as columns.
-- **Secure:** SASL authentication (PLAIN, SCRAM, OAUTHBEARER/OIDC) & SSL/TLS encryption.
+- **Secure:** SASL authentication (PLAIN, SCRAM, OAUTHBEARER/OIDC, GSSAPI/Kerberos) & SSL/TLS encryption.
 - **Easy setup:** Install and configure in minutes.
 
 ## How It Works
@@ -37,7 +37,7 @@ This plugin connects your Grafana instance directly to Kafka brokers, allowing y
 ## Features
 
 - Real-time monitoring of Kafka topics
-- Kafka authentication (SASL: PLAIN, SCRAM, OAUTHBEARER/OIDC client credentials) & encryption (SSL/TLS)
+- Kafka authentication (SASL: PLAIN, SCRAM, OAUTHBEARER/OIDC client credentials, GSSAPI/Kerberos) & encryption (SSL/TLS)
 - Query all or specific partitions
 - Autocomplete for topic names
 - Flexible offset options (latest, last N, earliest)
@@ -77,7 +77,7 @@ You can automatically configure the Kafka datasource using Grafana's provisionin
 2. Configure connection settings:
    - **Broker address** (e.g. `localhost:9094` or `kafka:9092`)
    - **Private Data Source Connect (PDC)** (optional; requires PDC to be configured in Grafana)
-   - **Authentication** (SASL — PLAIN, SCRAM, or OAUTHBEARER/OIDC client credentials — SSL/TLS, optional)
+   - **Authentication** (SASL — PLAIN, SCRAM, OAUTHBEARER/OIDC client credentials, or GSSAPI/Kerberos — SSL/TLS, optional)
    - **Avro Schema Registry** (if using Avro format)
    - **Timeout settings** (default: two seconds)
 
@@ -258,7 +258,7 @@ The Avro and Protobuf schema caches remain bounded with a hardcoded default size
 ## FAQ & Troubleshooting
 
 - **Can I use this with any Kafka broker?** Yes, supports Apache Kafka v0.11+ and compatible brokers.
-- **Does it support secure connections?** Yes, SASL (PLAIN, SCRAM-SHA-256/512, OAUTHBEARER/OIDC client credentials) and SSL/TLS are supported. See [OAuth 2.0 Authentication](https://github.com/hoptical/grafana-kafka-datasource/blob/main/docs/OAUTH2_AUTH.md) for OAUTHBEARER setup.
+- **Does it support secure connections?** Yes, SASL (PLAIN, SCRAM-SHA-256/512, OAUTHBEARER/OIDC client credentials, GSSAPI/Kerberos) and SSL/TLS are supported. See [OAuth 2.0 Authentication](https://github.com/hoptical/grafana-kafka-datasource/blob/main/docs/OAUTH2_AUTH.md) for OAUTHBEARER setup, and [Kerberos Authentication](https://github.com/hoptical/grafana-kafka-datasource/blob/main/docs/KERBEROS_AUTH.md) for GSSAPI setup.
 - **What JSON formats are supported?** Flat, nested, arrays, mixed types.
 - **What is Plaintext format?** It bypasses schema decoding and renders raw payload bytes in a single `message` field.
 - **What is Line Protocol format?** It parses [InfluxDB Line Protocol](https://docs.influxdata.com/influxdb/v2/reference/syntax/line-protocol/) messages — `measurement,tag=val field=val timestamp`. Each Kafka message produces a single Grafana frame in **long format**, one row per LP field, with a fixed streaming-friendly schema: `Time | _measurement | _field | value | value_str | <one column per tag key> | offset`. This shape works correctly with Grafana Live streaming (consistent schema per channel), and you can pivot it into Influx-style per-series frames with Grafana's **Transform → Partition by values** on `_measurement` + `_field` for dashboards that were built around the InfluxDB datasource. The **Timestamp Precision** dropdown decides how inline timestamps are interpreted; `Auto-detect` picks ns/µs/ms/s from the magnitude.
@@ -269,6 +269,7 @@ The Avro and Protobuf schema caches remain bounded with a hardcoded default size
 
 - [Sample Producers](https://github.com/hoptical/grafana-kafka-datasource/blob/main/example/README.md)
 - [OAuth 2.0 Authentication](https://github.com/hoptical/grafana-kafka-datasource/blob/main/docs/OAUTH2_AUTH.md)
+- [Kerberos Authentication](https://github.com/hoptical/grafana-kafka-datasource/blob/main/docs/KERBEROS_AUTH.md)
 - [Performance Optimizations](https://github.com/hoptical/grafana-kafka-datasource/blob/main/docs/PERFORMANCE_OPTIMIZATIONS.md)
 - [Changelog](https://github.com/hoptical/grafana-kafka-datasource/blob/main/CHANGELOG.md)
 - [Contribution Guidelines](https://github.com/hoptical/grafana-kafka-datasource/blob/main/CONTRIBUTING.md)
