@@ -1,5 +1,12 @@
 # Changelog
 
+## [v1.9.0](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.9.0)
+
+[Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v1.8.1...v1.9.0)
+
+- Fix: make plugin logo visible on light backgrounds ([#172](https://github.com/hoptical/grafana-kafka-datasource/pull/172))
+- Feat: add SASL/GSSAPI (Kerberos) authentication support ([#171](https://github.com/hoptical/grafana-kafka-datasource/pull/171))
+
 ## [v1.8.1](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.8.1)
 
 [Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v1.8.0...v1.8.1)
