@@ -438,6 +438,30 @@ func TestProcessMessageToFrame_Branches(t *testing.T) {
 	})
 }
 
+func TestSnapshotOffsetAndLastN(t *testing.T) {
+	tests := []struct {
+		name    string
+		qm      queryModel
+		wantOff string
+		wantN   int32
+	}{
+		{name: "latest defaults to last 1", qm: queryModel{AutoOffsetReset: "latest"}, wantOff: "lastN", wantN: 1},
+		{name: "empty offset defaults to last 1", qm: queryModel{}, wantOff: "lastN", wantN: 1},
+		{name: "lastN uses requested N", qm: queryModel{AutoOffsetReset: "lastN", LastN: 25}, wantOff: "lastN", wantN: 25},
+		{name: "lastN zero uses default 100", qm: queryModel{AutoOffsetReset: "lastN"}, wantOff: "lastN", wantN: 100},
+		{name: "lastN is capped", qm: queryModel{AutoOffsetReset: "lastN", LastN: 5000}, wantOff: "lastN", wantN: 1000},
+		{name: "earliest snapshots the tail", qm: queryModel{AutoOffsetReset: "earliest"}, wantOff: "lastN", wantN: 1000},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotOff, gotN := snapshotOffsetAndLastN(tt.qm)
+			if gotOff != tt.wantOff || gotN != tt.wantN {
+				t.Fatalf("snapshotOffsetAndLastN() = %s,%d want %s,%d", gotOff, gotN, tt.wantOff, tt.wantN)
+			}
+		})
+	}
+}
+
 func frameHasField(frame *data.Frame, name string) bool {
 	for _, field := range frame.Fields {
 		if field.Name == name {

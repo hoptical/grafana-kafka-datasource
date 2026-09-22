@@ -104,6 +104,10 @@ export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourc
   }
 
   query(request: DataQueryRequest<KafkaQuery>): Observable<DataQueryResponse> {
+    if (this.isAlertingRequest(request)) {
+      return super.query(request);
+    }
+
     const observables = request.targets
       .filter((q): q is KafkaQuery => this.filterQuery(q as KafkaQuery))
       .map((q) => {
@@ -183,6 +187,14 @@ export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourc
       });
 
     return observables.length ? merge(...observables) : of({ data: [] });
+  }
+
+  /**
+   * Grafana Alerting evaluates rules through backend QueryData, not Grafana Live.
+   * Route those requests to DataSourceWithBackend.query so they hit the snapshot path.
+   */
+  private isAlertingRequest(request: DataQueryRequest<KafkaQuery>): boolean {
+    return request.app === CoreApp.UnifiedAlerting || request.app === CoreApp.CloudAlerting;
   }
 
   async getTopicPartitions(topicName: string): Promise<number[]> {
