@@ -52,6 +52,7 @@ This plugin connects your Grafana instance directly to Kafka brokers, allowing y
 - Configurable flattening depth (default: 5)
 - Configurable max fields per message (default: 1000)
 - Customizable query aliases with placeholders
+- Grafana Alerting on a snapshot of recent topic messages
 
 ## Installation
 
@@ -117,6 +118,16 @@ You can automatically configure the Kafka datasource using Grafana's provisionin
 **Tip:** Numeric fields become time series, string fields are labels, arrays and nested objects are automatically flattened for visualization.
 
 <img src="https://raw.githubusercontent.com/hoptical/grafana-kafka-datasource/ba3d10342aca7512c5679fcd7761e5b394094598/src/img/query-json.png" alt="JSON query editor example" width="800">
+
+### Grafana Alerting
+
+Dashboard panels still stream over Grafana Live. Alert rules cannot subscribe to Live channels, so this plugin evaluates alerts from a **finite snapshot** of recent messages:
+
+- **Offset Reset = latest:** last message per selected partition
+- **Offset Reset = last N:** last N messages (capped at 1000)
+- **Offset Reset = earliest:** last 1000 messages (the current tail, not the topic start)
+
+Create a Grafana-managed alert from a panel or **Alerting → Alert rules**, pick a numeric field, and use a Reduce expression such as **Last**. If no messages arrive before the query timeout, the evaluation is **No data**.
 
 ## Supported JSON Structures
 
@@ -262,6 +273,7 @@ The Avro and Protobuf schema caches remain bounded with a hardcoded default size
 - **What JSON formats are supported?** Flat, nested, arrays, mixed types.
 - **What is Plaintext format?** It bypasses schema decoding and renders raw payload bytes in a single `message` field.
 - **What is Line Protocol format?** It parses [InfluxDB Line Protocol](https://docs.influxdata.com/influxdb/v2/reference/syntax/line-protocol/) messages — `measurement,tag=val field=val timestamp`. Each Kafka message produces a single Grafana frame in **long format**, one row per LP field, with a fixed streaming-friendly schema: `Time | _measurement | _field | value | value_str | <one column per tag key> | offset`. This shape works correctly with Grafana Live streaming (consistent schema per channel), and you can pivot it into Influx-style per-series frames with Grafana's **Transform → Partition by values** on `_measurement` + `_field` for dashboards that were built around the InfluxDB datasource. The **Timestamp Precision** dropdown decides how inline timestamps are interpreted; `Auto-detect` picks ns/µs/ms/s from the magnitude.
+- **Can I use this with Grafana Alerting?** Yes. Alert rules evaluate a snapshot of recent messages (see Grafana Alerting above). Use Reduce → Last on a numeric field. Dashboard live streaming is unchanged.
 - **How do I generate test data?** Use the included Go or Python producers.
 - **Where do I find more help?** See this README or open an issue.
 

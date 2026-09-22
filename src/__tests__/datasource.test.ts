@@ -1,3 +1,4 @@
+import { CoreApp } from '@grafana/data';
 import { of } from 'rxjs';
 import { DataSource, PAGE_LOAD_SESSION } from '../datasource';
 import {
@@ -16,6 +17,7 @@ import { deepFreeze } from '../test-utils/test-helpers';
 // Mock @grafana/runtime pieces used by DataSource
 let capturedPath: string | undefined;
 let capturedAddr: any;
+let capturedBackendQuery: any;
 // Allow tests to override template replacement logic dynamically
 let templateReplaceImpl = (v: string) => v.replace('${var}', '5');
 jest.mock('@grafana/runtime', () => {
@@ -36,6 +38,10 @@ jest.mock('@grafana/runtime', () => {
         this.uid = instanceSettings.uid;
       }
       getResource = jest.fn();
+      query = jest.fn((req: any) => {
+        capturedBackendQuery = req;
+        return of({ data: [] });
+      });
     },
   } as any;
 });
@@ -74,6 +80,7 @@ describe('DataSource', () => {
     ds = new DataSource(mockInstanceSettings as any);
     capturedPath = undefined;
     capturedAddr = undefined;
+    capturedBackendQuery = undefined;
     jest.clearAllMocks();
   });
 
@@ -250,6 +257,30 @@ describe('DataSource', () => {
   });
 
   describe('query', () => {
+    it('uses backend QueryData for Grafana Alerting instead of Grafana Live', (done) => {
+      const target: KafkaQuery = {
+        refId: 'A',
+        topicName: 'alerts',
+        partition: 0,
+        autoOffsetReset: AutoOffsetReset.LATEST,
+        timestampMode: TimestampMode.Message,
+      } as any;
+
+      ds.query({ app: CoreApp.UnifiedAlerting, targets: [target], scopedVars: {} } as any).subscribe({
+        complete: () => {
+          try {
+            expect(capturedPath).toBeUndefined();
+            expect(capturedBackendQuery).toBeDefined();
+            expect(capturedBackendQuery.targets[0].topicName).toBe('alerts');
+            done();
+          } catch (err) {
+            done(err);
+          }
+        },
+        error: done,
+      });
+    });
+
     it('incorporates Line Protocol filters into the stream path hash', (done) => {
       const base: KafkaQuery = {
         refId: 'A',

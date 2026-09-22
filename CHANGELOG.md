@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Feat: enable Grafana Alerting with a QueryData snapshot of recent Kafka messages
+
 ## [v1.9.1](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.9.1)
 
 [Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v1.9.0...v1.9.1)

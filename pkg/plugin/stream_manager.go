@@ -1133,6 +1133,104 @@ func (sm *StreamManager) ProcessMessage(
 	return frame, nil
 }
 
+// CollectSnapshot pulls a bounded number of recent messages from each partition
+// and returns when every reader has reached lastN, hit an idle timeout, or the
+// context is cancelled. Unlike StartPartitionReaders this always terminates,
+// which is required for Grafana Alerting QueryData evaluations.
+func (sm *StreamManager) CollectSnapshot(
+	ctx context.Context,
+	partitions []int32,
+	qm queryModel,
+	config *StreamConfig,
+) ([]messageWithPartition, error) {
+	lastN := config.LastN
+	if lastN <= 0 {
+		lastN = defaultSnapshotLastN
+	}
+
+	type partitionResult struct {
+		msgs []messageWithPartition
+		err  error
+	}
+
+	results := make(chan partitionResult, len(partitions))
+	var wg sync.WaitGroup
+	for _, partition := range partitions {
+		wg.Add(1)
+		go func(partition int32) {
+			defer wg.Done()
+			msgs, err := sm.readSnapshotPartition(ctx, partition, qm, config, lastN)
+			results <- partitionResult{msgs: msgs, err: err}
+		}(partition)
+	}
+
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	var all []messageWithPartition
+	for result := range results {
+		if result.err != nil {
+			return nil, result.err
+		}
+		all = append(all, result.msgs...)
+	}
+	return all, nil
+}
+
+func (sm *StreamManager) readSnapshotPartition(
+	ctx context.Context,
+	partition int32,
+	qm queryModel,
+	config *StreamConfig,
+	lastN int32,
+) ([]messageWithPartition, error) {
+	log.DefaultLogger.Debug("Starting snapshot partition reader",
+		"topic", qm.Topic,
+		"partition", partition,
+		"autoOffsetReset", config.AutoOffsetReset,
+		"lastN", lastN)
+
+	reader, err := sm.client.NewStreamReader(ctx, qm.Topic, partition, config.AutoOffsetReset, lastN)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create stream reader for partition %d: %w", partition, err)
+	}
+	if reader != nil {
+		defer func() {
+			if closeErr := reader.Close(); closeErr != nil {
+				log.DefaultLogger.Error("failed to close snapshot reader", "error", closeErr, "partition", partition)
+			}
+		}()
+	}
+
+	collected := make([]messageWithPartition, 0, lastN)
+	for len(collected) < int(lastN) {
+		if err := ctx.Err(); err != nil {
+			return collected, nil
+		}
+
+		msgCtx, msgCancel := context.WithTimeout(ctx, messageReadTimeout)
+		msg, err := sm.client.ConsumerPull(msgCtx, reader, config.MessageFormat)
+		msgCancel()
+		if err != nil {
+			if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+				log.DefaultLogger.Debug("Snapshot partition idle or cancelled",
+					"partition", partition,
+					"collected", len(collected))
+				return collected, nil
+			}
+			log.DefaultLogger.Debug("Snapshot partition stopped",
+				"partition", partition,
+				"collected", len(collected),
+				"error", err)
+			return collected, nil
+		}
+		collected = append(collected, messageWithPartition{msg: msg, partition: partition})
+	}
+	return collected, nil
+}
+
 // StartPartitionReaders starts goroutines to read from each partition and sends messages to the channel.
 func (sm *StreamManager) StartPartitionReaders(
 	ctx context.Context,

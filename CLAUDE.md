@@ -50,7 +50,7 @@ A Grafana data source plugin that streams Kafka topics into Grafana dashboards i
 
 `KafkaDatasource` implements the SDK's `QueryDataHandler`, `CheckHealthHandler`, `StreamHandler`, and `CallResourceHandler`. Key entry points:
 
-- `QueryData` / `query` — non-streaming query path (largely a no-op placeholder; real data arrives via streaming).
+- `QueryData` / `query` — finite snapshot of recent Kafka messages used by Grafana Alerting (and other non-Live callers). Dashboards still stream via Grafana Live; alerting cannot subscribe to Live channels.
 - `CallResource` — routes `/partitions`, `/topics`, `/schema-registry/validate`, `/avro/validate`, `/protobuf/validate` resource calls (topic/partition discovery and schema validation used by the Query Editor UI).
 - `CheckHealth` — datasource connectivity check (used by the Config Editor "Save & Test").
 - `SubscribeStream` / `RunStream` — the real work. `RunStream` spawns one goroutine per partition (`StreamManager.readFromPartition`) that pulls messages via `KafkaClientAPI.ConsumerPull`, converts them to Grafana `data.Frame`s, and fans them in over a buffered channel (`streamMessageBuffer = 100`) to a single sender loop that pushes frames to the `backend.StreamSender`.
