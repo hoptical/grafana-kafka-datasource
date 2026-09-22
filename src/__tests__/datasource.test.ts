@@ -38,10 +38,12 @@ jest.mock('@grafana/runtime', () => {
         this.uid = instanceSettings.uid;
       }
       getResource = jest.fn();
-      query = jest.fn((req: any) => {
+      // Prototype method (not a class field) so DataSource.query can still override
+      // it for Live dashboards and call super.query() for Grafana Alerting.
+      query(req: any) {
         capturedBackendQuery = req;
         return of({ data: [] });
-      });
+      }
     },
   } as any;
 });
