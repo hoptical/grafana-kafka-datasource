@@ -148,6 +148,14 @@ func TestQueryData(t *testing.T) {
 	if temp == nil {
 		t.Fatalf("missing temperature field, have %v", fieldNames(frame))
 	}
+	if frame.Meta == nil || frame.Meta.Type != data.FrameTypeTimeSeriesWide {
+		t.Fatalf("QueryData frames must be time-series-wide for Grafana Alerting, meta=%v", frame.Meta)
+	}
+	for _, name := range fieldNames(frame) {
+		if name == "offset" || name == "partition" {
+			t.Fatalf("alerting frames must drop Kafka metadata field %q", name)
+		}
+	}
 	got := temp.At(0)
 	switch v := got.(type) {
 	case float64:
@@ -161,6 +169,68 @@ func TestQueryData(t *testing.T) {
 	default:
 		t.Fatalf("temperature type %T", got)
 	}
+}
+
+func TestQueryData_DropsStringFieldsAndHonorsSelectedField(t *testing.T) {
+	ts := time.Unix(1700000000, 0).UTC()
+	mc := &mockKafkaClient{
+		partitions: []int32{0},
+		consumerMessages: []kafka_client.KafkaMessage{
+			{
+				Timestamp: ts,
+				Offset:    42,
+				Value: map[string]interface{}{
+					"temperature": 23.5,
+					"humidity":    65.0,
+					"host":        "srv-01",
+				},
+			},
+		},
+	}
+	ds := plugin.NewWithClient(mc)
+	queryJSON, err := json.Marshal(map[string]interface{}{
+		"topicName":       "sensors",
+		"partition":       0,
+		"autoOffsetReset": "latest",
+		"messageFormat":   "json",
+		"timestampMode":   "message",
+		"selectedField":   "temperature",
+		"refId":           "A",
+	})
+	if err != nil {
+		t.Fatalf("marshal query: %v", err)
+	}
+	resp, err := ds.QueryData(context.Background(), &backend.QueryDataRequest{
+		Queries: []backend.DataQuery{{RefID: "A", JSON: queryJSON}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dr := resp.Responses["A"]
+	if dr.Error != nil {
+		t.Fatalf("unexpected query error: %v", dr.Error)
+	}
+	if len(dr.Frames) != 1 {
+		t.Fatalf("expected 1 wide frame, got %d", len(dr.Frames))
+	}
+	names := fieldNames(dr.Frames[0])
+	for _, name := range names {
+		if name == "host" || name == "humidity" || name == "offset" {
+			t.Fatalf("unexpected field %q in alerting frame %v", name, names)
+		}
+	}
+	if !containsName(names, "temperature") {
+		t.Fatalf("missing temperature, have %v", names)
+	}
+}
+
+func containsName(names []string, want string) bool {
+	for _, n := range names {
+		if n == want {
+			return true
+		}
+	}
+	return false
 }
 
 func fieldNames(frame *data.Frame) []string {

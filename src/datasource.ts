@@ -85,11 +85,15 @@ export class DataSource extends DataSourceWithBackend<KafkaQuery, KafkaDataSourc
     const lineProtocolTags = query.lineProtocolTags
       ? templateSrv.replace(query.lineProtocolTags, scopedVars)
       : query.lineProtocolTags;
+    const selectedField = query.selectedField
+      ? templateSrv.replace(query.selectedField, scopedVars)
+      : query.selectedField;
     const result = {
       ...query,
       topicName,
       partition,
       lastN,
+      selectedField,
       lineProtocolMeasurements,
       lineProtocolFields,
       lineProtocolTags,

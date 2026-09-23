@@ -235,6 +235,11 @@ type queryModel struct {
 	// Metadata
 	RefID string `json:"refId"`
 	Alias string `json:"alias"`
+	// SelectedField is the numeric payload field Grafana Alerting should
+	// evaluate. QueryData always returns time-series-wide frames (string
+	// labels and Kafka offset/partition metadata are dropped). When empty,
+	// every remaining numeric field is kept.
+	SelectedField string `json:"selectedField"`
 }
 
 const (
@@ -397,7 +402,86 @@ func (d *KafkaDatasource) query(ctx context.Context, _ backend.PluginContext, qu
 		response.Frames = append(response.Frames, ready...)
 	}
 	response.Frames = append(response.Frames, batcher.Flush()...)
+	response.Frames = wideSeriesForAlerting(response.Frames, strings.TrimSpace(qm.SelectedField))
+	if strings.TrimSpace(qm.SelectedField) != "" && !framesHaveField(response.Frames, strings.TrimSpace(qm.SelectedField)) {
+		response.Error = fmt.Errorf("selectedField %q was not found in the snapshot", qm.SelectedField)
+	}
 	return response
+}
+
+func wideSeriesForAlerting(frames data.Frames, selectedField string) data.Frames {
+	out := make(data.Frames, 0, len(frames))
+	for _, fr := range frames {
+		if fr == nil {
+			continue
+		}
+		fields := make([]*data.Field, 0, len(fr.Fields))
+		for _, f := range fr.Fields {
+			if f == nil {
+				continue
+			}
+			ft := f.Type()
+			if ft.Time() {
+				fields = append(fields, f)
+				continue
+			}
+			if !ft.Numeric() {
+				continue
+			}
+			name := f.Name
+			if name == "offset" || name == "partition" {
+				continue
+			}
+			if selectedField != "" && name != selectedField {
+				continue
+			}
+			fields = append(fields, f)
+		}
+		if !frameHasTimeAndNumeric(fields) {
+			continue
+		}
+		nf := data.NewFrame(fr.Name, fields...)
+		nf.RefID = fr.RefID
+		meta := &data.FrameMeta{Type: data.FrameTypeTimeSeriesWide}
+		if fr.Meta != nil {
+			copied := *fr.Meta
+			copied.Type = data.FrameTypeTimeSeriesWide
+			meta = &copied
+		}
+		nf.Meta = meta
+		out = append(out, nf)
+	}
+	return out
+}
+
+func frameHasTimeAndNumeric(fields []*data.Field) bool {
+	hasTime, hasNumeric := false, false
+	for _, f := range fields {
+		if f == nil {
+			continue
+		}
+		if f.Type().Time() {
+			hasTime = true
+		}
+		if f.Type().Numeric() {
+			hasNumeric = true
+		}
+	}
+	return hasTime && hasNumeric
+}
+
+func framesHaveField(frames data.Frames, name string) bool {
+	for _, fr := range frames {
+		if fr == nil {
+			continue
+		}
+		for _, f := range fr.Fields {
+			if f != nil && f.Name == name {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (d *KafkaDatasource) CallResource(ctx context.Context, req *backend.CallResourceRequest, sender backend.CallResourceResponseSender) error {
