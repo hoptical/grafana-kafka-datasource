@@ -30,6 +30,8 @@ const streamMessageBuffer = 100
 const (
 	messageReadTimeout   = 5 * time.Second        // Timeout for reading individual messages
 	retryDelayAfterError = 100 * time.Millisecond // Brief pause between retries after errors
+	maxSnapshotReaders   = 8                      // Bound broker load from all-partition alert queries
+	maxSnapshotMessages  = 1000                   // Bound memory/CPU per alert evaluation across all partitions
 )
 
 // Defaults for JSON flattening behavior
@@ -320,6 +322,28 @@ func snapshotTimeout(settings *kafka_client.Options) time.Duration {
 	return defaultSnapshotTimeout
 }
 
+type contextRoundTripper struct {
+	ctx  context.Context
+	base http.RoundTripper
+}
+
+func (rt contextRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	return rt.base.RoundTrip(req.Clone(rt.ctx))
+}
+
+func httpClientWithContext(client *http.Client, ctx context.Context) *http.Client {
+	if client == nil {
+		client = http.DefaultClient
+	}
+	cloned := *client
+	base := cloned.Transport
+	if base == nil {
+		base = http.DefaultTransport
+	}
+	cloned.Transport = contextRoundTripper{ctx: ctx, base: base}
+	return &cloned
+}
+
 func (d *KafkaDatasource) query(ctx context.Context, _ backend.PluginContext, query backend.DataQuery) backend.DataResponse {
 	response := backend.DataResponse{}
 	var qm queryModel
@@ -337,14 +361,22 @@ func (d *KafkaDatasource) query(ctx context.Context, _ backend.PluginContext, qu
 		qm.RefID = query.RefID
 	}
 
+	timeout := snapshotTimeout(d.settings)
+	snapCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
 	if err := d.client.NewConnection(); err != nil {
 		response.Error = fmt.Errorf("failed to establish Kafka connection: %w", err)
 		return response
 	}
+	if err := snapCtx.Err(); err != nil {
+		response.Error = err
+		return response
+	}
 
 	streamManager := NewStreamManager(d.client, d.settings.FlattenMaxDepth, d.settings.FlattenFieldCap,
-		WithSchemaRegistryHTTPClient(d.schemaRegistryHTTPClient))
-	partitions, err := streamManager.ValidateAndGetPartitions(ctx, qm)
+		WithSchemaRegistryHTTPClient(httpClientWithContext(d.schemaRegistryHTTPClient, snapCtx)))
+	partitions, err := streamManager.ValidateAndGetPartitions(snapCtx, qm)
 	if err != nil {
 		response.Error = err
 		return response
@@ -356,10 +388,6 @@ func (d *KafkaDatasource) query(ctx context.Context, _ backend.PluginContext, qu
 	streamConfig.LastN = lastN
 	qm.AutoOffsetReset = autoOffsetReset
 	qm.LastN = lastN
-
-	timeout := snapshotTimeout(d.settings)
-	snapCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
 
 	log.DefaultLogger.Debug("QueryData snapshot",
 		"topic", qm.Topic,
@@ -376,7 +404,8 @@ func (d *KafkaDatasource) query(ctx context.Context, _ backend.PluginContext, qu
 
 	batcher := newFrameMicroBatcher(max(int(lastN)*len(partitions), 1))
 	for _, msgWithPartition := range messages {
-		frames, procErr := streamManager.ProcessMessageFrames(
+		frames, procErr := streamManager.ProcessMessageFramesContext(
+			snapCtx,
 			msgWithPartition.msg,
 			msgWithPartition.partition,
 			partitions,

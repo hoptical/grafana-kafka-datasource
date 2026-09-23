@@ -1153,16 +1153,35 @@ func (sm *StreamManager) CollectSnapshot(
 		err  error
 	}
 
+	limits := snapshotPartitionLimits(len(partitions), lastN)
 	results := make(chan partitionResult, len(partitions))
+	workers := min(maxSnapshotReaders, len(partitions))
+	jobs := make(chan int)
 	var wg sync.WaitGroup
-	for _, partition := range partitions {
+	for range workers {
 		wg.Add(1)
-		go func(partition int32) {
+		go func() {
 			defer wg.Done()
-			msgs, err := sm.readSnapshotPartition(ctx, partition, qm, config, lastN)
-			results <- partitionResult{msgs: msgs, err: err}
-		}(partition)
+			for index := range jobs {
+				if limits[index] <= 0 {
+					continue
+				}
+				msgs, err := sm.readSnapshotPartition(ctx, partitions[index], qm, config, limits[index])
+				results <- partitionResult{msgs: msgs, err: err}
+			}
+		}()
 	}
+
+	go func() {
+		defer close(jobs)
+		for index := range partitions {
+			select {
+			case jobs <- index:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
 
 	go func() {
 		wg.Wait()
@@ -1176,7 +1195,42 @@ func (sm *StreamManager) CollectSnapshot(
 		}
 		all = append(all, result.msgs...)
 	}
+	sortSnapshotMessages(all, config.TimestampMode)
 	return all, nil
+}
+
+func sortSnapshotMessages(messages []messageWithPartition, timestampMode string) {
+	if timestampMode == "now" {
+		return
+	}
+	sort.SliceStable(messages, func(i, j int) bool {
+		return messages[i].msg.Timestamp.Before(messages[j].msg.Timestamp)
+	})
+}
+
+func snapshotPartitionLimits(partitionCount int, lastN int32) []int32 {
+	limits := make([]int32, partitionCount)
+	if partitionCount == 0 || lastN <= 0 {
+		return limits
+	}
+
+	total := int64(partitionCount) * int64(lastN)
+	if total > maxSnapshotMessages {
+		total = maxSnapshotMessages
+	}
+	base := total / int64(partitionCount)
+	remainder := total % int64(partitionCount)
+	for i := range limits {
+		limit := base
+		if int64(i) < remainder {
+			limit++
+		}
+		if limit > int64(lastN) {
+			limit = int64(lastN)
+		}
+		limits[i] = int32(limit)
+	}
+	return limits
 }
 
 func (sm *StreamManager) readSnapshotPartition(
@@ -1224,7 +1278,7 @@ func (sm *StreamManager) readSnapshotPartition(
 				"partition", partition,
 				"collected", len(collected),
 				"error", err)
-			return collected, nil
+			return collected, fmt.Errorf("failed to read snapshot partition %d: %w", partition, err)
 		}
 		collected = append(collected, messageWithPartition{msg: msg, partition: partition})
 	}

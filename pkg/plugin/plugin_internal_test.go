@@ -462,6 +462,45 @@ func TestSnapshotOffsetAndLastN(t *testing.T) {
 	}
 }
 
+func TestHTTPClientWithContextCancelsSchemaRegistryRequest(t *testing.T) {
+	requestStarted := make(chan struct{})
+	requestCanceled := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(requestStarted)
+		<-r.Context().Done()
+		close(requestCanceled)
+	}))
+	defer server.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	client := httpClientWithContext(server.Client(), ctx)
+	done := make(chan error, 1)
+	go func() {
+		_, err := client.Get(server.URL)
+		done <- err
+	}()
+	select {
+	case <-requestStarted:
+	case <-time.After(time.Second):
+		t.Fatal("schema registry request did not start")
+	}
+	cancel()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("expected request cancellation error")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("schema registry request did not honor query context")
+	}
+	select {
+	case <-requestCanceled:
+	case <-time.After(time.Second):
+		t.Fatal("server did not observe request cancellation")
+	}
+}
+
 func frameHasField(frame *data.Frame, name string) bool {
 	for _, field := range frame.Fields {
 		if field.Name == name {
