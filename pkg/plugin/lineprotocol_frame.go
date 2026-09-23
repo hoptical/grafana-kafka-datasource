@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"time"
@@ -30,6 +31,23 @@ func (sm *StreamManager) ProcessMessageFrames(
 	config *StreamConfig,
 	topic string,
 ) ([]*data.Frame, error) {
+	return sm.ProcessMessageFramesContext(context.Background(), msg, partition, partitions, config, topic)
+}
+
+// ProcessMessageFramesContext is the deadline-aware form used by QueryData.
+// Grafana Live uses ProcessMessageFrames because its stream context is managed
+// by RunStream rather than a finite alert evaluation.
+func (sm *StreamManager) ProcessMessageFramesContext(
+	ctx context.Context,
+	msg kafka_client.KafkaMessage,
+	partition int32,
+	partitions []int32,
+	config *StreamConfig,
+	topic string,
+) ([]*data.Frame, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if config != nil && config.MessageFormat == "lineprotocol" {
 		if msg.Error != nil {
 			errFrame := sm.createLineProtocolErrorFrame(msg, partition, partitions, msg.Error, config, topic)
@@ -58,6 +76,9 @@ func (sm *StreamManager) ProcessMessageFrames(
 
 	frame, err := sm.ProcessMessage(msg, partition, partitions, config, topic)
 	if err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	if frame == nil {

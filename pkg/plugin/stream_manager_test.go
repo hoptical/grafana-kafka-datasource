@@ -546,6 +546,67 @@ func TestStreamManager_HandleTopicError(t *testing.T) {
 	}
 }
 
+func TestSnapshotPartitionLimitsBoundTotalAndPreservePerPartitionLimit(t *testing.T) {
+	limits := snapshotPartitionLimits(16, 1000)
+	if len(limits) != 16 {
+		t.Fatalf("got %d limits, want 16", len(limits))
+	}
+	total := int32(0)
+	for _, limit := range limits {
+		if limit > 1000 {
+			t.Fatalf("partition limit %d exceeds lastN", limit)
+		}
+		total += limit
+	}
+	if total != maxSnapshotMessages {
+		t.Fatalf("total snapshot budget = %d, want %d", total, maxSnapshotMessages)
+	}
+
+	small := snapshotPartitionLimits(3, 2)
+	if got := small[0] + small[1] + small[2]; got != 6 {
+		t.Fatalf("uncapped total = %d, want 6", got)
+	}
+}
+
+func TestSortSnapshotMessagesByTimestampUnlessNow(t *testing.T) {
+	base := time.Unix(1700000000, 0).UTC()
+	messages := []messageWithPartition{
+		{msg: kafka_client.KafkaMessage{Timestamp: base.Add(2 * time.Second), Offset: 2}},
+		{msg: kafka_client.KafkaMessage{Timestamp: base, Offset: 0}},
+		{msg: kafka_client.KafkaMessage{Timestamp: base.Add(time.Second), Offset: 1}},
+	}
+	sortSnapshotMessages(messages, "message")
+	for i, message := range messages {
+		if message.msg.Offset != int64(i) {
+			t.Fatalf("sorted offset[%d] = %d, want %d", i, message.msg.Offset, i)
+		}
+	}
+
+	nowMessages := []messageWithPartition{
+		{msg: kafka_client.KafkaMessage{Timestamp: base.Add(time.Second), Offset: 1}},
+		{msg: kafka_client.KafkaMessage{Timestamp: base, Offset: 0}},
+	}
+	sortSnapshotMessages(nowMessages, "now")
+	if nowMessages[0].msg.Offset != 1 {
+		t.Fatal("timestampMode=now must preserve collection order")
+	}
+}
+
+func TestReadSnapshotPartitionReturnsPullFailure(t *testing.T) {
+	want := errors.New("broker unavailable")
+	sm := NewStreamManager(&mockStreamClient{pullErr: want}, 5, 1000)
+	_, err := sm.readSnapshotPartition(
+		context.Background(),
+		7,
+		queryModel{Topic: "sensors"},
+		&StreamConfig{MessageFormat: "json", AutoOffsetReset: "lastN"},
+		1,
+	)
+	if !errors.Is(err, want) {
+		t.Fatalf("readSnapshotPartition error = %v, want wrapped %v", err, want)
+	}
+}
+
 func TestStreamManager_readFromPartition_ReaderError(t *testing.T) {
 	mockClient := &mockStreamClient{
 		readerErr: errors.New("failed to create reader"),

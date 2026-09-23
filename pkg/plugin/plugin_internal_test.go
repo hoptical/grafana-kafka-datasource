@@ -438,6 +438,69 @@ func TestProcessMessageToFrame_Branches(t *testing.T) {
 	})
 }
 
+func TestSnapshotOffsetAndLastN(t *testing.T) {
+	tests := []struct {
+		name    string
+		qm      queryModel
+		wantOff string
+		wantN   int32
+	}{
+		{name: "latest defaults to last 1", qm: queryModel{AutoOffsetReset: "latest"}, wantOff: "lastN", wantN: 1},
+		{name: "empty offset defaults to last 1", qm: queryModel{}, wantOff: "lastN", wantN: 1},
+		{name: "lastN uses requested N", qm: queryModel{AutoOffsetReset: "lastN", LastN: 25}, wantOff: "lastN", wantN: 25},
+		{name: "lastN zero uses default 100", qm: queryModel{AutoOffsetReset: "lastN"}, wantOff: "lastN", wantN: 100},
+		{name: "lastN is capped", qm: queryModel{AutoOffsetReset: "lastN", LastN: 5000}, wantOff: "lastN", wantN: 1000},
+		{name: "earliest snapshots the tail", qm: queryModel{AutoOffsetReset: "earliest"}, wantOff: "lastN", wantN: 1000},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotOff, gotN := snapshotOffsetAndLastN(tt.qm)
+			if gotOff != tt.wantOff || gotN != tt.wantN {
+				t.Fatalf("snapshotOffsetAndLastN() = %s,%d want %s,%d", gotOff, gotN, tt.wantOff, tt.wantN)
+			}
+		})
+	}
+}
+
+func TestHTTPClientWithContextCancelsSchemaRegistryRequest(t *testing.T) {
+	requestStarted := make(chan struct{})
+	requestCanceled := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(requestStarted)
+		<-r.Context().Done()
+		close(requestCanceled)
+	}))
+	defer server.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	client := httpClientWithContext(server.Client(), ctx)
+	done := make(chan error, 1)
+	go func() {
+		_, err := client.Get(server.URL)
+		done <- err
+	}()
+	select {
+	case <-requestStarted:
+	case <-time.After(time.Second):
+		t.Fatal("schema registry request did not start")
+	}
+	cancel()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("expected request cancellation error")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("schema registry request did not honor query context")
+	}
+	select {
+	case <-requestCanceled:
+	case <-time.After(time.Second):
+		t.Fatal("server did not observe request cancellation")
+	}
+}
+
 func frameHasField(frame *data.Frame, name string) bool {
 	for _, field := range frame.Fields {
 		if field.Name == name {

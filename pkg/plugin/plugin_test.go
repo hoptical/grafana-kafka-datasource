@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
+	"github.com/grafana/grafana-plugin-sdk-go/data"
 	"github.com/hoptical/grafana-kafka-datasource/pkg/kafka_client"
 	"github.com/hoptical/grafana-kafka-datasource/pkg/plugin"
 	"github.com/segmentio/kafka-go"
@@ -89,24 +90,222 @@ func (m *mockKafkaClient) GetSchemaRegistryPassword() string { return m.schemaRe
 func (m *mockKafkaClient) GetSubjectNamingStrategy() string  { return m.avroSubjectNamingStrategy }
 
 func TestQueryData(t *testing.T) {
-	ds := plugin.NewWithClient(&mockKafkaClient{})
-	jsonBytes, err := json.Marshal(testTLSConfig)
+	ts := time.Unix(1700000000, 0).UTC()
+	mc := &mockKafkaClient{
+		partitions: []int32{0},
+		consumerMessages: []kafka_client.KafkaMessage{
+			{
+				Timestamp: ts,
+				Offset:    42,
+				Value:     map[string]interface{}{"temperature": 23.5},
+			},
+		},
+	}
+	ds := plugin.NewWithClient(mc)
+	queryJSON, err := json.Marshal(map[string]interface{}{
+		"topicName":       "sensors",
+		"partition":       0,
+		"autoOffsetReset": "latest",
+		"messageFormat":   "json",
+		"timestampMode":   "message",
+		"refId":           "A",
+	})
 	if err != nil {
-		t.Fatalf("Failed to marshal test config: %v", err)
+		t.Fatalf("marshal query: %v", err)
 	}
 	resp, err := ds.QueryData(
 		context.Background(),
 		&backend.QueryDataRequest{
 			Queries: []backend.DataQuery{
-				{RefID: "A", JSON: jsonBytes},
+				{RefID: "A", JSON: queryJSON},
 			},
 		},
 	)
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 	if len(resp.Responses) != 1 {
 		t.Fatal("QueryData must return a response")
+	}
+	dr := resp.Responses["A"]
+	if dr.Error != nil {
+		t.Fatalf("unexpected query error: %v", dr.Error)
+	}
+	if len(dr.Frames) == 0 {
+		t.Fatal("expected snapshot frames for alerting QueryData")
+	}
+	frame := dr.Frames[0]
+	if frame.Rows() != 1 {
+		t.Fatalf("expected 1 row, got %d", frame.Rows())
+	}
+	var temp *data.Field
+	for _, field := range frame.Fields {
+		if field.Name == "temperature" {
+			temp = field
+			break
+		}
+	}
+	if temp == nil {
+		t.Fatalf("missing temperature field, have %v", fieldNames(frame))
+	}
+	if frame.Meta == nil || frame.Meta.Type != data.FrameTypeTimeSeriesWide {
+		t.Fatalf("QueryData frames must be time-series-wide for Grafana Alerting, meta=%v", frame.Meta)
+	}
+	for _, name := range fieldNames(frame) {
+		if name == "offset" || name == "partition" {
+			t.Fatalf("alerting frames must drop Kafka metadata field %q", name)
+		}
+	}
+	got := temp.At(0)
+	switch v := got.(type) {
+	case float64:
+		if v != 23.5 {
+			t.Fatalf("temperature = %v, want 23.5", v)
+		}
+	case *float64:
+		if v == nil || *v != 23.5 {
+			t.Fatalf("temperature = %v, want 23.5", v)
+		}
+	default:
+		t.Fatalf("temperature type %T", got)
+	}
+}
+
+func TestQueryData_DropsStringFieldsAndHonorsSelectedField(t *testing.T) {
+	ts := time.Unix(1700000000, 0).UTC()
+	mc := &mockKafkaClient{
+		partitions: []int32{0},
+		consumerMessages: []kafka_client.KafkaMessage{
+			{
+				Timestamp: ts,
+				Offset:    42,
+				Value: map[string]interface{}{
+					"temperature": 23.5,
+					"humidity":    65.0,
+					"host":        "srv-01",
+				},
+			},
+		},
+	}
+	ds := plugin.NewWithClient(mc)
+	queryJSON, err := json.Marshal(map[string]interface{}{
+		"topicName":       "sensors",
+		"partition":       0,
+		"autoOffsetReset": "latest",
+		"messageFormat":   "json",
+		"timestampMode":   "message",
+		"selectedField":   "temperature",
+		"refId":           "A",
+	})
+	if err != nil {
+		t.Fatalf("marshal query: %v", err)
+	}
+	resp, err := ds.QueryData(context.Background(), &backend.QueryDataRequest{
+		Queries: []backend.DataQuery{{RefID: "A", JSON: queryJSON}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dr := resp.Responses["A"]
+	if dr.Error != nil {
+		t.Fatalf("unexpected query error: %v", dr.Error)
+	}
+	if len(dr.Frames) != 1 {
+		t.Fatalf("expected 1 wide frame, got %d", len(dr.Frames))
+	}
+	names := fieldNames(dr.Frames[0])
+	for _, name := range names {
+		if name == "host" || name == "humidity" || name == "offset" {
+			t.Fatalf("unexpected field %q in alerting frame %v", name, names)
+		}
+	}
+	if !containsName(names, "temperature") {
+		t.Fatalf("missing temperature, have %v", names)
+	}
+}
+
+func TestQueryData_EmptySnapshotWithSelectedFieldIsNoData(t *testing.T) {
+	mc := &mockKafkaClient{
+		partitions:  []int32{0},
+		consumerErr: context.DeadlineExceeded,
+	}
+	ds := plugin.NewWithClient(mc)
+	queryJSON, err := json.Marshal(map[string]interface{}{
+		"topicName":       "empty-topic",
+		"partition":       0,
+		"autoOffsetReset": "latest",
+		"messageFormat":   "json",
+		"timestampMode":   "message",
+		"selectedField":   "temperature",
+		"refId":           "A",
+	})
+	if err != nil {
+		t.Fatalf("marshal query: %v", err)
+	}
+
+	resp, err := ds.QueryData(context.Background(), &backend.QueryDataRequest{
+		Queries: []backend.DataQuery{{RefID: "A", JSON: queryJSON}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dr := resp.Responses["A"]
+	if dr.Error != nil {
+		t.Fatalf("empty snapshot should be No Data, got error: %v", dr.Error)
+	}
+	if len(dr.Frames) != 0 {
+		t.Fatalf("empty snapshot should return no frames, got %d", len(dr.Frames))
+	}
+}
+
+func containsName(names []string, want string) bool {
+	for _, n := range names {
+		if n == want {
+			return true
+		}
+	}
+	return false
+}
+
+func fieldNames(frame *data.Frame) []string {
+	names := make([]string, 0, len(frame.Fields))
+	for _, field := range frame.Fields {
+		names = append(names, field.Name)
+	}
+	return names
+}
+
+func TestQueryData_EmptyTopic(t *testing.T) {
+	ds := plugin.NewWithClient(&mockKafkaClient{})
+	resp, err := ds.QueryData(context.Background(), &backend.QueryDataRequest{
+		Queries: []backend.DataQuery{
+			{RefID: "A", JSON: []byte(`{"topicName":""}`)},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Responses["A"].Error == nil {
+		t.Fatal("expected error for empty topicName")
+	}
+}
+
+func TestQueryData_ConnectionError(t *testing.T) {
+	ds := plugin.NewWithClient(&mockKafkaClient{newConnErr: errors.New("dial refused")})
+	queryJSON, _ := json.Marshal(map[string]interface{}{
+		"topicName": "sensors",
+		"partition": "all",
+	})
+	resp, err := ds.QueryData(context.Background(), &backend.QueryDataRequest{
+		Queries: []backend.DataQuery{
+			{RefID: "A", JSON: queryJSON},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Responses["A"].Error == nil {
+		t.Fatal("expected connection error")
 	}
 }
 

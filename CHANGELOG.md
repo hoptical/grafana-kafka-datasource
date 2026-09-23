@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Feat: enable Grafana Alerting with a QueryData snapshot of recent Kafka messages
+- Fix: QueryData returns time-series-wide frames (drop string labels and offset) so Reduce expressions can evaluate
+- Fix: bound all-partition snapshots, sort message timestamps, propagate broker errors, and apply the query deadline through schema lookup and frame processing
+
 ## [v1.9.0](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.9.0)
 
 [Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v1.8.1...v1.9.0)

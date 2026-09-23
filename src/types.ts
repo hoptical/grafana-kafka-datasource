@@ -177,6 +177,8 @@ export interface KafkaQuery extends DataQuery {
   keyFormat?: KeyFormat;
   // Optional alias for the query
   alias?: string;
+  // Numeric payload field Grafana Alerting should evaluate (QueryData only).
+  selectedField?: string;
 }
 
 export const defaultQuery: Partial<KafkaQuery> = {
