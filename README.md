@@ -124,8 +124,12 @@ You can automatically configure the Kafka datasource using Grafana's provisionin
 Dashboard panels still stream over Grafana Live. Alert rules cannot subscribe to Live channels, so this plugin evaluates alerts from a **finite snapshot** of recent messages:
 
 - **Offset Reset = latest:** last message per selected partition
-- **Offset Reset = last N:** last N messages (capped at 1000)
-- **Offset Reset = earliest:** last 1000 messages (the current tail, not the topic start)
+- **Offset Reset = last N:** up to last N messages per partition
+- **Offset Reset = earliest:** reads from the current tail, not the topic start
+
+Each evaluation is capped at 1000 messages total and eight concurrent partition
+readers. Message-timestamp snapshots are sorted before Reduce → Last runs.
+Broker read failures return **Error**, while an idle snapshot returns **No data**.
 
 Create a Grafana-managed alert from a panel or **Alerting → Alert rules**. QueryData returns **wide time series** only: string labels and Kafka `offset`/`partition` columns are dropped so Reduce expressions do not fail with `must be a wide series but got type long`. Set **Alert field** (`selectedField`) to the numeric payload field (for example `value1` or `metrics.cpu.load`), then Reduce → Last. If no messages arrive before the query timeout, the evaluation is **No data**. Dashboard Live streaming is unchanged.
 
