@@ -432,7 +432,8 @@ func (d *KafkaDatasource) query(ctx context.Context, _ backend.PluginContext, qu
 	}
 	response.Frames = append(response.Frames, batcher.Flush()...)
 	response.Frames = wideSeriesForAlerting(response.Frames, strings.TrimSpace(qm.SelectedField))
-	if strings.TrimSpace(qm.SelectedField) != "" && !framesHaveField(response.Frames, strings.TrimSpace(qm.SelectedField)) {
+	if len(messages) > 0 && strings.TrimSpace(qm.SelectedField) != "" &&
+		!framesHaveField(response.Frames, strings.TrimSpace(qm.SelectedField)) {
 		response.Error = fmt.Errorf("selectedField %q was not found in the snapshot", qm.SelectedField)
 	}
 	return response
