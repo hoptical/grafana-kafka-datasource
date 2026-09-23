@@ -1,4 +1,4 @@
-import React, { ChangeEvent, useState } from 'react';
+import React, { ChangeEvent } from 'react';
 import { InlineField, Input, SecretInput, SecretTextArea, TextArea, RadioButtonGroup, Checkbox } from '@grafana/ui';
 import { DataSourcePluginOptionsEditorProps } from '@grafana/data';
 import { KafkaDataSourceOptions, KafkaSecureJsonData, GssapiAuthType } from './types';
@@ -13,31 +13,16 @@ const AUTH_TYPE_OPTIONS = [
   { label: 'Keytab', value: GssapiAuthType.KEYTAB },
 ];
 
-const SOURCE_OPTIONS = [
-  { label: 'Paste content', value: 'inline' as const },
-  { label: 'File path', value: 'path' as const },
-];
-
 // GssapiFields renders the SASL/GSSAPI (Kerberos) configuration block. It is
 // factored out of ConfigEditor.tsx because, unlike the OAUTHBEARER fields it
-// sits alongside, GSSAPI needs ~10 fields plus two independent
-// inline-content-vs-file-path toggles (krb5.conf and, for keytab auth, the
-// keytab); inlining that into ConfigEditor's per-mechanism ternary would
-// make it unreadable.
+// sits alongside, GSSAPI needs ~10 fields; inlining that into
+// ConfigEditor's per-mechanism ternary would make it unreadable.
+//
+// krb5.conf and the keytab are only accepted as pasted content (the keytab
+// base64-encoded, stored encrypted). File paths are deliberately not
+// supported: the plugin must not read files from the Grafana host.
 export function GssapiFields({ options, onOptionsChange }: Props) {
   const { jsonData, secureJsonData = {}, secureJsonFields } = options;
-
-  // Which source (pasted content vs. file path) is shown for each of
-  // krb5.conf and the keytab. This is UI-only state, not persisted: on
-  // load, default to "path" only when a path is already set and there is no
-  // inline content, so existing path-based configurations still render
-  // correctly; otherwise default to "paste content".
-  const [krb5ConfigSource, setKrb5ConfigSource] = useState<'inline' | 'path'>(
-    !jsonData.saslGssapiKrb5Config && jsonData.saslGssapiKrb5ConfigPath ? 'path' : 'inline'
-  );
-  const [keytabSource, setKeytabSource] = useState<'inline' | 'path'>(
-    !secureJsonFields?.saslGssapiKeytab && jsonData.saslGssapiKeytabPath ? 'path' : 'inline'
-  );
 
   const updateJsonData = (patch: Partial<KafkaDataSourceOptions>) => {
     onOptionsChange({ ...options, jsonData: { ...jsonData, ...patch } });
@@ -54,8 +39,6 @@ export function GssapiFields({ options, onOptionsChange }: Props) {
 
   const onKrb5ConfigChange = (e: ChangeEvent<HTMLTextAreaElement>) =>
     updateJsonData({ saslGssapiKrb5Config: e.target.value });
-  const onKrb5ConfigPathChange = (e: ChangeEvent<HTMLInputElement>) =>
-    updateJsonData({ saslGssapiKrb5ConfigPath: e.target.value });
 
   const onAuthTypeChange = (value: GssapiAuthType) => updateJsonData({ saslGssapiAuthType: value });
 
@@ -78,39 +61,9 @@ export function GssapiFields({ options, onOptionsChange }: Props) {
       secureJsonData: { ...secureJsonData, saslGssapiKeytab: '' },
     });
   };
-  const onKeytabPathChange = (e: ChangeEvent<HTMLInputElement>) =>
-    updateJsonData({ saslGssapiKeytabPath: e.target.value });
 
   const onDisablePAFXFASTChange = (e: ChangeEvent<HTMLInputElement>) =>
     updateJsonData({ saslGssapiDisablePAFXFAST: e.target.checked });
-
-  // The backend (parseKrb5Config/parseKeytab) prefers inline content over a
-  // path whenever both are set. Switching the source toggle only changes
-  // what's rendered here, so without clearing the field being switched
-  // away from, a stale value left over from the other source would keep
-  // silently winning on save regardless of what the user just configured.
-  const onKrb5ConfigSourceChange = (value: 'inline' | 'path') => {
-    setKrb5ConfigSource(value);
-    updateJsonData(value === 'inline' ? { saslGssapiKrb5ConfigPath: '' } : { saslGssapiKrb5Config: '' });
-  };
-
-  const onKeytabSourceChange = (value: 'inline' | 'path') => {
-    setKeytabSource(value);
-    if (value === 'inline') {
-      updateJsonData({ saslGssapiKeytabPath: '' });
-    } else {
-      // The inline keytab is a secret: once saved, its value is invisible
-      // to this UI (only secureJsonFields.saslGssapiKeytab says whether one
-      // is configured server-side). Switching to "path" has to explicitly
-      // reset it the same way the reset button does, or a previously-saved
-      // keytab would keep silently winning over the new path.
-      onOptionsChange({
-        ...options,
-        secureJsonFields: { ...secureJsonFields, saslGssapiKeytab: false },
-        secureJsonData: { ...secureJsonData, saslGssapiKeytab: '' },
-      });
-    }
-  };
 
   const authType = jsonData.saslGssapiAuthType || GssapiAuthType.PASSWORD;
 
@@ -162,56 +115,23 @@ export function GssapiFields({ options, onOptionsChange }: Props) {
       </InlineField>
 
       <InlineField
-        label="krb5.conf Source"
+        label="krb5.conf Content"
         labelWidth={30}
-        tooltip="How the Kerberos configuration file is provided"
+        tooltip="Contents of krb5.conf, pasted directly (not a secret)"
+        htmlFor="config-editor-gssapi-krb5-config"
+        interactive
         grow
+        required
       >
-        <RadioButtonGroup
-          data-testid="gssapi-krb5-config-source"
-          options={SOURCE_OPTIONS}
-          value={krb5ConfigSource}
-          onChange={(value) => value && onKrb5ConfigSourceChange(value)}
+        <TextArea
+          id="config-editor-gssapi-krb5-config"
+          data-testid="gssapi-krb5-config"
+          onChange={onKrb5ConfigChange}
+          value={jsonData.saslGssapiKrb5Config || ''}
+          placeholder="[libdefaults]&#10;  default_realm = EXAMPLE.COM"
+          rows={6}
         />
       </InlineField>
-
-      {krb5ConfigSource === 'inline' ? (
-        <InlineField
-          label="krb5.conf Content"
-          labelWidth={30}
-          tooltip="Contents of krb5.conf, pasted directly (not a secret)"
-          htmlFor="config-editor-gssapi-krb5-config"
-          interactive
-          grow
-          required
-        >
-          <TextArea
-            id="config-editor-gssapi-krb5-config"
-            data-testid="gssapi-krb5-config"
-            onChange={onKrb5ConfigChange}
-            value={jsonData.saslGssapiKrb5Config || ''}
-            placeholder="[libdefaults]&#10;  default_realm = EXAMPLE.COM"
-            rows={6}
-          />
-        </InlineField>
-      ) : (
-        <InlineField
-          label="krb5.conf Path"
-          labelWidth={30}
-          tooltip="Path to krb5.conf on the Grafana backend host"
-          grow
-          required
-        >
-          <Input
-            id="config-editor-gssapi-krb5-config-path"
-            data-testid="gssapi-krb5-config-path"
-            onChange={onKrb5ConfigPathChange}
-            value={jsonData.saslGssapiKrb5ConfigPath || ''}
-            placeholder="/etc/krb5.conf"
-            width={40}
-          />
-        </InlineField>
-      )}
 
       <InlineField label="Authentication Method" labelWidth={30} tooltip="How to authenticate the principal" grow>
         <RadioButtonGroup
@@ -223,55 +143,25 @@ export function GssapiFields({ options, onOptionsChange }: Props) {
       </InlineField>
 
       {authType === GssapiAuthType.KEYTAB ? (
-        <>
-          <InlineField label="Keytab Source" labelWidth={30} tooltip="How the keytab is provided" grow>
-            <RadioButtonGroup
-              data-testid="gssapi-keytab-source"
-              options={SOURCE_OPTIONS}
-              value={keytabSource}
-              onChange={(value) => value && onKeytabSourceChange(value)}
-            />
-          </InlineField>
-
-          {keytabSource === 'inline' ? (
-            <InlineField
-              label="Keytab Content"
-              labelWidth={30}
-              tooltip="Base64-encoded keytab file content (stored encrypted)"
-              htmlFor="config-editor-gssapi-keytab"
-              interactive
-              grow
-              required
-            >
-              <SecretTextArea
-                id="config-editor-gssapi-keytab"
-                data-testid="gssapi-keytab"
-                isConfigured={(secureJsonFields && secureJsonFields.saslGssapiKeytab) as boolean}
-                onReset={onResetKeytab}
-                onChange={(e) => onKeytabChange(e as ChangeEvent<HTMLTextAreaElement>)}
-                placeholder="Base64-encoded keytab content"
-                rows={4}
-              />
-            </InlineField>
-          ) : (
-            <InlineField
-              label="Keytab Path"
-              labelWidth={30}
-              tooltip="Path to the keytab file on the Grafana backend host"
-              grow
-              required
-            >
-              <Input
-                id="config-editor-gssapi-keytab-path"
-                data-testid="gssapi-keytab-path"
-                onChange={onKeytabPathChange}
-                value={jsonData.saslGssapiKeytabPath || ''}
-                placeholder="/etc/security/keytabs/grafana.keytab"
-                width={40}
-              />
-            </InlineField>
-          )}
-        </>
+        <InlineField
+          label="Keytab Content"
+          labelWidth={30}
+          tooltip="Base64-encoded keytab file content, e.g. the output of `base64 -w0 grafana.keytab` (stored encrypted)"
+          htmlFor="config-editor-gssapi-keytab"
+          interactive
+          grow
+          required
+        >
+          <SecretTextArea
+            id="config-editor-gssapi-keytab"
+            data-testid="gssapi-keytab"
+            isConfigured={(secureJsonFields && secureJsonFields.saslGssapiKeytab) as boolean}
+            onReset={onResetKeytab}
+            onChange={(e) => onKeytabChange(e as ChangeEvent<HTMLTextAreaElement>)}
+            placeholder="Base64-encoded keytab content"
+            rows={4}
+          />
+        </InlineField>
       ) : (
         <InlineField label="Password" labelWidth={30} tooltip="Kerberos password for the principal" grow required>
           <SecretInput

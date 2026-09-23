@@ -83,8 +83,6 @@ export interface KafkaDataSourceOptions extends DataSourceJsonData {
   saslGssapiUsername?: string;
   saslGssapiAuthType?: GssapiAuthType;
   saslGssapiKrb5Config?: string;
-  saslGssapiKrb5ConfigPath?: string;
-  saslGssapiKeytabPath?: string;
   saslGssapiDisablePAFXFAST?: boolean;
   logLevel: string;
   healthcheckTimeout: number;
@@ -119,8 +117,6 @@ export const defaultDataSourceOptions: Partial<KafkaDataSourceOptions> = {
   saslGssapiUsername: '',
   saslGssapiAuthType: GssapiAuthType.PASSWORD,
   saslGssapiKrb5Config: '',
-  saslGssapiKrb5ConfigPath: '',
-  saslGssapiKeytabPath: '',
   saslGssapiDisablePAFXFAST: false,
   logLevel: '',
   healthcheckTimeout: 2000,

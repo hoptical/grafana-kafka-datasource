@@ -35,13 +35,12 @@ In the datasource's **Authentication** section:
    - **Realm**: the Kerberos realm, exactly as it appears (case-sensitive) in the
      `[realms]` section of krb5.conf.
    - **Principal**: the Kerberos username, without an `@REALM` suffix.
-   - **krb5.conf Source**: paste the contents of krb5.conf directly, or provide a path to
-     a krb5.conf file already present on the Grafana backend host. krb5.conf contains no
-     key material, so it is stored as plain (not encrypted) configuration.
+   - **krb5.conf Content**: paste the contents of krb5.conf. krb5.conf contains no key
+     material, so it is stored as plain (not encrypted) configuration.
    - **Authentication Method**: `Password` or `Keytab`.
      - **Password**: the principal's Kerberos password (stored encrypted).
-     - **Keytab**: paste the keytab's base64-encoded content, or provide a path to a
-       keytab file on the Grafana backend host (stored encrypted either way).
+     - **Keytab**: paste the keytab's base64-encoded content (stored encrypted). Encode it
+       with `base64 -w0 grafana.keytab` on Linux or `base64 -i grafana.keytab` on macOS.
    - **Disable PA-FX-FAST** (advanced): disables the `PA_REQ_ENC_PA_REP` pre-authentication
      data some Active Directory environments and older MIT KDCs reject. Leave unchecked
      unless authentication fails with a pre-authentication error.
@@ -71,10 +70,10 @@ applies at a time.
 
 For keytab authentication, set `saslGssapiAuthType` to `"keytab"` and provide
 `secureJsonData.saslGssapiKeytab` (base64-encoded keytab content) instead of a password.
-`saslGssapiKrb5ConfigPath` and `saslGssapiKeytabPath` are the file-path equivalents of
-`saslGssapiKrb5Config` and `saslGssapiKeytab`; when both an inline value and a path are set
-for the same artifact, the inline value takes precedence. `saslGssapiDisablePAFXFAST` is an
-optional boolean.
+`saslGssapiDisablePAFXFAST` is an optional boolean.
+
+krb5.conf and the keytab can only be supplied as content, not as file paths: the plugin never
+reads files from the Grafana server's filesystem.
 
 `saslGssapiPassword` and `saslGssapiKeytab` are the only GSSAPI fields treated as secrets;
 they are stored the same way as `saslPassword` and other encrypted datasource fields.
@@ -143,8 +142,8 @@ Unit tests (no live KDC required):
 - `pkg/kafka_client/gssapi_mechanism_test.go`: a full offline handshake test that mints a
   Kerberos ticket in-memory and drives the mechanism's `Start`/`Next` state machine against
   it exactly as kafka-go would, verifying the AP_REQ against the ticket's own keytab and
-  the security-layer negotiation response; plus krb5.conf/keytab parsing (inline, path, and
-  precedence), realm and principal validation, SPN construction, the authentication-failure
+  the security-layer negotiation response; plus krb5.conf/keytab parsing (including empty and
+  malformed input), realm and principal validation, SPN construction, the authentication-failure
   cache, and concurrent-connection behavior.
 - `pkg/kafka_client/client_test.go`: `getSASLMechanism`/`NewConnection` GSSAPI selection and
   required-field validation, dial-function/TLS preservation, and that a previous GSSAPI
@@ -158,7 +157,7 @@ go test ./pkg/kafka_client/... -run Gssapi -v
 ```
 
 Frontend unit tests (`src/__tests__/ConfigEditor.test.tsx`) cover conditional rendering of
-the GSSAPI fields, the krb5.conf/keytab inline-vs-path source toggles, the
+the GSSAPI fields (and that no file-path inputs are rendered), the
 password/keytab authentication-method toggle, and the password/keytab secret change and
 reset flows.
 
