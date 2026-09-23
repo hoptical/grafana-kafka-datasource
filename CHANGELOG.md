@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Feat: enable Grafana Alerting with a QueryData snapshot of recent Kafka messages
+- Fix: QueryData returns time-series-wide frames (drop string labels and offset) so Reduce expressions can evaluate
 
 ## [v1.9.0](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.9.0)
 

@@ -127,7 +127,7 @@ Dashboard panels still stream over Grafana Live. Alert rules cannot subscribe to
 - **Offset Reset = last N:** last N messages (capped at 1000)
 - **Offset Reset = earliest:** last 1000 messages (the current tail, not the topic start)
 
-Create a Grafana-managed alert from a panel or **Alerting → Alert rules**, pick a numeric field, and use a Reduce expression such as **Last**. If no messages arrive before the query timeout, the evaluation is **No data**.
+Create a Grafana-managed alert from a panel or **Alerting → Alert rules**. QueryData returns **wide time series** only: string labels and Kafka `offset`/`partition` columns are dropped so Reduce expressions do not fail with `must be a wide series but got type long`. Set **Alert field** (`selectedField`) to the numeric payload field (for example `value1` or `metrics.cpu.load`), then Reduce → Last. If no messages arrive before the query timeout, the evaluation is **No data**. Dashboard Live streaming is unchanged.
 
 ## Supported JSON Structures
 

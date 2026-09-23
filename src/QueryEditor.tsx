@@ -710,6 +710,12 @@ class QueryEditorInner extends PureComponent<QueryEditorInnerProps, State> {
     this.debouncedRunQuery();
   };
 
+  onSelectedFieldChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const { onChange, query } = this.props;
+    onChange({ ...query, selectedField: event.target.value });
+    this.debouncedRunQuery();
+  };
+
   render() {
     const query = { ...defaultQuery, ...this.props.query };
     const { topicName, partition, autoOffsetReset, timestampMode, lastN, messageFormat } = query;
@@ -863,6 +869,20 @@ class QueryEditorInner extends PureComponent<QueryEditorInnerProps, State> {
             tooltip="Custom alias for the query series. Supports placeholders: {{topic}}, {{partition}}, {{refid}}, {{field}}"
           >
             <Input width={25} value={query.alias || ''} onChange={this.onAliasChange} placeholder="Optional alias" />
+          </InlineField>
+        </InlineFieldRow>
+        <InlineFieldRow>
+          <InlineField
+            label="Alert field"
+            labelWidth={25}
+            tooltip="Numeric JSON/Avro field Grafana Alerting evaluates. QueryData drops string labels and Kafka offset metadata so Reduce expressions receive a wide time series. Leave empty to keep every numeric payload field."
+          >
+            <Input
+              width={25}
+              value={query.selectedField || ''}
+              onChange={this.onSelectedFieldChange}
+              placeholder="value1"
+            />
           </InlineField>
         </InlineFieldRow>
 
