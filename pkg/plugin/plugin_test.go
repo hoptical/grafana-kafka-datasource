@@ -224,6 +224,40 @@ func TestQueryData_DropsStringFieldsAndHonorsSelectedField(t *testing.T) {
 	}
 }
 
+func TestQueryData_EmptySnapshotWithSelectedFieldIsNoData(t *testing.T) {
+	mc := &mockKafkaClient{
+		partitions:  []int32{0},
+		consumerErr: context.DeadlineExceeded,
+	}
+	ds := plugin.NewWithClient(mc)
+	queryJSON, err := json.Marshal(map[string]interface{}{
+		"topicName":       "empty-topic",
+		"partition":       0,
+		"autoOffsetReset": "latest",
+		"messageFormat":   "json",
+		"timestampMode":   "message",
+		"selectedField":   "temperature",
+		"refId":           "A",
+	})
+	if err != nil {
+		t.Fatalf("marshal query: %v", err)
+	}
+
+	resp, err := ds.QueryData(context.Background(), &backend.QueryDataRequest{
+		Queries: []backend.DataQuery{{RefID: "A", JSON: queryJSON}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dr := resp.Responses["A"]
+	if dr.Error != nil {
+		t.Fatalf("empty snapshot should be No Data, got error: %v", dr.Error)
+	}
+	if len(dr.Frames) != 0 {
+		t.Fatalf("empty snapshot should return no frames, got %d", len(dr.Frames))
+	}
+}
+
 func containsName(names []string, want string) bool {
 	for _, n := range names {
 		if n == want {
