@@ -78,6 +78,20 @@ reads files from the Grafana server's filesystem.
 `saslGssapiPassword` and `saslGssapiKeytab` are the only GSSAPI fields treated as secrets;
 they are stored the same way as `saslPassword` and other encrypted datasource fields.
 
+### Upgrading from a v1.9.0 file-path configuration
+
+v1.9.0 briefly offered `saslGssapiKrb5ConfigPath` and `saslGssapiKeytabPath`. These settings
+have been removed and are now ignored, so a datasource that relied on them fails Save & Test
+with `GSSAPI authentication requires krb5.conf content` (or the keytab equivalent) until it is
+migrated:
+
+1. Keep a copy of the krb5.conf and keytab files the paths pointed to.
+2. Paste the contents of krb5.conf into **krb5.conf Content** (`jsonData.saslGssapiKrb5Config`).
+3. For keytab authentication, base64-encode the keytab (`base64 -w0 grafana.keytab` on Linux,
+   `base64 -i grafana.keytab` on macOS) and paste the output into **Keytab Content**
+   (`secureJsonData.saslGssapiKeytab`).
+4. Save the datasource, or update the provisioning file with the same fields.
+
 ## Behavior
 
 ### Handshake
