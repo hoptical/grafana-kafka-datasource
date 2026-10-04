@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -250,11 +251,11 @@ func encodeProtobufWireFormat(schemaID int, messageIndex int, payload []byte) []
 	var buf bytes.Buffer
 	buf.WriteByte(0)
 	idBytes := make([]byte, 4)
-	binary.BigEndian.PutUint32(idBytes, uint32(schemaID))
+	binary.BigEndian.PutUint32(idBytes, uint32(schemaID)) // #nosec G115 -- Schema Registry IDs are positive int32 values
 	buf.Write(idBytes)
 	// Confluent wire format: count-prefixed 0-based indexes
 	buf.Write(protowire.AppendVarint(nil, 1))
-	buf.Write(protowire.AppendVarint(nil, uint64(messageIndex)))
+	buf.Write(protowire.AppendVarint(nil, uint64(messageIndex))) // #nosec G115 -- message index is a small non-negative descriptor index
 	buf.Write(payload)
 	return buf.Bytes()
 }
@@ -361,11 +362,11 @@ func toProtobufValue(field protoreflect.FieldDescriptor, value interface{}) (pro
 	case protoreflect.BoolKind:
 		return protoreflect.ValueOfBool(toBool(value)), nil
 	case protoreflect.Int32Kind, protoreflect.Sint32Kind, protoreflect.Sfixed32Kind:
-		return protoreflect.ValueOfInt32(int32(toInt64(value))), nil
+		return protoreflect.ValueOfInt32(int32(toInt64(value))), nil // #nosec G115 -- intentional truncation of synthetic sample values to the proto field width
 	case protoreflect.Int64Kind, protoreflect.Sint64Kind, protoreflect.Sfixed64Kind:
 		return protoreflect.ValueOfInt64(toInt64(value)), nil
 	case protoreflect.Uint32Kind, protoreflect.Fixed32Kind:
-		return protoreflect.ValueOfUint32(uint32(toUint64(value))), nil
+		return protoreflect.ValueOfUint32(uint32(toUint64(value))), nil // #nosec G115 -- intentional truncation of synthetic sample values to the proto field width
 	case protoreflect.Uint64Kind, protoreflect.Fixed64Kind:
 		return protoreflect.ValueOfUint64(toUint64(value)), nil
 	case protoreflect.FloatKind:
@@ -400,10 +401,16 @@ func enumNumberFromValue(field protoreflect.FieldDescriptor, value interface{}) 
 	case int64:
 		return enumNumberFromInt(field, v)
 	case uint:
+		if v > math.MaxInt32 {
+			return 0, fmt.Errorf("enum value %d out of int32 range for field %s", v, field.Name())
+		}
 		return enumNumberFromInt(field, int64(v))
 	case uint32:
 		return enumNumberFromInt(field, int64(v))
 	case uint64:
+		if v > math.MaxInt32 {
+			return 0, fmt.Errorf("enum value %d out of int32 range for field %s", v, field.Name())
+		}
 		return enumNumberFromInt(field, int64(v))
 	case float64:
 		return enumNumberFromInt(field, int64(v))
@@ -413,6 +420,9 @@ func enumNumberFromValue(field protoreflect.FieldDescriptor, value interface{}) 
 }
 
 func enumNumberFromInt(field protoreflect.FieldDescriptor, value int64) (protoreflect.EnumNumber, error) {
+	if value < math.MinInt32 || value > math.MaxInt32 {
+		return 0, fmt.Errorf("enum value %d out of int32 range for field %s", value, field.Name())
+	}
 	enumNumber := protoreflect.EnumNumber(value)
 	if field.Enum().Values().ByNumber(enumNumber) == nil {
 		return 0, fmt.Errorf("unknown enum value %d for field %s", value, field.Name())
@@ -455,8 +465,14 @@ func toUint64(value interface{}) uint64 {
 	case uint64:
 		return v
 	case int:
+		if v < 0 {
+			return 0
+		}
 		return uint64(v)
 	case int64:
+		if v < 0 {
+			return 0
+		}
 		return uint64(v)
 	case float64:
 		return uint64(v)

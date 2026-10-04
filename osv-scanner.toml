@@ -1,0 +1,7 @@
+# Vulnerabilities with no upstream fix that only affect dev/build tooling.
+# Re-check on every security pass and drop entries once a fix ships.
+
+[[IgnoredVulns]]
+id = "GHSA-vfj7-8cjw-p6xm"
+ignoreUntil = 2027-01-04T00:00:00Z
+reason = "braces@3.0.3 (latest release; no fixed version) is pulled in only via micromatch by dev tooling (eslint-webpack-plugin, markdownlint-cli2, globby/fast-glob) and is not bundled into the plugin. It is reachable in CI: the lint:md job runs markdownlint-cli2 on pull_request, and a PR can change the globs in package.json or .markdownlint-cli2.yaml to supply deeply nested brace patterns. Impact is limited to stack exhaustion crashing that lint job (denial of service); it cannot affect the shipped plugin or expose secrets."

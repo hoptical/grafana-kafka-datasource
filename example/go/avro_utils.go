@@ -105,7 +105,7 @@ func (src *SchemaRegistryClient) EncodeWithSchemaID(schemaID int, data interface
 
 	// Schema ID (big endian)
 	schemaIDBytes := make([]byte, 4)
-	binary.BigEndian.PutUint32(schemaIDBytes, uint32(schemaID))
+	binary.BigEndian.PutUint32(schemaIDBytes, uint32(schemaID)) // #nosec G115 -- Schema Registry IDs are positive int32 values
 	buf.Write(schemaIDBytes)
 
 	// Avro data

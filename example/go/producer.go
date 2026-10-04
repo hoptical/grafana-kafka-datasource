@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"math/rand"
 	"net"
 	"os"
 	"strconv"
@@ -222,8 +221,8 @@ func main() {
 		} else {
 			// Create sample data (flat, nested, or list)
 			// Periodically set value1/value2 to null to reproduce the bug.
-			rawValue1 := *valuesOffset - rand.Float64()
-			rawValue2 := *valuesOffset + rand.Float64()
+			rawValue1 := *valuesOffset - randFloat64()
+			rawValue2 := *valuesOffset + randFloat64()
 			var value1 interface{} = rawValue1
 			var value2 interface{} = rawValue2
 			if counter%7 == 0 {
@@ -244,9 +243,9 @@ func main() {
 						"host_name":        hostName,
 						"host_ip":          hostIP,
 						"metrics_cpu_load": value1,
-						"metrics_cpu_temp": 60.0 + rand.Float64()*10.0,
-						"metrics_mem_used": 1000 + rand.Intn(2000),
-						"metrics_mem_free": 8000 + rand.Intn(2000),
+						"metrics_cpu_temp": 60.0 + randFloat64()*10.0,
+						"metrics_mem_used": 1000 + randIntn(2000),
+						"metrics_mem_free": 8000 + randIntn(2000),
 						"value1":           value1,
 						"value2":           value2,
 						"tags":             []string{"prod", "edge"},
@@ -257,9 +256,9 @@ func main() {
 						"host.name":        hostName,
 						"host.ip":          hostIP,
 						"metrics.cpu.load": value1,
-						"metrics.cpu.temp": 60.0 + rand.Float64()*10.0,
-						"metrics.mem.used": 1000 + rand.Intn(2000),
-						"metrics.mem.free": 8000 + rand.Intn(2000),
+						"metrics.cpu.temp": 60.0 + randFloat64()*10.0,
+						"metrics.mem.used": 1000 + randIntn(2000),
+						"metrics.mem.free": 8000 + randIntn(2000),
 						"value1":           value1,
 						"value2":           value2,
 						"tags":             []string{"prod", "edge"},
@@ -274,11 +273,11 @@ func main() {
 					"metrics": map[string]interface{}{
 						"cpu": map[string]interface{}{
 							"load": value1,
-							"temp": 60.0 + rand.Float64()*10.0,
+							"temp": 60.0 + randFloat64()*10.0,
 						},
 						"mem": map[string]interface{}{
-							"used": 1000 + rand.Intn(2000),
-							"free": 8000 + rand.Intn(2000),
+							"used": 1000 + randIntn(2000),
+							"free": 8000 + randIntn(2000),
 						},
 					},
 					"value1": value1,
