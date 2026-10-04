@@ -60,8 +60,6 @@ type Options struct {
 	SaslGssapiUsername        string `json:"saslGssapiUsername"`
 	SaslGssapiAuthType        string `json:"saslGssapiAuthType"` // "password" | "keytab"
 	SaslGssapiKrb5Config      string `json:"saslGssapiKrb5Config"`
-	SaslGssapiKrb5ConfigPath  string `json:"saslGssapiKrb5ConfigPath"`
-	SaslGssapiKeytabPath      string `json:"saslGssapiKeytabPath"`
 	SaslGssapiDisablePAFXFAST bool   `json:"saslGssapiDisablePAFXFAST"`
 	SaslGssapiPassword        string `json:"-"` // secret: populated only from DecryptedSecureJSONData
 	SaslGssapiKeytab          string `json:"-"` // secret: base64 keytab content, populated only from DecryptedSecureJSONData
@@ -112,8 +110,6 @@ type KafkaClient struct {
 	SaslGssapiUsername        string
 	SaslGssapiAuthType        string
 	SaslGssapiKrb5Config      string
-	SaslGssapiKrb5ConfigPath  string
-	SaslGssapiKeytabPath      string
 	SaslGssapiDisablePAFXFAST bool
 	SaslGssapiPassword        string
 	SaslGssapiKeytab          string
@@ -327,8 +323,6 @@ func newKafkaClient(options Options, dialFunc DialFunc) KafkaClient {
 		SaslGssapiUsername:        options.SaslGssapiUsername,
 		SaslGssapiAuthType:        options.SaslGssapiAuthType,
 		SaslGssapiKrb5Config:      options.SaslGssapiKrb5Config,
-		SaslGssapiKrb5ConfigPath:  options.SaslGssapiKrb5ConfigPath,
-		SaslGssapiKeytabPath:      options.SaslGssapiKeytabPath,
 		SaslGssapiDisablePAFXFAST: options.SaslGssapiDisablePAFXFAST,
 		SaslGssapiPassword:        options.SaslGssapiPassword,
 		SaslGssapiKeytab:          options.SaslGssapiKeytab,
@@ -371,8 +365,8 @@ func (client *KafkaClient) NewConnection() error {
 			if client.SaslGssapiRealm == "" || client.SaslGssapiUsername == "" {
 				return fmt.Errorf("GSSAPI authentication requires a Kerberos realm and principal")
 			}
-			if client.SaslGssapiKrb5Config == "" && client.SaslGssapiKrb5ConfigPath == "" {
-				return fmt.Errorf("GSSAPI authentication requires krb5.conf content or a krb5.conf file path")
+			if client.SaslGssapiKrb5Config == "" {
+				return fmt.Errorf("GSSAPI authentication requires krb5.conf content")
 			}
 			switch client.SaslGssapiAuthType {
 			case "", gssapiAuthTypePassword:
@@ -380,8 +374,8 @@ func (client *KafkaClient) NewConnection() error {
 					return fmt.Errorf("GSSAPI password authentication requires a password")
 				}
 			case gssapiAuthTypeKeytab:
-				if client.SaslGssapiKeytab == "" && client.SaslGssapiKeytabPath == "" {
-					return fmt.Errorf("GSSAPI keytab authentication requires keytab content or a keytab file path")
+				if client.SaslGssapiKeytab == "" {
+					return fmt.Errorf("GSSAPI keytab authentication requires base64-encoded keytab content")
 				}
 			default:
 				return fmt.Errorf("unsupported GSSAPI authentication type: %s", client.SaslGssapiAuthType)

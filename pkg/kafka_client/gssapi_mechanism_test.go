@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/hex"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -121,11 +119,11 @@ func TestNewGSSAPIMechanism_Errors(t *testing.T) {
 			wantErr: "must not include the realm",
 		},
 		{
-			name: "keytab auth without keytab content or path",
+			name: "keytab auth without keytab content",
 			overrides: func(c *KafkaClient) {
 				c.SaslGssapiAuthType = gssapiAuthTypeKeytab
 			},
-			wantErr: "keytab content or a keytab file path",
+			wantErr: "requires base64-encoded keytab content",
 		},
 		{
 			name: "unsupported auth type is rejected rather than silently treated as password",
@@ -173,7 +171,7 @@ func TestNewGSSAPIMechanism_KeytabAuth(t *testing.T) {
 
 func TestParseKrb5Config(t *testing.T) {
 	t.Run("inline", func(t *testing.T) {
-		cfg, err := parseKrb5Config(testKrb5Conf, "")
+		cfg, err := parseKrb5Config(testKrb5Conf)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -182,39 +180,10 @@ func TestParseKrb5Config(t *testing.T) {
 		}
 	})
 
-	t.Run("path", func(t *testing.T) {
-		path := writeTempFile(t, testKrb5Conf)
-		cfg, err := parseKrb5Config("", path)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if len(cfg.Realms) != 1 || cfg.Realms[0].Realm != "EXAMPLE.COM" {
-			t.Errorf("unexpected realms: %+v", cfg.Realms)
-		}
-	})
-
-	t.Run("missing path", func(t *testing.T) {
-		_, err := parseKrb5Config("", "/nonexistent/krb5.conf")
+	t.Run("empty", func(t *testing.T) {
+		_, err := parseKrb5Config("")
 		if err == nil {
-			t.Fatal("expected error for missing file")
-		}
-	})
-
-	t.Run("both empty", func(t *testing.T) {
-		_, err := parseKrb5Config("", "")
-		if err == nil {
-			t.Fatal("expected error when neither inline content nor a path is set")
-		}
-	})
-
-	t.Run("inline takes precedence over path", func(t *testing.T) {
-		path := writeTempFile(t, "[libdefaults]\ndefault_realm = FROM_PATH.COM\n[realms]\nFROM_PATH.COM = {\nkdc = kdc\n}\n")
-		cfg, err := parseKrb5Config(testKrb5Conf, path)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if cfg.Realms[0].Realm != "EXAMPLE.COM" {
-			t.Errorf("expected inline config to take precedence, got realm %q", cfg.Realms[0].Realm)
+			t.Fatal("expected error when no krb5.conf content is set")
 		}
 	})
 }
@@ -231,18 +200,7 @@ func TestParseKeytab(t *testing.T) {
 	b64 := base64.StdEncoding.EncodeToString(raw)
 
 	t.Run("inline base64", func(t *testing.T) {
-		got, err := parseKeytab(b64, "")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if len(got.Entries) != 1 {
-			t.Errorf("expected 1 keytab entry, got %d", len(got.Entries))
-		}
-	})
-
-	t.Run("path", func(t *testing.T) {
-		path := writeTempBinaryFile(t, raw)
-		got, err := parseKeytab("", path)
+		got, err := parseKeytab(b64)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -252,14 +210,14 @@ func TestParseKeytab(t *testing.T) {
 	})
 
 	t.Run("bad base64", func(t *testing.T) {
-		_, err := parseKeytab("not-valid-base64!!!", "")
+		_, err := parseKeytab("not-valid-base64!!!")
 		if err == nil || !strings.Contains(err.Error(), "base64") {
 			t.Fatalf("expected a base64 error, got %v", err)
 		}
 	})
 
 	t.Run("malformed keytab bytes", func(t *testing.T) {
-		_, err := parseKeytab(base64.StdEncoding.EncodeToString([]byte("not a keytab")), "")
+		_, err := parseKeytab(base64.StdEncoding.EncodeToString([]byte("not a keytab")))
 		if err == nil {
 			t.Fatal("expected an error for malformed keytab bytes")
 		}
@@ -268,26 +226,12 @@ func TestParseKeytab(t *testing.T) {
 		}
 	})
 
-	t.Run("both empty", func(t *testing.T) {
-		_, err := parseKeytab("", "")
+	t.Run("empty", func(t *testing.T) {
+		_, err := parseKeytab("")
 		if err == nil {
-			t.Fatal("expected error when neither keytab content nor a path is set")
+			t.Fatal("expected error when no keytab content is set")
 		}
 	})
-}
-
-func writeTempFile(t *testing.T, content string) string {
-	t.Helper()
-	return writeTempBinaryFile(t, []byte(content))
-}
-
-func writeTempBinaryFile(t *testing.T, content []byte) string {
-	t.Helper()
-	path := filepath.Join(t.TempDir(), "kerberos-test-file")
-	if err := os.WriteFile(path, content, 0o600); err != nil {
-		t.Fatalf("failed to write temp file: %v", err)
-	}
-	return path
 }
 
 func TestSpnForHost(t *testing.T) {

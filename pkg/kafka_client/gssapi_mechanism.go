@@ -148,7 +148,7 @@ func (c gokrb5Client) CName() types.PrincipalName { return c.Credentials.CName()
 // keytab synchronously, so configuration errors surface immediately from
 // NewConnection rather than on the first dial.
 func newGSSAPIMechanism(c *KafkaClient) (*gssapiMechanism, error) {
-	krb5Config, err := parseKrb5Config(c.SaslGssapiKrb5Config, c.SaslGssapiKrb5ConfigPath)
+	krb5Config, err := parseKrb5Config(c.SaslGssapiKrb5Config)
 	if err != nil {
 		return nil, err
 	}
@@ -187,7 +187,7 @@ func newGSSAPIMechanism(c *KafkaClient) (*gssapiMechanism, error) {
 	}
 
 	if m.authType == gssapiAuthTypeKeytab {
-		kt, ktErr := parseKeytab(c.SaslGssapiKeytab, c.SaslGssapiKeytabPath)
+		kt, ktErr := parseKeytab(c.SaslGssapiKeytab)
 		if ktErr != nil {
 			return nil, ktErr
 		}
@@ -212,53 +212,37 @@ func realmConfigured(cfg *config.Config, realm string) bool {
 	return false
 }
 
-// parseKrb5Config parses krb5.conf from inline content or a file path.
-// Inline content takes precedence when both are set. gokrb5 parses both
-// forms entirely in memory (config.NewFromString / config.Load); no temp
-// file is ever written.
-func parseKrb5Config(inline, path string) (*config.Config, error) {
-	switch {
-	case inline != "":
-		cfg, err := config.NewFromString(inline)
-		if err != nil {
-			return nil, fmt.Errorf("invalid Kerberos configuration: %w", err)
-		}
-		return cfg, nil
-	case path != "":
-		cfg, err := config.Load(path)
-		if err != nil {
-			return nil, fmt.Errorf("invalid Kerberos configuration: %w", err)
-		}
-		return cfg, nil
-	default:
-		return nil, fmt.Errorf("GSSAPI authentication requires krb5.conf content or a krb5.conf file path")
+// parseKrb5Config parses krb5.conf from inline content. gokrb5 parses it
+// entirely in memory (config.NewFromString); the plugin never reads
+// krb5.conf from the Grafana host's filesystem.
+func parseKrb5Config(inline string) (*config.Config, error) {
+	if inline == "" {
+		return nil, fmt.Errorf("GSSAPI authentication requires krb5.conf content")
 	}
+	cfg, err := config.NewFromString(inline)
+	if err != nil {
+		return nil, fmt.Errorf("invalid Kerberos configuration: %w", err)
+	}
+	return cfg, nil
 }
 
-// parseKeytab parses a keytab from base64-encoded inline content or a file
-// path. Inline content takes precedence when both are set. gokrb5 has no
-// keytab.Parse; the inline form is decoded and handed to keytab.Unmarshal.
-func parseKeytab(base64Content, path string) (*keytab.Keytab, error) {
-	switch {
-	case base64Content != "":
-		raw, err := base64.StdEncoding.DecodeString(base64Content)
-		if err != nil {
-			return nil, fmt.Errorf("invalid Kerberos keytab: content is not valid base64: %w", err)
-		}
-		kt := keytab.New()
-		if err := kt.Unmarshal(raw); err != nil {
-			return nil, fmt.Errorf("invalid Kerberos keytab: %w", err)
-		}
-		return kt, nil
-	case path != "":
-		kt, err := keytab.Load(path)
-		if err != nil {
-			return nil, fmt.Errorf("invalid Kerberos keytab: %w", err)
-		}
-		return kt, nil
-	default:
-		return nil, fmt.Errorf("GSSAPI keytab authentication requires keytab content or a keytab file path")
+// parseKeytab parses a keytab from base64-encoded inline content. gokrb5
+// has no keytab.Parse; the content is decoded and handed to
+// keytab.Unmarshal. The plugin never reads a keytab from the Grafana host's
+// filesystem.
+func parseKeytab(base64Content string) (*keytab.Keytab, error) {
+	if base64Content == "" {
+		return nil, fmt.Errorf("GSSAPI keytab authentication requires base64-encoded keytab content")
 	}
+	raw, err := base64.StdEncoding.DecodeString(base64Content)
+	if err != nil {
+		return nil, fmt.Errorf("invalid Kerberos keytab: content is not valid base64: %w", err)
+	}
+	kt := keytab.New()
+	if err := kt.Unmarshal(raw); err != nil {
+		return nil, fmt.Errorf("invalid Kerberos keytab: %w", err)
+	}
+	return kt, nil
 }
 
 func (m *gssapiMechanism) Name() string {
