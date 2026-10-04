@@ -1,5 +1,12 @@
 # Changelog
 
+## [v1.9.1](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.9.1)
+
+[Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v1.9.0...v1.9.1)
+
+- Fix: resolve plugin-validator security findings (brace-expansion, fast-uri, braces, gosec) ([#177](https://github.com/hoptical/grafana-kafka-datasource/pull/177))
+- Fix: remove GSSAPI krb5.conf/keytab file-path options ([#176](https://github.com/hoptical/grafana-kafka-datasource/pull/176))
+
 ## [v1.9.0](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.9.0)
 
 [Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v1.8.1...v1.9.0)
