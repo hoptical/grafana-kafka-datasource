@@ -3,15 +3,14 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"math/rand"
 	"time"
 )
 
 // EncodeJSONMessage encodes a message using JSON
 func EncodeJSONMessage(shape string, counter int, hostName, hostIP string, valuesOffset float64) ([]byte, error) {
 	// Create sample data (flat, nested, or list)
-	value1 := valuesOffset - rand.Float64()
-	value2 := valuesOffset + rand.Float64()
+	value1 := valuesOffset - randFloat64()
+	value2 := valuesOffset + randFloat64()
 
 	var payload interface{}
 	switch shape {
@@ -20,9 +19,9 @@ func EncodeJSONMessage(shape string, counter int, hostName, hostIP string, value
 			"host.name":        hostName,
 			"host.ip":          hostIP,
 			"metrics.cpu.load": value1,
-			"metrics.cpu.temp": 60.0 + rand.Float64()*10.0,
-			"metrics.mem.used": 1000 + rand.Intn(2000),
-			"metrics.mem.free": 8000 + rand.Intn(2000),
+			"metrics.cpu.temp": 60.0 + randFloat64()*10.0,
+			"metrics.mem.used": 1000 + randIntn(2000),
+			"metrics.mem.free": 8000 + randIntn(2000),
 			"value1":           value1,
 			"value2":           value2,
 			"tags":             []string{"prod", "edge"},
@@ -36,11 +35,11 @@ func EncodeJSONMessage(shape string, counter int, hostName, hostIP string, value
 			"metrics": map[string]interface{}{
 				"cpu": map[string]interface{}{
 					"load": value1,
-					"temp": 60.0 + rand.Float64()*10.0,
+					"temp": 60.0 + randFloat64()*10.0,
 				},
 				"mem": map[string]interface{}{
-					"used": 1000 + rand.Intn(2000),
-					"free": 8000 + rand.Intn(2000),
+					"used": 1000 + randIntn(2000),
+					"free": 8000 + randIntn(2000),
 				},
 			},
 			"value1": value1,

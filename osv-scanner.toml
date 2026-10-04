@@ -1,0 +1,7 @@
+# Vulnerabilities with no upstream fix that only affect dev/build tooling.
+# Re-check on every security pass and drop entries once a fix ships.
+
+[[IgnoredVulns]]
+id = "GHSA-vfj7-8cjw-p6xm"
+ignoreUntil = 2027-01-04T00:00:00Z
+reason = "braces@3.0.3 (no fixed release) is pulled in only via micromatch by dev tooling (eslint-webpack-plugin, markdownlint-cli2, globby/fast-glob); it is not bundled into the plugin and never processes untrusted input."

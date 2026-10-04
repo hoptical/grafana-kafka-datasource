@@ -7,10 +7,11 @@ allowBuilds:
   unrs-resolver: true
 
 overrides:
-  dompurify: 3.4.12
-  fast-uri: 3.1.6
+  dompurify: 3.4.16
+  fast-uri: 3.1.8
   js-yaml: 4.3.2
-  qs: 6.15.2
+  qs: 6.16.0
   js-cookie: 3.0.7
   minimatch@<10.2.5: 10.2.5
   smol-toml: 1.7.1
+  brace-expansion@>=5.0.0 <5.0.12: 5.0.12

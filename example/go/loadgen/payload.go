@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"math/rand"
 	"strings"
 	"time"
 
@@ -79,11 +78,11 @@ func newJSONBuilder(extraFields int) payloadFunc {
 		payload := map[string]interface{}{
 			"id":         sensorID,
 			"seq":        seq,
-			"value":      rand.Float64() * 100,
+			"value":      randFloat64() * 100,
 			"sent_at_ns": time.Now().UnixNano(),
 		}
 		for i := 0; i < extraFields; i++ {
-			payload[fmt.Sprintf("field_%d", i)] = rand.Float64() * 100
+			payload[fmt.Sprintf("field_%d", i)] = randFloat64() * 100
 		}
 		return json.Marshal(payload)
 	}
@@ -98,7 +97,7 @@ func newAvroBuilder() (payloadFunc, error) {
 		native := map[string]interface{}{
 			"id":         sensorID,
 			"seq":        seq,
-			"value":      rand.Float64() * 100,
+			"value":      randFloat64() * 100,
 			"sent_at_ns": time.Now().UnixNano(),
 		}
 		return codec.BinaryFromNative(nil, native)
@@ -138,7 +137,7 @@ func newProtobufBuilder() (payloadFunc, error) {
 		msg := dynamicpb.NewMessage(msgDesc)
 		msg.Set(idField, protoreflect.ValueOfString(sensorID))
 		msg.Set(seqField, protoreflect.ValueOfInt64(seq))
-		msg.Set(valueField, protoreflect.ValueOfFloat64(rand.Float64()*100))
+		msg.Set(valueField, protoreflect.ValueOfFloat64(randFloat64()*100))
 		msg.Set(sentAtField, protoreflect.ValueOfInt64(time.Now().UnixNano()))
 		return proto.Marshal(msg)
 	}, nil
@@ -148,7 +147,7 @@ func newLineProtocolBuilder() payloadFunc {
 	return func(seq int64) ([]byte, error) {
 		line := fmt.Sprintf(
 			"loadgen,host=%s value=%f,seq=%di,sent_at_ns=%di %d\n",
-			sensorID, rand.Float64()*100, seq, time.Now().UnixNano(), time.Now().UnixNano(),
+			sensorID, randFloat64()*100, seq, time.Now().UnixNano(), time.Now().UnixNano(),
 		)
 		return []byte(line), nil
 	}
@@ -156,7 +155,7 @@ func newLineProtocolBuilder() payloadFunc {
 
 func newPlaintextBuilder() payloadFunc {
 	return func(seq int64) ([]byte, error) {
-		line := fmt.Sprintf("seq=%d value=%.4f sent_at_ns=%d", seq, rand.Float64()*100, time.Now().UnixNano())
+		line := fmt.Sprintf("seq=%d value=%.4f sent_at_ns=%d", seq, randFloat64()*100, time.Now().UnixNano())
 		return []byte(line), nil
 	}
 }
