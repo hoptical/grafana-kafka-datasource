@@ -43,10 +43,17 @@ const (
 // KafkaClientAPI abstracts the kafka client for easier testing.
 type KafkaClientAPI interface {
 	NewConnection() error
+	// EnsureConnection dials only when this client is not already connected.
+	EnsureConnection() error
 	GetTopicPartitions(ctx context.Context, topicName string) ([]int32, error)
 	GetTopics(ctx context.Context, prefix string, limit int) ([]string, error)
 	HealthCheck(ctx context.Context) error
 	NewStreamReader(ctx context.Context, topic string, partition int32, autoOffsetReset string, lastN int32) (*kafka.Reader, error)
+	// NewStreamReaderAtOffset starts a reader at an absolute partition offset.
+	NewStreamReaderAtOffset(ctx context.Context, topic string, partition int32, offset int64) (*kafka.Reader, error)
+	// SnapshotBounds returns the offset of the first message at or after from,
+	// and the exclusive high watermark captured when the query starts.
+	SnapshotBounds(ctx context.Context, topic string, partition int32, from time.Time) (start int64, highWatermark int64, err error)
 	ConsumerPull(ctx context.Context, reader *kafka.Reader, messageFormat string) (kafka_client.KafkaMessage, error)
 	Dispose()
 	// Avro-related methods
@@ -245,8 +252,6 @@ type queryModel struct {
 }
 
 const (
-	defaultSnapshotLastN   = int32(1)
-	defaultLastN           = int32(100)
 	maxSnapshotLastN       = int32(1000)
 	defaultSnapshotTimeout = 2 * time.Second
 )
@@ -293,26 +298,10 @@ func streamConfigFromQuery(qm queryModel) *StreamConfig {
 	return streamConfig
 }
 
-// snapshotOffsetAndLastN maps a dashboard streaming query onto a finite Kafka
-// read so Grafana Alerting (and other QueryData callers) can evaluate numeric
-// fields. Latest becomes last-1; last-N is capped; earliest is read from the
-// tail, not the topic start, so evaluations see current values.
-func snapshotOffsetAndLastN(qm queryModel) (string, int32) {
-	switch qm.AutoOffsetReset {
-	case "lastN":
-		n := qm.LastN
-		if n <= 0 {
-			n = defaultLastN
-		}
-		if n > maxSnapshotLastN {
-			n = maxSnapshotLastN
-		}
-		return "lastN", n
-	case "earliest":
-		return "lastN", maxSnapshotLastN
-	default:
-		return "lastN", defaultSnapshotLastN
-	}
+// snapshotMessageCap bounds an alerting read. The query time range selects the
+// window; latest, last-N, and earliest stay dashboard streaming controls.
+func snapshotMessageCap() int32 {
+	return maxSnapshotLastN
 }
 
 func snapshotTimeout(settings *kafka_client.Options) time.Duration {
@@ -356,6 +345,10 @@ func (d *KafkaDatasource) query(ctx context.Context, _ backend.PluginContext, qu
 		response.Error = errors.New("topicName is required")
 		return response
 	}
+	if qm.MessageFormat == "lineprotocol" {
+		response.Error = errors.New("line protocol is not supported for alerting yet")
+		return response
+	}
 
 	if qm.RefID == "" {
 		qm.RefID = query.RefID
@@ -365,7 +358,7 @@ func (d *KafkaDatasource) query(ctx context.Context, _ backend.PluginContext, qu
 	snapCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	if err := d.client.NewConnection(); err != nil {
+	if err := d.client.EnsureConnection(); err != nil {
 		response.Error = fmt.Errorf("failed to establish Kafka connection: %w", err)
 		return response
 	}
@@ -383,20 +376,18 @@ func (d *KafkaDatasource) query(ctx context.Context, _ backend.PluginContext, qu
 	}
 
 	streamConfig := streamConfigFromQuery(qm)
-	autoOffsetReset, lastN := snapshotOffsetAndLastN(qm)
-	streamConfig.AutoOffsetReset = autoOffsetReset
+	lastN := snapshotMessageCap()
 	streamConfig.LastN = lastN
-	qm.AutoOffsetReset = autoOffsetReset
-	qm.LastN = lastN
 
 	log.DefaultLogger.Debug("QueryData snapshot",
 		"topic", qm.Topic,
 		"partitions", partitions,
-		"autoOffsetReset", autoOffsetReset,
-		"lastN", lastN,
+		"from", query.TimeRange.From,
+		"to", query.TimeRange.To,
+		"messageCap", lastN,
 		"timeout", timeout.String())
 
-	messages, err := streamManager.CollectSnapshot(snapCtx, partitions, qm, streamConfig)
+	messages, err := streamManager.CollectSnapshot(snapCtx, partitions, qm, streamConfig, query.TimeRange.From, query.TimeRange.To)
 	if err != nil {
 		response.Error = err
 		return response
@@ -450,16 +441,17 @@ func wideSeriesForAlerting(frames data.Frames, selectedField string) data.Frames
 			if f == nil {
 				continue
 			}
+			name := f.Name
+			if name == "offset" || name == "partition" {
+				continue
+			}
 			ft := f.Type()
-			if ft.Time() {
+			if ft.Time() || ft == data.FieldTypeString || ft == data.FieldTypeNullableString ||
+				ft == data.FieldTypeBool || ft == data.FieldTypeNullableBool {
 				fields = append(fields, f)
 				continue
 			}
 			if !ft.Numeric() {
-				continue
-			}
-			name := f.Name
-			if name == "offset" || name == "partition" {
 				continue
 			}
 			if selectedField != "" && name != selectedField {
@@ -472,13 +464,18 @@ func wideSeriesForAlerting(frames data.Frames, selectedField string) data.Frames
 		}
 		nf := data.NewFrame(fr.Name, fields...)
 		nf.RefID = fr.RefID
-		meta := &data.FrameMeta{Type: data.FrameTypeTimeSeriesWide}
-		if fr.Meta != nil {
-			copied := *fr.Meta
-			copied.Type = data.FrameTypeTimeSeriesWide
-			meta = &copied
+		if nf.TimeSeriesSchema().Type == data.TimeSeriesTypeLong {
+			wide, err := data.LongToWide(nf, nil)
+			if err != nil {
+				log.DefaultLogger.Error("QueryData failed to convert alerting frame to wide series", "error", err)
+				continue
+			}
+			nf = wide
 		}
-		nf.Meta = meta
+		if nf.Meta == nil {
+			nf.Meta = &data.FrameMeta{}
+		}
+		nf.Meta.Type = data.FrameTypeTimeSeriesWide
 		out = append(out, nf)
 	}
 	return out

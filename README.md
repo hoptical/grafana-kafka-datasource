@@ -121,17 +121,11 @@ You can automatically configure the Kafka datasource using Grafana's provisionin
 
 ### Grafana Alerting
 
-Dashboard panels still stream over Grafana Live. Alert rules cannot subscribe to Live channels, so this plugin evaluates alerts from a **finite snapshot** of recent messages:
+Dashboard panels still stream over Grafana Live. Alert rules cannot subscribe to Live channels, so this plugin evaluates alerts from messages inside the rule's time range.
 
-- **Offset Reset = latest:** last message per selected partition
-- **Offset Reset = last N:** up to last N messages per partition
-- **Offset Reset = earliest:** reads from the current tail, not the topic start
+QueryData resolves each partition's start offset from the range start (`ListOffsets` by timestamp) and reads until that partition's high watermark. The read is capped at 1000 messages and eight concurrent partition readers. A message older than the range is dropped, so a producer that has stopped evaluates as **No data**. If the query deadline arrives before the high watermark, the evaluation is **Error** instead of a partial snapshot. Latest, last N, and earliest still control dashboard streaming. They do not define the alert window.
 
-Each evaluation is capped at 1000 messages total and eight concurrent partition
-readers. Message-timestamp snapshots are sorted before Reduce → Last runs.
-Broker read failures return **Error**, while an idle snapshot returns **No data**.
-
-Create a Grafana-managed alert from a panel or **Alerting → Alert rules**. QueryData returns **wide time series** only: string labels and Kafka `offset`/`partition` columns are dropped so Reduce expressions do not fail with `must be a wide series but got type long`. Set **Alert field** (`selectedField`) to the numeric payload field (for example `value1` or `metrics.cpu.load`), then Reduce → Last. If no messages arrive before the query timeout, the evaluation is **No data**. Dashboard Live streaming is unchanged.
+Line protocol is not supported for alerting yet. JSON, Avro, Protobuf, and plaintext return **wide time series**. String fields become series labels, and Kafka `offset`/`partition` columns are removed, so Reduce does not fail with `must be a wide series but got type long`. Set **Alert field** (`selectedField`) to the numeric payload field (for example `value1` or `metrics.cpu.load`), then Reduce → Last. That field is shown only in the alerting query editor. Dashboard Live streaming is unchanged.
 
 ## Supported JSON Structures
 

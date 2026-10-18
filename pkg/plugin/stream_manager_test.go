@@ -21,9 +21,27 @@ type mockStreamClient struct {
 	pullMessages  []kafka_client.KafkaMessage
 	pullErr       error
 	pullIndex     int
+	boundsSet     bool
+	boundsStart   int64
+	boundsHigh    int64
+	boundsErr     error
 }
 
-func (m *mockStreamClient) NewConnection() error { return nil }
+func (m *mockStreamClient) NewConnection() error    { return nil }
+func (m *mockStreamClient) EnsureConnection() error { return nil }
+func (m *mockStreamClient) SnapshotBounds(ctx context.Context, topic string, partition int32, from time.Time) (int64, int64, error) {
+	if m.boundsErr != nil {
+		return 0, 0, m.boundsErr
+	}
+	if m.boundsSet {
+		return m.boundsStart, m.boundsHigh, nil
+	}
+	start, high := defaultSnapshotBounds(m.pullMessages, m.pullErr != nil)
+	return start, high, nil
+}
+func (m *mockStreamClient) NewStreamReaderAtOffset(ctx context.Context, topic string, partition int32, offset int64) (*kafka.Reader, error) {
+	return m.NewStreamReader(ctx, topic, partition, "latest", 0)
+}
 func (m *mockStreamClient) GetTopics(ctx context.Context, prefix string, limit int) ([]string, error) {
 	return nil, nil
 }
@@ -68,6 +86,25 @@ func (m *mockStreamClient) GetSchemaRegistryUrl() string      { return "" }
 func (m *mockStreamClient) GetSchemaRegistryUsername() string { return "" }
 func (m *mockStreamClient) GetSchemaRegistryPassword() string { return "" }
 func (m *mockStreamClient) GetSubjectNamingStrategy() string  { return "recordName" }
+
+func defaultSnapshotBounds(messages []kafka_client.KafkaMessage, unread bool) (int64, int64) {
+	if len(messages) == 0 {
+		if unread {
+			return 0, 1
+		}
+		return 0, 0
+	}
+	high := int64(0)
+	for _, msg := range messages {
+		if msg.Offset+1 > high {
+			high = msg.Offset + 1
+		}
+	}
+	if high == 0 {
+		high = int64(len(messages))
+	}
+	return 0, high
+}
 
 func TestStreamManager_ValidateAndGetPartitions(t *testing.T) {
 	tests := []struct {
@@ -601,6 +638,8 @@ func TestReadSnapshotPartitionReturnsPullFailure(t *testing.T) {
 		queryModel{Topic: "sensors"},
 		&StreamConfig{MessageFormat: "json", AutoOffsetReset: "lastN"},
 		1,
+		time.Time{},
+		time.Time{},
 	)
 	if !errors.Is(err, want) {
 		t.Fatalf("readSnapshotPartition error = %v, want wrapped %v", err, want)

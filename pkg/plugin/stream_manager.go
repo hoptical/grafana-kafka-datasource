@@ -1133,20 +1133,23 @@ func (sm *StreamManager) ProcessMessage(
 	return frame, nil
 }
 
-// CollectSnapshot pulls a bounded number of recent messages from each partition
-// and returns when every reader has reached lastN, hit an idle timeout, or the
-// context is cancelled. Unlike StartPartitionReaders this always terminates,
-// which is required for Grafana Alerting QueryData evaluations.
+// CollectSnapshot reads messages inside window, stopping at each partition's
+// high watermark or the hard message cap. A deadline before the watermark is
+// an error. An empty window returns no messages so Grafana can evaluate No Data.
 func (sm *StreamManager) CollectSnapshot(
 	ctx context.Context,
 	partitions []int32,
 	qm queryModel,
 	config *StreamConfig,
+	from time.Time,
+	to time.Time,
 ) ([]messageWithPartition, error) {
 	lastN := config.LastN
 	if lastN <= 0 {
-		lastN = defaultSnapshotLastN
+		lastN = maxSnapshotLastN
 	}
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
 	type partitionResult struct {
 		msgs []messageWithPartition
@@ -1166,7 +1169,7 @@ func (sm *StreamManager) CollectSnapshot(
 				if limits[index] <= 0 {
 					continue
 				}
-				msgs, err := sm.readSnapshotPartition(ctx, partitions[index], qm, config, limits[index])
+				msgs, err := sm.readSnapshotPartition(ctx, partitions[index], qm, config, limits[index], from, to)
 				results <- partitionResult{msgs: msgs, err: err}
 			}
 		}()
@@ -1191,6 +1194,7 @@ func (sm *StreamManager) CollectSnapshot(
 	var all []messageWithPartition
 	for result := range results {
 		if result.err != nil {
+			cancel()
 			return nil, result.err
 		}
 		all = append(all, result.msgs...)
@@ -1233,20 +1237,51 @@ func snapshotPartitionLimits(partitionCount int, lastN int32) []int32 {
 	return limits
 }
 
+func messageInSnapshotWindow(ts, from, to time.Time) (include bool, stop bool) {
+	if ts.IsZero() {
+		return true, false
+	}
+	if !from.IsZero() && ts.Before(from) {
+		return false, false
+	}
+	if !to.IsZero() && ts.After(to) {
+		return false, true
+	}
+	return true, false
+}
+
 func (sm *StreamManager) readSnapshotPartition(
 	ctx context.Context,
 	partition int32,
 	qm queryModel,
 	config *StreamConfig,
 	lastN int32,
+	from time.Time,
+	to time.Time,
 ) ([]messageWithPartition, error) {
+	start, high, err := sm.client.SnapshotBounds(ctx, qm.Topic, partition, from)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve snapshot bounds for partition %d: %w", partition, err)
+	}
+	if start >= high {
+		log.DefaultLogger.Debug("Snapshot partition has no messages in range",
+			"topic", qm.Topic,
+			"partition", partition,
+			"start", start,
+			"highWatermark", high)
+		return nil, nil
+	}
+
 	log.DefaultLogger.Debug("Starting snapshot partition reader",
 		"topic", qm.Topic,
 		"partition", partition,
-		"autoOffsetReset", config.AutoOffsetReset,
-		"lastN", lastN)
+		"start", start,
+		"highWatermark", high,
+		"from", from,
+		"to", to,
+		"messageCap", lastN)
 
-	reader, err := sm.client.NewStreamReader(ctx, qm.Topic, partition, config.AutoOffsetReset, lastN)
+	reader, err := sm.client.NewStreamReaderAtOffset(ctx, qm.Topic, partition, start)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create stream reader for partition %d: %w", partition, err)
 	}
@@ -1259,28 +1294,33 @@ func (sm *StreamManager) readSnapshotPartition(
 	}
 
 	collected := make([]messageWithPartition, 0, lastN)
-	for len(collected) < int(lastN) {
+	next := start
+	for len(collected) < int(lastN) && next < high {
 		if err := ctx.Err(); err != nil {
-			return collected, nil
+			return nil, fmt.Errorf("snapshot partition %d timed out before high watermark %d: %w", partition, high, err)
 		}
 
 		msgCtx, msgCancel := context.WithTimeout(ctx, messageReadTimeout)
 		msg, err := sm.client.ConsumerPull(msgCtx, reader, config.MessageFormat)
 		msgCancel()
 		if err != nil {
-			if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
-				log.DefaultLogger.Debug("Snapshot partition idle or cancelled",
-					"partition", partition,
-					"collected", len(collected))
-				return collected, nil
+			if ctx.Err() != nil {
+				return nil, fmt.Errorf("snapshot partition %d timed out before high watermark %d: %w", partition, high, ctx.Err())
 			}
-			log.DefaultLogger.Debug("Snapshot partition stopped",
-				"partition", partition,
-				"collected", len(collected),
-				"error", err)
-			return collected, fmt.Errorf("failed to read snapshot partition %d: %w", partition, err)
+			return nil, fmt.Errorf("failed to read snapshot partition %d: %w", partition, err)
 		}
-		collected = append(collected, messageWithPartition{msg: msg, partition: partition})
+		if msg.Offset+1 > next {
+			next = msg.Offset + 1
+		} else {
+			next++
+		}
+		include, stop := messageInSnapshotWindow(msg.Timestamp, from, to)
+		if include {
+			collected = append(collected, messageWithPartition{msg: msg, partition: partition})
+		}
+		if stop || next >= high {
+			return collected, nil
+		}
 	}
 	return collected, nil
 }

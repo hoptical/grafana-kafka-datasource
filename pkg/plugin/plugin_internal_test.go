@@ -22,7 +22,14 @@ type internalMockClient struct {
 	schemaRegistryPassword string
 }
 
-func (m *internalMockClient) NewConnection() error { return nil }
+func (m *internalMockClient) NewConnection() error    { return nil }
+func (m *internalMockClient) EnsureConnection() error { return nil }
+func (m *internalMockClient) SnapshotBounds(ctx context.Context, topic string, partition int32, from time.Time) (int64, int64, error) {
+	return 0, 0, nil
+}
+func (m *internalMockClient) NewStreamReaderAtOffset(ctx context.Context, topic string, partition int32, offset int64) (*kafka.Reader, error) {
+	return nil, nil
+}
 
 func (m *internalMockClient) GetTopicPartitions(ctx context.Context, topicName string) ([]int32, error) {
 	return []int32{0}, nil
@@ -438,27 +445,26 @@ func TestProcessMessageToFrame_Branches(t *testing.T) {
 	})
 }
 
-func TestSnapshotOffsetAndLastN(t *testing.T) {
-	tests := []struct {
-		name    string
-		qm      queryModel
-		wantOff string
-		wantN   int32
-	}{
-		{name: "latest defaults to last 1", qm: queryModel{AutoOffsetReset: "latest"}, wantOff: "lastN", wantN: 1},
-		{name: "empty offset defaults to last 1", qm: queryModel{}, wantOff: "lastN", wantN: 1},
-		{name: "lastN uses requested N", qm: queryModel{AutoOffsetReset: "lastN", LastN: 25}, wantOff: "lastN", wantN: 25},
-		{name: "lastN zero uses default 100", qm: queryModel{AutoOffsetReset: "lastN"}, wantOff: "lastN", wantN: 100},
-		{name: "lastN is capped", qm: queryModel{AutoOffsetReset: "lastN", LastN: 5000}, wantOff: "lastN", wantN: 1000},
-		{name: "earliest snapshots the tail", qm: queryModel{AutoOffsetReset: "earliest"}, wantOff: "lastN", wantN: 1000},
+func TestSnapshotMessageCapIsIndependentOfOffsetMode(t *testing.T) {
+	if snapshotMessageCap() != maxSnapshotLastN {
+		t.Fatalf("snapshot cap = %d, want %d", snapshotMessageCap(), maxSnapshotLastN)
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			gotOff, gotN := snapshotOffsetAndLastN(tt.qm)
-			if gotOff != tt.wantOff || gotN != tt.wantN {
-				t.Fatalf("snapshotOffsetAndLastN() = %s,%d want %s,%d", gotOff, gotN, tt.wantOff, tt.wantN)
-			}
-		})
+}
+
+func TestMessageInSnapshotWindow(t *testing.T) {
+	from := time.Unix(1_700_000_000, 0).UTC()
+	to := from.Add(time.Hour)
+	include, stop := messageInSnapshotWindow(from.Add(-time.Minute), from, to)
+	if include || stop {
+		t.Fatalf("message before range include=%v stop=%v", include, stop)
+	}
+	include, stop = messageInSnapshotWindow(from.Add(time.Minute), from, to)
+	if !include || stop {
+		t.Fatalf("message inside range include=%v stop=%v", include, stop)
+	}
+	include, stop = messageInSnapshotWindow(to.Add(time.Second), from, to)
+	if include || !stop {
+		t.Fatalf("message after range include=%v stop=%v", include, stop)
 	}
 }
 

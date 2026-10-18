@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -34,6 +35,10 @@ type mockKafkaClient struct {
 	streamReaderErr  error
 	consumerMessages []kafka_client.KafkaMessage
 	consumerErr      error
+	boundsSet        bool
+	boundsStart      int64
+	boundsHigh       int64
+	boundsErr        error
 	// Avro-related fields
 	messageFormat             string
 	schemaRegistryUrl         string
@@ -42,7 +47,21 @@ type mockKafkaClient struct {
 	avroSubjectNamingStrategy string
 }
 
-func (m *mockKafkaClient) NewConnection() error { return m.newConnErr }
+func (m *mockKafkaClient) NewConnection() error    { return m.newConnErr }
+func (m *mockKafkaClient) EnsureConnection() error { return m.NewConnection() }
+func (m *mockKafkaClient) SnapshotBounds(ctx context.Context, topic string, partition int32, from time.Time) (int64, int64, error) {
+	if m.boundsErr != nil {
+		return 0, 0, m.boundsErr
+	}
+	if m.boundsSet {
+		return m.boundsStart, m.boundsHigh, nil
+	}
+	start, high := defaultSnapshotBounds(m.consumerMessages, m.consumerErr != nil)
+	return start, high, nil
+}
+func (m *mockKafkaClient) NewStreamReaderAtOffset(ctx context.Context, topic string, partition int32, offset int64) (*kafka.Reader, error) {
+	return m.NewStreamReader(ctx, topic, partition, "latest", 0)
+}
 func (m *mockKafkaClient) GetTopicPartitions(ctx context.Context, topicName string) ([]int32, error) {
 	if m.partitionsErr != nil {
 		return nil, m.partitionsErr
@@ -81,6 +100,25 @@ func (m *mockKafkaClient) ConsumerPull(ctx context.Context, reader *kafka.Reader
 	return msg, nil
 }
 func (m *mockKafkaClient) Dispose() {}
+
+func defaultSnapshotBounds(messages []kafka_client.KafkaMessage, unread bool) (int64, int64) {
+	if len(messages) == 0 {
+		if unread {
+			return 0, 1
+		}
+		return 0, 0
+	}
+	high := int64(0)
+	for _, msg := range messages {
+		if msg.Offset+1 > high {
+			high = msg.Offset + 1
+		}
+	}
+	if high == 0 {
+		high = int64(len(messages))
+	}
+	return 0, high
+}
 
 // Avro-related methods
 func (m *mockKafkaClient) GetMessageFormat() string          { return m.messageFormat }
@@ -213,21 +251,176 @@ func TestQueryData_DropsStringFieldsAndHonorsSelectedField(t *testing.T) {
 	if len(dr.Frames) != 1 {
 		t.Fatalf("expected 1 wide frame, got %d", len(dr.Frames))
 	}
-	names := fieldNames(dr.Frames[0])
+	frame := dr.Frames[0]
+	names := fieldNames(frame)
 	for _, name := range names {
 		if name == "host" || name == "humidity" || name == "offset" {
 			t.Fatalf("unexpected field %q in alerting frame %v", name, names)
 		}
 	}
-	if !containsName(names, "temperature") {
+	var temp *data.Field
+	for _, field := range frame.Fields {
+		if field.Name == "temperature" {
+			temp = field
+			break
+		}
+	}
+	if temp == nil {
 		t.Fatalf("missing temperature, have %v", names)
+	}
+	if temp.Labels["host"] != "srv-01" {
+		t.Fatalf("host label = %q, want srv-01", temp.Labels["host"])
+	}
+}
+
+func TestQueryData_MessageOlderThanTimeRangeIsNoData(t *testing.T) {
+	old := time.Unix(1_600_000_000, 0).UTC()
+	from := old.Add(24 * time.Hour)
+	mc := &mockKafkaClient{
+		partitions: []int32{0},
+		consumerMessages: []kafka_client.KafkaMessage{
+			{
+				Timestamp: old,
+				Offset:    7,
+				Value:     map[string]interface{}{"temperature": 1.0},
+			},
+		},
+	}
+	ds := plugin.NewWithClient(mc)
+	queryJSON, err := json.Marshal(map[string]interface{}{
+		"topicName":       "sensors",
+		"partition":       0,
+		"autoOffsetReset": "latest",
+		"messageFormat":   "json",
+		"timestampMode":   "message",
+		"refId":           "A",
+	})
+	if err != nil {
+		t.Fatalf("marshal query: %v", err)
+	}
+	resp, err := ds.QueryData(context.Background(), &backend.QueryDataRequest{
+		Queries: []backend.DataQuery{{
+			RefID: "A",
+			JSON:  queryJSON,
+			TimeRange: backend.TimeRange{
+				From: from,
+				To:   from.Add(5 * time.Minute),
+			},
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dr := resp.Responses["A"]
+	if dr.Error != nil {
+		t.Fatalf("message older than the time range should be No Data, got error: %v", dr.Error)
+	}
+	if len(dr.Frames) != 0 {
+		t.Fatalf("message older than the time range should return no frames, got %d", len(dr.Frames))
+	}
+}
+
+func TestQueryData_TimeRangeKeepsCurrentMessage(t *testing.T) {
+	ts := time.Unix(1_700_000_000, 0).UTC()
+	mc := &mockKafkaClient{
+		partitions: []int32{0},
+		consumerMessages: []kafka_client.KafkaMessage{
+			{
+				Timestamp: ts,
+				Offset:    9,
+				Value:     map[string]interface{}{"temperature": 23.5},
+			},
+		},
+	}
+	ds := plugin.NewWithClient(mc)
+	queryJSON, err := json.Marshal(map[string]interface{}{
+		"topicName":     "sensors",
+		"partition":     0,
+		"messageFormat": "json",
+		"timestampMode": "message",
+		"refId":         "A",
+	})
+	if err != nil {
+		t.Fatalf("marshal query: %v", err)
+	}
+	resp, err := ds.QueryData(context.Background(), &backend.QueryDataRequest{
+		Queries: []backend.DataQuery{{
+			RefID: "A",
+			JSON:  queryJSON,
+			TimeRange: backend.TimeRange{
+				From: ts.Add(-time.Minute),
+				To:   ts.Add(time.Minute),
+			},
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dr := resp.Responses["A"]
+	if dr.Error != nil {
+		t.Fatalf("in-range snapshot error: %v", dr.Error)
+	}
+	if len(dr.Frames) != 1 || dr.Frames[0].Rows() != 1 {
+		t.Fatalf("expected one in-range row, frames=%d", len(dr.Frames))
+	}
+}
+
+func TestQueryData_DeadlineBeforeWatermarkIsError(t *testing.T) {
+	mc := &mockKafkaClient{
+		partitions:  []int32{0},
+		consumerErr: context.DeadlineExceeded,
+		boundsSet:   true,
+		boundsStart: 0,
+		boundsHigh:  10,
+	}
+	ds := plugin.NewWithClient(mc)
+	queryJSON, err := json.Marshal(map[string]interface{}{
+		"topicName":     "sensors",
+		"partition":     0,
+		"messageFormat": "json",
+		"refId":         "A",
+	})
+	if err != nil {
+		t.Fatalf("marshal query: %v", err)
+	}
+	resp, err := ds.QueryData(context.Background(), &backend.QueryDataRequest{
+		Queries: []backend.DataQuery{{RefID: "A", JSON: queryJSON}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dr := resp.Responses["A"]
+	if dr.Error == nil {
+		t.Fatal("expected an error when the snapshot deadline arrives before the high watermark")
+	}
+}
+
+func TestQueryData_LineProtocolAlertingIsRejected(t *testing.T) {
+	ds := plugin.NewWithClient(&mockKafkaClient{partitions: []int32{0}})
+	queryJSON, err := json.Marshal(map[string]interface{}{
+		"topicName":     "metrics",
+		"partition":     0,
+		"messageFormat": "lineprotocol",
+		"refId":         "A",
+	})
+	if err != nil {
+		t.Fatalf("marshal query: %v", err)
+	}
+	resp, err := ds.QueryData(context.Background(), &backend.QueryDataRequest{
+		Queries: []backend.DataQuery{{RefID: "A", JSON: queryJSON}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dr := resp.Responses["A"]
+	if dr.Error == nil || !strings.Contains(dr.Error.Error(), "line protocol is not supported") {
+		t.Fatalf("line protocol error = %v", dr.Error)
 	}
 }
 
 func TestQueryData_EmptySnapshotWithSelectedFieldIsNoData(t *testing.T) {
 	mc := &mockKafkaClient{
-		partitions:  []int32{0},
-		consumerErr: context.DeadlineExceeded,
+		partitions: []int32{0},
 	}
 	ds := plugin.NewWithClient(mc)
 	queryJSON, err := json.Marshal(map[string]interface{}{

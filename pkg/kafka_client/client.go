@@ -493,6 +493,72 @@ func (client *KafkaClient) metadataForTopic(ctx context.Context, topicName strin
 	return &t, nil
 }
 
+// EnsureConnection dials the cluster only when this client has no dialer yet.
+// Alert evaluations use it so they do not replace the SASL mechanism under a live reader.
+func (client *KafkaClient) EnsureConnection() error {
+	if client.Dialer != nil && client.Conn != nil {
+		return nil
+	}
+	return client.NewConnection()
+}
+
+// SnapshotBounds resolves the first offset at or after from and the exclusive
+// high watermark. A start at or beyond the watermark means the partition has
+// no messages in the query window.
+func (client *KafkaClient) SnapshotBounds(ctx context.Context, topic string, partition int32, from time.Time) (int64, int64, error) {
+	if err := client.EnsureConnection(); err != nil {
+		return 0, 0, err
+	}
+	if len(client.Brokers) == 0 {
+		return 0, 0, fmt.Errorf("no brokers configured to read offsets")
+	}
+	offCtx := ctx
+	if client.Timeout > 0 {
+		var cancel context.CancelFunc
+		offCtx, cancel = context.WithTimeout(ctx, time.Duration(client.Timeout)*time.Millisecond)
+		defer cancel()
+	}
+	leaderConn, err := client.Dialer.DialLeader(offCtx, "tcp", client.Brokers[0], topic, int(partition))
+	if err != nil {
+		return 0, 0, fmt.Errorf("unable to dial leader: %w", err)
+	}
+	defer func() {
+		if closeErr := leaderConn.Close(); closeErr != nil {
+			grafanalog.DefaultLogger.Error("failed to close leader connection", "error", closeErr)
+		}
+	}()
+	high, err := leaderConn.ReadLastOffset()
+	if err != nil {
+		return 0, 0, fmt.Errorf("unable to read high watermark: %w", err)
+	}
+	start := int64(0)
+	if from.IsZero() {
+		start, err = leaderConn.ReadFirstOffset()
+	} else {
+		start, err = leaderConn.ReadOffset(from)
+	}
+	if err != nil {
+		return 0, 0, fmt.Errorf("unable to read offset for %s: %w", from.Format(time.RFC3339), err)
+	}
+	if start < 0 || start > high {
+		start = high
+	}
+	return start, high, nil
+}
+
+// NewStreamReaderAtOffset positions a reader at an absolute partition offset.
+func (client *KafkaClient) NewStreamReaderAtOffset(ctx context.Context, topic string, partition int32, offset int64) (*kafka.Reader, error) {
+	if err := client.EnsureConnection(); err != nil {
+		return nil, fmt.Errorf("failed to create connection: %w", err)
+	}
+	reader := client.newReader(topic, int(partition))
+	if err := reader.SetOffset(offset); err != nil {
+		_ = reader.Close()
+		return nil, fmt.Errorf("unable to set snapshot offset: %w", err)
+	}
+	return reader, nil
+}
+
 func (client *KafkaClient) NewStreamReader(ctx context.Context, topic string, partition int32, autoOffsetReset string, lastN int32) (*kafka.Reader, error) {
 	if client.Dialer == nil {
 		if err := client.NewConnection(); err != nil {
