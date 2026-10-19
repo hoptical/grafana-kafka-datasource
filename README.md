@@ -52,6 +52,7 @@ This plugin connects your Grafana instance directly to Kafka brokers, allowing y
 - Configurable flattening depth (default: 5)
 - Configurable max fields per message (default: 1000)
 - Customizable query aliases with placeholders
+- Grafana Alerting on a snapshot of recent topic messages
 
 ## Installation
 
@@ -117,6 +118,18 @@ You can automatically configure the Kafka datasource using Grafana's provisionin
 **Tip:** Numeric fields become time series, string fields are labels, arrays and nested objects are automatically flattened for visualization.
 
 <img src="https://raw.githubusercontent.com/hoptical/grafana-kafka-datasource/ba3d10342aca7512c5679fcd7761e5b394094598/src/img/query-json.png" alt="JSON query editor example" width="800">
+
+### Grafana Alerting
+
+Dashboard panels still stream over Grafana Live. Alert rules cannot subscribe to Live channels, so this plugin evaluates alerts from messages inside the rule's time range.
+
+QueryData resolves the partition offsets selected by the rule's time range (`ListOffsets` by timestamp). It returns the freshest bounded tail: up to 1000 messages across all selected partitions, with at most eight concurrent partition readers. Keeping the newest messages makes Reduce → Last evaluate the freshest available value instead of a value from the beginning of a busy range.
+
+The 1000-message cap is global and is divided across selected partitions. When a range contains more messages than that cap, Reduce → Min, Max, Mean, and Count describe only the returned tail, not the entire time range. This bound keeps alert evaluation memory, CPU, and broker reads predictable.
+
+A producer with no messages in the range evaluates as **No data**. If the query deadline arrives before the selected end offset, the evaluation is **Error** instead of a partial snapshot. Latest, last N, and earliest still control dashboard streaming. They do not define the alert window.
+
+Line protocol is not supported for alerting yet. JSON, Avro, Protobuf, and plaintext return **wide time series**. String fields become series labels, and Kafka `offset`/`partition` columns are removed, so Reduce does not fail with `must be a wide series but got type long`. Set **Alert field** (`selectedField`) to the numeric payload field (for example `value1` or `metrics.cpu.load`), then Reduce → Last. That field is shown only in the alerting query editor. Dashboard Live streaming is unchanged.
 
 ## Supported JSON Structures
 
@@ -262,6 +275,7 @@ The Avro and Protobuf schema caches remain bounded with a hardcoded default size
 - **What JSON formats are supported?** Flat, nested, arrays, mixed types.
 - **What is Plaintext format?** It bypasses schema decoding and renders raw payload bytes in a single `message` field.
 - **What is Line Protocol format?** It parses [InfluxDB Line Protocol](https://docs.influxdata.com/influxdb/v2/reference/syntax/line-protocol/) messages — `measurement,tag=val field=val timestamp`. Each Kafka message produces a single Grafana frame in **long format**, one row per LP field, with a fixed streaming-friendly schema: `Time | _measurement | _field | value | value_str | <one column per tag key> | offset`. This shape works correctly with Grafana Live streaming (consistent schema per channel), and you can pivot it into Influx-style per-series frames with Grafana's **Transform → Partition by values** on `_measurement` + `_field` for dashboards that were built around the InfluxDB datasource. The **Timestamp Precision** dropdown decides how inline timestamps are interpreted; `Auto-detect` picks ns/µs/ms/s from the magnitude.
+- **Can I use this with Grafana Alerting?** Yes. Alert rules evaluate a snapshot of recent messages (see Grafana Alerting above). Use Reduce → Last on a numeric field. Dashboard live streaming is unchanged.
 - **How do I generate test data?** Use the included Go or Python producers.
 - **Where do I find more help?** See this README or open an issue.
 
