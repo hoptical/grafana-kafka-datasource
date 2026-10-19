@@ -454,15 +454,6 @@ func TestQueryData_EmptySnapshotWithSelectedFieldIsNoData(t *testing.T) {
 	}
 }
 
-func containsName(names []string, want string) bool {
-	for _, n := range names {
-		if n == want {
-			return true
-		}
-	}
-	return false
-}
-
 func fieldNames(frame *data.Frame) []string {
 	names := make([]string, 0, len(frame.Fields))
 	for _, field := range frame.Fields {
