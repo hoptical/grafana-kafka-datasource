@@ -49,7 +49,7 @@ type mockKafkaClient struct {
 
 func (m *mockKafkaClient) NewConnection() error    { return m.newConnErr }
 func (m *mockKafkaClient) EnsureConnection() error { return m.NewConnection() }
-func (m *mockKafkaClient) SnapshotBounds(ctx context.Context, topic string, partition int32, from time.Time) (int64, int64, error) {
+func (m *mockKafkaClient) SnapshotBounds(ctx context.Context, topic string, partition int32, from, to time.Time) (int64, int64, error) {
 	if m.boundsErr != nil {
 		return 0, 0, m.boundsErr
 	}
@@ -60,6 +60,9 @@ func (m *mockKafkaClient) SnapshotBounds(ctx context.Context, topic string, part
 	return start, high, nil
 }
 func (m *mockKafkaClient) NewStreamReaderAtOffset(ctx context.Context, topic string, partition int32, offset int64) (*kafka.Reader, error) {
+	for len(m.consumerMessages) > 0 && m.consumerMessages[0].Offset < offset {
+		m.consumerMessages = m.consumerMessages[1:]
+	}
 	return m.NewStreamReader(ctx, topic, partition, "latest", 0)
 }
 func (m *mockKafkaClient) GetTopicPartitions(ctx context.Context, topicName string) ([]int32, error) {

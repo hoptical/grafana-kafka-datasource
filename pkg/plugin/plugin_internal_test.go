@@ -24,7 +24,7 @@ type internalMockClient struct {
 
 func (m *internalMockClient) NewConnection() error    { return nil }
 func (m *internalMockClient) EnsureConnection() error { return nil }
-func (m *internalMockClient) SnapshotBounds(ctx context.Context, topic string, partition int32, from time.Time) (int64, int64, error) {
+func (m *internalMockClient) SnapshotBounds(ctx context.Context, topic string, partition int32, from, to time.Time) (int64, int64, error) {
 	return 0, 0, nil
 }
 func (m *internalMockClient) NewStreamReaderAtOffset(ctx context.Context, topic string, partition int32, offset int64) (*kafka.Reader, error) {
@@ -463,8 +463,29 @@ func TestMessageInSnapshotWindow(t *testing.T) {
 		t.Fatalf("message inside range include=%v stop=%v", include, stop)
 	}
 	include, stop = messageInSnapshotWindow(to.Add(time.Second), from, to)
-	if include || !stop {
+	if include || stop {
 		t.Fatalf("message after range include=%v stop=%v", include, stop)
+	}
+}
+
+func TestSnapshotTailStart(t *testing.T) {
+	tests := []struct {
+		name       string
+		start      int64
+		end        int64
+		messageCap int32
+		want       int64
+	}{
+		{name: "window below cap", start: 10, end: 15, messageCap: 10, want: 10},
+		{name: "window above cap", start: 10, end: 30, messageCap: 5, want: 25},
+		{name: "tail clamped to range start", start: 10, end: 12, messageCap: 5, want: 10},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := snapshotTailStart(tt.start, tt.end, tt.messageCap); got != tt.want {
+				t.Fatalf("snapshotTailStart() = %d, want %d", got, tt.want)
+			}
+		})
 	}
 }
 

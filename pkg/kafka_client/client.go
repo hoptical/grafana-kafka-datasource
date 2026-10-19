@@ -502,10 +502,9 @@ func (client *KafkaClient) EnsureConnection() error {
 	return client.NewConnection()
 }
 
-// SnapshotBounds resolves the first offset at or after from and the exclusive
-// high watermark. A start at or beyond the watermark means the partition has
-// no messages in the query window.
-func (client *KafkaClient) SnapshotBounds(ctx context.Context, topic string, partition int32, from time.Time) (int64, int64, error) {
+// SnapshotBounds resolves the offset range selected by the query time range.
+// The end is exclusive and never exceeds the high watermark captured here.
+func (client *KafkaClient) SnapshotBounds(ctx context.Context, topic string, partition int32, from, to time.Time) (int64, int64, error) {
 	if err := client.EnsureConnection(); err != nil {
 		return 0, 0, err
 	}
@@ -543,7 +542,19 @@ func (client *KafkaClient) SnapshotBounds(ctx context.Context, topic string, par
 	if start < 0 || start > high {
 		start = high
 	}
-	return start, high, nil
+	end := high
+	if !to.IsZero() {
+		// Kafka timestamps have millisecond precision. Move the exclusive lookup
+		// one millisecond forward so a record stamped exactly at To is included.
+		end, err = leaderConn.ReadOffset(to.Add(time.Millisecond))
+		if err != nil {
+			return 0, 0, fmt.Errorf("unable to read offset for %s: %w", to.Format(time.RFC3339), err)
+		}
+		if end < 0 || end > high {
+			end = high
+		}
+	}
+	return start, end, nil
 }
 
 // NewStreamReaderAtOffset positions a reader at an absolute partition offset.

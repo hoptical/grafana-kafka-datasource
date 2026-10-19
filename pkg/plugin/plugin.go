@@ -51,9 +51,8 @@ type KafkaClientAPI interface {
 	NewStreamReader(ctx context.Context, topic string, partition int32, autoOffsetReset string, lastN int32) (*kafka.Reader, error)
 	// NewStreamReaderAtOffset starts a reader at an absolute partition offset.
 	NewStreamReaderAtOffset(ctx context.Context, topic string, partition int32, offset int64) (*kafka.Reader, error)
-	// SnapshotBounds returns the offset of the first message at or after from,
-	// and the exclusive high watermark captured when the query starts.
-	SnapshotBounds(ctx context.Context, topic string, partition int32, from time.Time) (start int64, highWatermark int64, err error)
+	// SnapshotBounds returns the offset range selected by the query time range.
+	SnapshotBounds(ctx context.Context, topic string, partition int32, from, to time.Time) (start int64, end int64, err error)
 	ConsumerPull(ctx context.Context, reader *kafka.Reader, messageFormat string) (kafka_client.KafkaMessage, error)
 	Dispose()
 	// Avro-related methods
