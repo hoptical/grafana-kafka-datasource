@@ -29,6 +29,6 @@ jobs:
           # save the value in your repository secrets
           policy_token: ${{ secrets.GRAFANA_ACCESS_POLICY_TOKEN }}
           go-version: '1.26.8'
-          node-version: '22.x'
+          node-version: '24.x'
           use_changelog_generator: false
           attestation: true
