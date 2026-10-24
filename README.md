@@ -129,6 +129,8 @@ The 1000-message cap is global and is divided across selected partitions. When a
 
 A producer with no messages in the range evaluates as **No data**. If the query deadline arrives before the selected end offset, the evaluation is **Error** instead of a partial snapshot. Latest, last N, and earliest still control dashboard streaming. They do not define the alert window.
 
+Topics written by transactional (exactly-once) producers are supported. The snapshot reads committed data up to the partition's last stable offset, so an open transaction or a trailing COMMIT/ABORT marker does not stall the evaluation.
+
 Line protocol is not supported for alerting yet. JSON, Avro, Protobuf, and plaintext return **wide time series**. String fields become series labels, and Kafka `offset`/`partition` columns are removed, so Reduce does not fail with `must be a wide series but got type long`. Set **Alert field** (`selectedField`) to the numeric payload field (for example `value1` or `metrics.cpu.load`), then Reduce → Last. That field is shown only in the alerting query editor. Dashboard Live streaming is unchanged.
 
 ## Supported JSON Structures

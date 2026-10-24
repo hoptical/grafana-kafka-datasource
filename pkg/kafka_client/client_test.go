@@ -851,6 +851,89 @@ func TestConsumerPull_SkipsControlRecord(t *testing.T) {
 	}
 }
 
+func TestSnapshotPull(t *testing.T) {
+	commitKey := []byte{0x00, 0x00, 0x00, 0x01}              // version=0, type=COMMIT
+	abortKey := []byte{0x00, 0x00, 0x00, 0x00}               // version=0, type=ABORT
+	controlVal := []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x05} // epoch=5
+	data := func(offset int64) kafka.Message {
+		return kafka.Message{Topic: "t", Offset: offset, Value: []byte(`{"v":1}`)}
+	}
+
+	type step struct {
+		offset int64
+		done   bool
+	}
+	tests := []struct {
+		name     string
+		messages []kafka.Message
+		end      int64
+		want     []step
+	}{
+		{
+			name:     "commit marker at the tail ends the snapshot without another read",
+			messages: []kafka.Message{data(0), data(1), {Offset: 2, Key: commitKey, Value: controlVal}},
+			end:      3,
+			want:     []step{{offset: 0}, {offset: 1}, {done: true}},
+		},
+		{
+			name:     "only an abort marker in range is done with no messages",
+			messages: []kafka.Message{{Offset: 7, Key: abortKey, Value: controlVal}},
+			end:      8,
+			want:     []step{{done: true}},
+		},
+		{
+			name:     "marker in the middle is skipped and reading continues",
+			messages: []kafka.Message{{Offset: 4, Key: commitKey, Value: controlVal}, data(5)},
+			end:      7,
+			want:     []step{{offset: 5}},
+		},
+		{
+			name:     "message at or past end is done",
+			messages: []kafka.Message{data(9)},
+			end:      9,
+			want:     []step{{done: true}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := NewKafkaClient(Options{BootstrapServers: "localhost:9092"})
+			// The stub returns context.Canceled once drained, so an extra read fails the test.
+			reader := &stubMessageReader{messages: tt.messages}
+			for i, want := range tt.want {
+				msg, done, err := client.snapshotPull(context.Background(), reader, "json", tt.end)
+				if err != nil {
+					t.Fatalf("step %d: unexpected error: %v", i, err)
+				}
+				if done != want.done {
+					t.Fatalf("step %d: done = %v, want %v", i, done, want.done)
+				}
+				if !done && msg.Offset != want.offset {
+					t.Fatalf("step %d: offset = %d, want %d", i, msg.Offset, want.offset)
+				}
+				if !done && msg.Value == nil {
+					t.Fatalf("step %d: expected decoded value", i)
+				}
+			}
+			if reader.idx != len(tt.messages) {
+				t.Fatalf("read %d of %d scripted messages", reader.idx, len(tt.messages))
+			}
+		})
+	}
+}
+
+func TestSnapshotPull_ReadErrorIsReturned(t *testing.T) {
+	client := NewKafkaClient(Options{BootstrapServers: "localhost:9092"})
+	want := errors.New("broker unavailable")
+	_, done, err := client.snapshotPull(context.Background(), &stubMessageReader{err: want}, "json", 10)
+	if !errors.Is(err, want) {
+		t.Fatalf("error = %v, want wrapped %v", err, want)
+	}
+	if done {
+		t.Fatal("a read error must not report done")
+	}
+}
+
 func TestKafkaClient_GetTopicPartitions(t *testing.T) {
 	client := NewKafkaClient(Options{BootstrapServers: "localhost:9092"})
 	err := client.NewConnection()

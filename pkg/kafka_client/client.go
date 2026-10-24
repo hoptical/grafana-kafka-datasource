@@ -24,6 +24,13 @@ const debugLogLevel = "debug"
 const errorLogLevel = "error"
 const dialerTimeout = 10 * time.Second // Fallback dialer timeout when user timeout not set
 const defaultTimeoutMs = 2000          // Fallback general timeout (health check) in ms if user timeout not provided
+
+// snapshotReaderMaxWait bounds how long an alert snapshot reader's background
+// fetch long-polls the broker once it reaches the end of the log. Reader.Close
+// waits for that fetch, so the kafka-go default (10s) would stall every
+// evaluation of an idle topic past the snapshot deadline.
+const snapshotReaderMaxWait = 250 * time.Millisecond
+
 // Kafka transaction end-marker record key layout (4 bytes):
 //
 //	version (int16) + controlType (int16)
@@ -459,6 +466,12 @@ func (client *KafkaClient) NewConnection() error {
 }
 
 func (client *KafkaClient) newReader(topic string, partition int) *kafka.Reader {
+	return client.newReaderWithMaxWait(topic, partition, 0)
+}
+
+// newReaderWithMaxWait builds a partition reader. A zero maxWait keeps the
+// kafka-go default, which suits long-lived streaming readers.
+func (client *KafkaClient) newReaderWithMaxWait(topic string, partition int, maxWait time.Duration) *kafka.Reader {
 	logger, errorLogger := getKafkaLogger(client.LogLevel)
 	return kafka.NewReader(kafka.ReaderConfig{
 		Brokers:        client.Brokers,
@@ -467,6 +480,7 @@ func (client *KafkaClient) newReader(topic string, partition int) *kafka.Reader 
 		Dialer:         client.Dialer,
 		IsolationLevel: kafka.ReadCommitted,
 		CommitInterval: 0,
+		MaxWait:        maxWait,
 		Logger:         logger,
 		ErrorLogger:    errorLogger,
 	})
@@ -503,7 +517,9 @@ func (client *KafkaClient) EnsureConnection() error {
 }
 
 // SnapshotBounds resolves the offset range selected by the query time range.
-// The end is exclusive and never exceeds the high watermark captured here.
+// The end is exclusive and never exceeds the last stable offset captured here.
+// A ReadCommitted reader cannot read past the LSO, so using the high watermark
+// would make a snapshot wait for records held back by an open transaction.
 func (client *KafkaClient) SnapshotBounds(ctx context.Context, topic string, partition int32, from, to time.Time) (int64, int64, error) {
 	if err := client.EnsureConnection(); err != nil {
 		return 0, 0, err
@@ -526,9 +542,9 @@ func (client *KafkaClient) SnapshotBounds(ctx context.Context, topic string, par
 			grafanalog.DefaultLogger.Error("failed to close leader connection", "error", closeErr)
 		}
 	}()
-	high, err := leaderConn.ReadLastOffset()
+	high, err := client.lastStableOffset(offCtx, topic, partition)
 	if err != nil {
-		return 0, 0, fmt.Errorf("unable to read high watermark: %w", err)
+		return 0, 0, err
 	}
 	start := int64(0)
 	if from.IsZero() {
@@ -557,12 +573,38 @@ func (client *KafkaClient) SnapshotBounds(ctx context.Context, topic string, par
 	return start, end, nil
 }
 
+// lastStableOffset returns the partition's last stable offset. Brokers without
+// ListOffsets v2 ignore the isolation level and return the high watermark.
+func (client *KafkaClient) lastStableOffset(ctx context.Context, topic string, partition int32) (int64, error) {
+	resp, err := client.Conn.ListOffsets(ctx, &kafka.ListOffsetsRequest{
+		Topics:         map[string][]kafka.OffsetRequest{topic: {kafka.LastOffsetOf(int(partition))}},
+		IsolationLevel: kafka.ReadCommitted,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("unable to read last stable offset: %w", err)
+	}
+	for _, p := range resp.Topics[topic] {
+		if p.Partition != int(partition) {
+			continue
+		}
+		if p.Error != nil {
+			return 0, fmt.Errorf("unable to read last stable offset: %w", p.Error)
+		}
+		return p.LastOffset, nil
+	}
+	return 0, fmt.Errorf("unable to read last stable offset: no result for partition %d", partition)
+}
+
 // NewStreamReaderAtOffset positions a reader at an absolute partition offset.
+// It is meant for short-lived alert snapshots: the reader polls the broker with
+// snapshotReaderMaxWait so Close returns promptly. Do not use it for long-lived
+// streaming, where that short wait would poll an idle partition several times
+// a second.
 func (client *KafkaClient) NewStreamReaderAtOffset(ctx context.Context, topic string, partition int32, offset int64) (*kafka.Reader, error) {
 	if err := client.EnsureConnection(); err != nil {
 		return nil, fmt.Errorf("failed to create connection: %w", err)
 	}
-	reader := client.newReader(topic, int(partition))
+	reader := client.newReaderWithMaxWait(topic, int(partition), snapshotReaderMaxWait)
 	if err := reader.SetOffset(offset); err != nil {
 		_ = reader.Close()
 		return nil, fmt.Errorf("unable to set snapshot offset: %w", err)
@@ -657,76 +699,116 @@ type messageReader interface {
 
 func (client *KafkaClient) consumerPull(ctx context.Context, reader messageReader, messageFormat string) (KafkaMessage, error) {
 	for {
-		var message KafkaMessage
 		msg, err := reader.ReadMessage(ctx)
 		if err != nil {
-			return message, fmt.Errorf("error reading message from Kafka: %w", err)
+			return KafkaMessage{}, fmt.Errorf("error reading message from Kafka: %w", err)
 		}
 
 		// Skip broker-generated transaction control records (COMMIT/ABORT
 		// markers). The kafka-go Reader does not filter these automatically,
 		// so we detect them via their protocol-defined key structure.
 		if isTransactionControlRecord(msg.Key, msg.Value) {
-			grafanalog.DefaultLogger.Debug("Skipping transaction control record",
-				"topic", msg.Topic,
-				"partition", msg.Partition,
-				"offset", msg.Offset,
-				"keyBytes", fmt.Sprintf("%x", msg.Key),
-				"valueLength", len(msg.Value))
+			logSkippedControlRecord(msg)
 			continue
 		}
 
-		grafanalog.DefaultLogger.Debug("Received Kafka message",
-			"topic", msg.Topic,
-			"partition", msg.Partition,
-			"offset", msg.Offset,
-			"valueLength", len(msg.Value),
-			"timestamp", msg.Time,
-			"messageFormat", messageFormat)
-
-		// Store raw bytes for potential Avro decoding
-		message.RawValue = msg.Value
-
-		// Capture message key (will be decoded later based on config)
-		message.RawKey = msg.Key
-		if len(msg.Key) > 0 {
-			grafanalog.DefaultLogger.Debug("Message key present",
-				"keyLength", len(msg.Key))
-		}
-
-		// Log first few bytes for debugging
-		if len(msg.Value) > 0 {
-			preview := msg.Value
-			if len(preview) > 20 {
-				preview = preview[:20]
-			}
-			grafanalog.DefaultLogger.Debug("Message content preview",
-				"firstBytes", fmt.Sprintf("%x", preview),
-				"firstChars", string(preview))
-		}
-
-		// Decode message value based on format
-		value, err := client.decodeMessageValue(msg.Value, messageFormat)
-		if err != nil {
-			message.Error = err
-			message.Value = nil
-		} else {
-			message.Value = value
-		}
-
-		message.Offset = msg.Offset
-		message.Timestamp = msg.Time
-
-		grafanalog.DefaultLogger.Debug("Message processing complete",
-			"hasParsedValue", message.Value != nil,
-			"rawValueLength", len(message.RawValue))
-
-		return message, nil
+		return client.toKafkaMessage(msg, messageFormat), nil
 	}
+}
+
+// snapshotPull reads the next visible message below end. It reports done when
+// the reader reaches end, including when the last record before end is a
+// transaction control record. Without that, a partition whose tail is a COMMIT
+// marker would block waiting for a message that never arrives below end.
+func (client *KafkaClient) snapshotPull(ctx context.Context, reader messageReader, messageFormat string, end int64) (KafkaMessage, bool, error) {
+	for {
+		msg, err := reader.ReadMessage(ctx)
+		if err != nil {
+			return KafkaMessage{}, false, fmt.Errorf("error reading message from Kafka: %w", err)
+		}
+		if msg.Offset >= end {
+			return KafkaMessage{}, true, nil
+		}
+		if isTransactionControlRecord(msg.Key, msg.Value) {
+			logSkippedControlRecord(msg)
+			if msg.Offset+1 >= end {
+				return KafkaMessage{}, true, nil
+			}
+			continue
+		}
+		return client.toKafkaMessage(msg, messageFormat), false, nil
+	}
+}
+
+func logSkippedControlRecord(msg kafka.Message) {
+	grafanalog.DefaultLogger.Debug("Skipping transaction control record",
+		"topic", msg.Topic,
+		"partition", msg.Partition,
+		"offset", msg.Offset,
+		"keyBytes", fmt.Sprintf("%x", msg.Key),
+		"valueLength", len(msg.Value))
+}
+
+// toKafkaMessage decodes a visible Kafka record into a KafkaMessage.
+func (client *KafkaClient) toKafkaMessage(msg kafka.Message, messageFormat string) KafkaMessage {
+	var message KafkaMessage
+
+	grafanalog.DefaultLogger.Debug("Received Kafka message",
+		"topic", msg.Topic,
+		"partition", msg.Partition,
+		"offset", msg.Offset,
+		"valueLength", len(msg.Value),
+		"timestamp", msg.Time,
+		"messageFormat", messageFormat)
+
+	// Store raw bytes for potential Avro decoding
+	message.RawValue = msg.Value
+
+	// Capture message key (will be decoded later based on config)
+	message.RawKey = msg.Key
+	if len(msg.Key) > 0 {
+		grafanalog.DefaultLogger.Debug("Message key present",
+			"keyLength", len(msg.Key))
+	}
+
+	// Log first few bytes for debugging
+	if len(msg.Value) > 0 {
+		preview := msg.Value
+		if len(preview) > 20 {
+			preview = preview[:20]
+		}
+		grafanalog.DefaultLogger.Debug("Message content preview",
+			"firstBytes", fmt.Sprintf("%x", preview),
+			"firstChars", string(preview))
+	}
+
+	// Decode message value based on format
+	value, err := client.decodeMessageValue(msg.Value, messageFormat)
+	if err != nil {
+		message.Error = err
+		message.Value = nil
+	} else {
+		message.Value = value
+	}
+
+	message.Offset = msg.Offset
+	message.Timestamp = msg.Time
+
+	grafanalog.DefaultLogger.Debug("Message processing complete",
+		"hasParsedValue", message.Value != nil,
+		"rawValueLength", len(message.RawValue))
+
+	return message
 }
 
 func (client *KafkaClient) ConsumerPull(ctx context.Context, reader *kafka.Reader, messageFormat string) (KafkaMessage, error) {
 	return client.consumerPull(ctx, reader, messageFormat)
+}
+
+// SnapshotPull reads the next visible message below end for alert snapshots.
+// done is true once the reader has reached end.
+func (client *KafkaClient) SnapshotPull(ctx context.Context, reader *kafka.Reader, messageFormat string, end int64) (KafkaMessage, bool, error) {
+	return client.snapshotPull(ctx, reader, messageFormat, end)
 }
 
 func (client *KafkaClient) HealthCheck(ctx context.Context) error {

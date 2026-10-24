@@ -1314,7 +1314,7 @@ func (sm *StreamManager) readSnapshotPartition(
 		}
 
 		msgCtx, msgCancel := context.WithTimeout(ctx, messageReadTimeout)
-		msg, err := sm.client.ConsumerPull(msgCtx, reader, config.MessageFormat)
+		msg, done, err := sm.client.SnapshotPull(msgCtx, reader, config.MessageFormat, end)
 		msgCancel()
 		if err != nil {
 			if ctx.Err() != nil {
@@ -1322,7 +1322,7 @@ func (sm *StreamManager) readSnapshotPartition(
 			}
 			return nil, fmt.Errorf("failed to read snapshot partition %d: %w", partition, err)
 		}
-		if msg.Offset >= end {
+		if done || msg.Offset >= end {
 			return collected, nil
 		}
 		if msg.Offset+1 > next {
