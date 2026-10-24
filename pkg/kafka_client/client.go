@@ -596,6 +596,10 @@ func (client *KafkaClient) lastStableOffset(ctx context.Context, topic string, p
 }
 
 // NewStreamReaderAtOffset positions a reader at an absolute partition offset.
+// It is meant for short-lived alert snapshots: the reader polls the broker with
+// snapshotReaderMaxWait so Close returns promptly. Do not use it for long-lived
+// streaming, where that short wait would poll an idle partition several times
+// a second.
 func (client *KafkaClient) NewStreamReaderAtOffset(ctx context.Context, topic string, partition int32, offset int64) (*kafka.Reader, error) {
 	if err := client.EnsureConnection(); err != nil {
 		return nil, fmt.Errorf("failed to create connection: %w", err)
