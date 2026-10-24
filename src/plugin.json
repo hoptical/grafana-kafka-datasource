@@ -5,6 +5,7 @@
   "id": "hamedkarbasi93-kafka-datasource",
   "metrics": true,
   "backend": true,
+  "alerting": true,
   "executable": "gpx_kafka-datasource",
   "info": {
     "description": "Kafka Datasource Plugin",

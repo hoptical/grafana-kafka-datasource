@@ -21,9 +21,33 @@ type mockStreamClient struct {
 	pullMessages  []kafka_client.KafkaMessage
 	pullErr       error
 	pullIndex     int
+	boundsSet     bool
+	boundsStart   int64
+	boundsHigh    int64
+	boundsErr     error
+	readerOffset  int64
 }
 
-func (m *mockStreamClient) NewConnection() error { return nil }
+func (m *mockStreamClient) NewConnection() error    { return nil }
+func (m *mockStreamClient) EnsureConnection() error { return nil }
+func (m *mockStreamClient) SnapshotBounds(ctx context.Context, topic string, partition int32, from, to time.Time) (int64, int64, error) {
+	if m.boundsErr != nil {
+		return 0, 0, m.boundsErr
+	}
+	if m.boundsSet {
+		return m.boundsStart, m.boundsHigh, nil
+	}
+	start, high := defaultSnapshotBounds(m.pullMessages, m.pullErr != nil)
+	return start, high, nil
+}
+func (m *mockStreamClient) NewStreamReaderAtOffset(ctx context.Context, topic string, partition int32, offset int64) (*kafka.Reader, error) {
+	m.readerOffset = offset
+	m.pullIndex = 0
+	for m.pullIndex < len(m.pullMessages) && m.pullMessages[m.pullIndex].Offset < offset {
+		m.pullIndex++
+	}
+	return m.NewStreamReader(ctx, topic, partition, "latest", 0)
+}
 func (m *mockStreamClient) GetTopics(ctx context.Context, prefix string, limit int) ([]string, error) {
 	return nil, nil
 }
@@ -68,6 +92,25 @@ func (m *mockStreamClient) GetSchemaRegistryUrl() string      { return "" }
 func (m *mockStreamClient) GetSchemaRegistryUsername() string { return "" }
 func (m *mockStreamClient) GetSchemaRegistryPassword() string { return "" }
 func (m *mockStreamClient) GetSubjectNamingStrategy() string  { return "recordName" }
+
+func defaultSnapshotBounds(messages []kafka_client.KafkaMessage, unread bool) (int64, int64) {
+	if len(messages) == 0 {
+		if unread {
+			return 0, 1
+		}
+		return 0, 0
+	}
+	high := int64(0)
+	for _, msg := range messages {
+		if msg.Offset+1 > high {
+			high = msg.Offset + 1
+		}
+	}
+	if high == 0 {
+		high = int64(len(messages))
+	}
+	return 0, high
+}
 
 func TestStreamManager_ValidateAndGetPartitions(t *testing.T) {
 	tests := []struct {
@@ -543,6 +586,139 @@ func TestStreamManager_HandleTopicError(t *testing.T) {
 	}
 	if !errors.Is(err, generalErr) {
 		t.Error("Expected wrapped general error")
+	}
+}
+
+func TestSnapshotPartitionLimitsBoundTotalAndPreservePerPartitionLimit(t *testing.T) {
+	limits := snapshotPartitionLimits(16, 1000)
+	if len(limits) != 16 {
+		t.Fatalf("got %d limits, want 16", len(limits))
+	}
+	total := int32(0)
+	for _, limit := range limits {
+		if limit > 1000 {
+			t.Fatalf("partition limit %d exceeds lastN", limit)
+		}
+		total += limit
+	}
+	if total != maxSnapshotMessages {
+		t.Fatalf("total snapshot budget = %d, want %d", total, maxSnapshotMessages)
+	}
+
+	small := snapshotPartitionLimits(3, 2)
+	if got := small[0] + small[1] + small[2]; got != 6 {
+		t.Fatalf("uncapped total = %d, want 6", got)
+	}
+}
+
+func TestReadSnapshotPartitionKeepsFreshestBoundedTail(t *testing.T) {
+	base := time.Unix(1_700_000_000, 0).UTC()
+	messages := make([]kafka_client.KafkaMessage, 5)
+	for i := range messages {
+		messages[i] = kafka_client.KafkaMessage{
+			Offset:    int64(i),
+			Timestamp: base.Add(time.Duration(i) * time.Minute),
+		}
+	}
+	client := &mockStreamClient{
+		pullMessages: messages,
+		boundsSet:    true,
+		boundsStart:  0,
+		boundsHigh:   5,
+	}
+	sm := NewStreamManager(client, 5, 1000)
+
+	got, err := sm.readSnapshotPartition(
+		context.Background(),
+		0,
+		queryModel{Topic: "sensors"},
+		&StreamConfig{MessageFormat: "json"},
+		2,
+		base,
+		base.Add(4*time.Minute),
+	)
+	if err != nil {
+		t.Fatalf("readSnapshotPartition returned error: %v", err)
+	}
+	if client.readerOffset != 3 {
+		t.Fatalf("reader offset = %d, want 3", client.readerOffset)
+	}
+	if len(got) != 2 {
+		t.Fatalf("snapshot length = %d, want 2", len(got))
+	}
+	if got[0].msg.Offset != 3 || got[1].msg.Offset != 4 {
+		t.Fatalf("snapshot offsets = [%d %d], want [3 4]", got[0].msg.Offset, got[1].msg.Offset)
+	}
+}
+
+func TestReadSnapshotPartitionContinuesPastOutOfOrderTimestamp(t *testing.T) {
+	base := time.Unix(1_700_000_000, 0).UTC()
+	client := &mockStreamClient{
+		pullMessages: []kafka_client.KafkaMessage{
+			{Offset: 0, Timestamp: base.Add(2 * time.Hour)},
+			{Offset: 1, Timestamp: base.Add(30 * time.Minute)},
+		},
+		boundsSet:   true,
+		boundsStart: 0,
+		boundsHigh:  2,
+	}
+	sm := NewStreamManager(client, 5, 1000)
+
+	got, err := sm.readSnapshotPartition(
+		context.Background(),
+		0,
+		queryModel{Topic: "sensors"},
+		&StreamConfig{MessageFormat: "json"},
+		2,
+		base,
+		base.Add(time.Hour),
+	)
+	if err != nil {
+		t.Fatalf("readSnapshotPartition returned error: %v", err)
+	}
+	if len(got) != 1 || got[0].msg.Offset != 1 {
+		t.Fatalf("snapshot = %#v, want only offset 1", got)
+	}
+}
+
+func TestSortSnapshotMessagesByTimestampUnlessNow(t *testing.T) {
+	base := time.Unix(1700000000, 0).UTC()
+	messages := []messageWithPartition{
+		{msg: kafka_client.KafkaMessage{Timestamp: base.Add(2 * time.Second), Offset: 2}},
+		{msg: kafka_client.KafkaMessage{Timestamp: base, Offset: 0}},
+		{msg: kafka_client.KafkaMessage{Timestamp: base.Add(time.Second), Offset: 1}},
+	}
+	sortSnapshotMessages(messages, "message")
+	for i, message := range messages {
+		if message.msg.Offset != int64(i) {
+			t.Fatalf("sorted offset[%d] = %d, want %d", i, message.msg.Offset, i)
+		}
+	}
+
+	nowMessages := []messageWithPartition{
+		{msg: kafka_client.KafkaMessage{Timestamp: base.Add(time.Second), Offset: 1}},
+		{msg: kafka_client.KafkaMessage{Timestamp: base, Offset: 0}},
+	}
+	sortSnapshotMessages(nowMessages, "now")
+	if nowMessages[0].msg.Offset != 1 {
+		t.Fatal("timestampMode=now must preserve collection order")
+	}
+}
+
+func TestReadSnapshotPartitionReturnsPullFailure(t *testing.T) {
+	want := errors.New("broker unavailable")
+	sm := NewStreamManager(&mockStreamClient{pullErr: want}, 5, 1000)
+	_, err := sm.readSnapshotPartition(
+		context.Background(),
+		7,
+		queryModel{Topic: "sensors"},
+		&StreamConfig{MessageFormat: "json", AutoOffsetReset: "lastN"},
+		1,
+		time.Time{},
+		time.Time{},
+	)
+	if !errors.Is(err, want) {
+		t.Fatalf("readSnapshotPartition error = %v, want wrapped %v", err, want)
 	}
 }
 

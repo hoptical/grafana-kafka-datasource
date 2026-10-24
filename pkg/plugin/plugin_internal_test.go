@@ -22,7 +22,14 @@ type internalMockClient struct {
 	schemaRegistryPassword string
 }
 
-func (m *internalMockClient) NewConnection() error { return nil }
+func (m *internalMockClient) NewConnection() error    { return nil }
+func (m *internalMockClient) EnsureConnection() error { return nil }
+func (m *internalMockClient) SnapshotBounds(ctx context.Context, topic string, partition int32, from, to time.Time) (int64, int64, error) {
+	return 0, 0, nil
+}
+func (m *internalMockClient) NewStreamReaderAtOffset(ctx context.Context, topic string, partition int32, offset int64) (*kafka.Reader, error) {
+	return nil, nil
+}
 
 func (m *internalMockClient) GetTopicPartitions(ctx context.Context, topicName string) ([]int32, error) {
 	return []int32{0}, nil
@@ -436,6 +443,89 @@ func TestProcessMessageToFrame_Branches(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestSnapshotMessageCapIsIndependentOfOffsetMode(t *testing.T) {
+	if snapshotMessageCap() != maxSnapshotLastN {
+		t.Fatalf("snapshot cap = %d, want %d", snapshotMessageCap(), maxSnapshotLastN)
+	}
+}
+
+func TestMessageInSnapshotWindow(t *testing.T) {
+	from := time.Unix(1_700_000_000, 0).UTC()
+	to := from.Add(time.Hour)
+	include, stop := messageInSnapshotWindow(from.Add(-time.Minute), from, to)
+	if include || stop {
+		t.Fatalf("message before range include=%v stop=%v", include, stop)
+	}
+	include, stop = messageInSnapshotWindow(from.Add(time.Minute), from, to)
+	if !include || stop {
+		t.Fatalf("message inside range include=%v stop=%v", include, stop)
+	}
+	include, stop = messageInSnapshotWindow(to.Add(time.Second), from, to)
+	if include || stop {
+		t.Fatalf("message after range include=%v stop=%v", include, stop)
+	}
+}
+
+func TestSnapshotTailStart(t *testing.T) {
+	tests := []struct {
+		name       string
+		start      int64
+		end        int64
+		messageCap int32
+		want       int64
+	}{
+		{name: "window below cap", start: 10, end: 15, messageCap: 10, want: 10},
+		{name: "window above cap", start: 10, end: 30, messageCap: 5, want: 25},
+		{name: "tail clamped to range start", start: 10, end: 12, messageCap: 5, want: 10},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := snapshotTailStart(tt.start, tt.end, tt.messageCap); got != tt.want {
+				t.Fatalf("snapshotTailStart() = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestHTTPClientWithContextCancelsSchemaRegistryRequest(t *testing.T) {
+	requestStarted := make(chan struct{})
+	requestCanceled := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(requestStarted)
+		<-r.Context().Done()
+		close(requestCanceled)
+	}))
+	defer server.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	client := httpClientWithContext(server.Client(), ctx)
+	done := make(chan error, 1)
+	go func() {
+		_, err := client.Get(server.URL)
+		done <- err
+	}()
+	select {
+	case <-requestStarted:
+	case <-time.After(time.Second):
+		t.Fatal("schema registry request did not start")
+	}
+	cancel()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("expected request cancellation error")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("schema registry request did not honor query context")
+	}
+	select {
+	case <-requestCanceled:
+	case <-time.After(time.Second):
+		t.Fatal("server did not observe request cancellation")
+	}
 }
 
 func frameHasField(frame *data.Frame, name string) bool {

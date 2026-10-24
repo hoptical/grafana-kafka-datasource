@@ -30,6 +30,8 @@ const streamMessageBuffer = 100
 const (
 	messageReadTimeout   = 5 * time.Second        // Timeout for reading individual messages
 	retryDelayAfterError = 100 * time.Millisecond // Brief pause between retries after errors
+	maxSnapshotReaders   = 8                      // Bound broker load from all-partition alert queries
+	maxSnapshotMessages  = 1000                   // Bound memory/CPU per alert evaluation across all partitions
 )
 
 // Defaults for JSON flattening behavior
@@ -41,10 +43,16 @@ const (
 // KafkaClientAPI abstracts the kafka client for easier testing.
 type KafkaClientAPI interface {
 	NewConnection() error
+	// EnsureConnection dials only when this client is not already connected.
+	EnsureConnection() error
 	GetTopicPartitions(ctx context.Context, topicName string) ([]int32, error)
 	GetTopics(ctx context.Context, prefix string, limit int) ([]string, error)
 	HealthCheck(ctx context.Context) error
 	NewStreamReader(ctx context.Context, topic string, partition int32, autoOffsetReset string, lastN int32) (*kafka.Reader, error)
+	// NewStreamReaderAtOffset starts a reader at an absolute partition offset.
+	NewStreamReaderAtOffset(ctx context.Context, topic string, partition int32, offset int64) (*kafka.Reader, error)
+	// SnapshotBounds returns the offset range selected by the query time range.
+	SnapshotBounds(ctx context.Context, topic string, partition int32, from, to time.Time) (start int64, end int64, err error)
 	ConsumerPull(ctx context.Context, reader *kafka.Reader, messageFormat string) (kafka_client.KafkaMessage, error)
 	Dispose()
 	// Avro-related methods
@@ -199,7 +207,7 @@ func NewWithClient(c KafkaClientAPI, schemaRegistryHTTPClient ...*http.Client) *
 }
 
 func (d *KafkaDatasource) QueryData(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
-	log.DefaultLogger.Debug("QueryData called", "request", req)
+	log.DefaultLogger.Debug("QueryData called", "queries", len(req.Queries))
 
 	response := backend.NewQueryDataResponse()
 
@@ -235,27 +243,271 @@ type queryModel struct {
 	// Metadata
 	RefID string `json:"refId"`
 	Alias string `json:"alias"`
+	// SelectedField is the numeric payload field Grafana Alerting should
+	// evaluate. QueryData always returns time-series-wide frames (string
+	// labels and Kafka offset/partition metadata are dropped). When empty,
+	// every remaining numeric field is kept.
+	SelectedField string `json:"selectedField"`
 }
 
-func (d *KafkaDatasource) query(_ context.Context, pCtx backend.PluginContext, query backend.DataQuery) backend.DataResponse {
+const (
+	maxSnapshotLastN       = int32(1000)
+	defaultSnapshotTimeout = 2 * time.Second
+)
+
+func streamConfigFromQuery(qm queryModel) *StreamConfig {
+	streamConfig := &StreamConfig{
+		MessageFormat:                  qm.MessageFormat,
+		AvroSchemaSource:               qm.AvroSchemaSource,
+		AvroSchema:                     qm.AvroSchema,
+		ProtobufSchemaSource:           qm.ProtobufSchemaSource,
+		ProtobufSchema:                 qm.ProtobufSchema,
+		AutoOffsetReset:                qm.AutoOffsetReset,
+		TimestampMode:                  qm.TimestampMode,
+		LastN:                          qm.LastN,
+		KeyFormat:                      qm.KeyFormat,
+		RefID:                          qm.RefID,
+		Alias:                          qm.Alias,
+		LineProtocolTimestampPrecision: qm.LineProtocolTimestampPrecision,
+		LineProtocolMeasurements:       qm.LineProtocolMeasurements,
+		LineProtocolFields:             qm.LineProtocolFields,
+		LineProtocolTags:               qm.LineProtocolTags,
+	}
+	if streamConfig.LineProtocolTimestampPrecision == "" {
+		streamConfig.LineProtocolTimestampPrecision = "auto"
+	}
+	if streamConfig.MessageFormat == "" {
+		streamConfig.MessageFormat = "json"
+	}
+	if streamConfig.AvroSchemaSource == "" {
+		streamConfig.AvroSchemaSource = "schemaRegistry"
+	}
+	if streamConfig.ProtobufSchemaSource == "" {
+		streamConfig.ProtobufSchemaSource = "schemaRegistry"
+	}
+	if streamConfig.AutoOffsetReset == "" {
+		streamConfig.AutoOffsetReset = "latest"
+	}
+	if streamConfig.TimestampMode == "" {
+		streamConfig.TimestampMode = "message"
+	}
+	if streamConfig.KeyFormat == "" {
+		streamConfig.KeyFormat = "none"
+	}
+	return streamConfig
+}
+
+// snapshotMessageCap bounds an alerting read. The query time range selects the
+// window; latest, last-N, and earliest stay dashboard streaming controls.
+func snapshotMessageCap() int32 {
+	return maxSnapshotLastN
+}
+
+func snapshotTimeout(settings *kafka_client.Options) time.Duration {
+	if settings != nil && settings.Timeout > 0 {
+		return time.Duration(settings.Timeout) * time.Millisecond
+	}
+	return defaultSnapshotTimeout
+}
+
+type contextRoundTripper struct {
+	ctx  context.Context
+	base http.RoundTripper
+}
+
+func (rt contextRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	return rt.base.RoundTrip(req.Clone(rt.ctx))
+}
+
+func httpClientWithContext(client *http.Client, ctx context.Context) *http.Client {
+	if client == nil {
+		client = http.DefaultClient
+	}
+	cloned := *client
+	base := cloned.Transport
+	if base == nil {
+		base = http.DefaultTransport
+	}
+	cloned.Transport = contextRoundTripper{ctx: ctx, base: base}
+	return &cloned
+}
+
+func (d *KafkaDatasource) query(ctx context.Context, _ backend.PluginContext, query backend.DataQuery) backend.DataResponse {
 	response := backend.DataResponse{}
 	var qm queryModel
-	response.Error = json.Unmarshal(query.JSON, &qm)
-
-	if response.Error != nil {
+	if err := json.Unmarshal(query.JSON, &qm); err != nil {
+		response.Error = err
 		return response
 	}
 
-	frame := data.NewFrame("response")
+	if qm.Topic == "" {
+		response.Error = errors.New("topicName is required")
+		return response
+	}
+	if qm.MessageFormat == "lineprotocol" {
+		response.Error = errors.New("line protocol is not supported for alerting yet")
+		return response
+	}
 
-	frame.Fields = append(frame.Fields,
-		data.NewField("time", nil, []time.Time{query.TimeRange.From, query.TimeRange.To}),
-		data.NewField("values", nil, []int64{0, 0}),
-	)
+	if qm.RefID == "" {
+		qm.RefID = query.RefID
+	}
 
-	response.Frames = append(response.Frames, frame)
+	timeout := snapshotTimeout(d.settings)
+	snapCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
 
+	if err := d.client.EnsureConnection(); err != nil {
+		response.Error = fmt.Errorf("failed to establish Kafka connection: %w", err)
+		return response
+	}
+	if err := snapCtx.Err(); err != nil {
+		response.Error = err
+		return response
+	}
+
+	streamManager := NewStreamManager(d.client, d.settings.FlattenMaxDepth, d.settings.FlattenFieldCap,
+		WithSchemaRegistryHTTPClient(httpClientWithContext(d.schemaRegistryHTTPClient, snapCtx)))
+	partitions, err := streamManager.ValidateAndGetPartitions(snapCtx, qm)
+	if err != nil {
+		response.Error = err
+		return response
+	}
+
+	streamConfig := streamConfigFromQuery(qm)
+	lastN := snapshotMessageCap()
+	streamConfig.LastN = lastN
+
+	log.DefaultLogger.Debug("QueryData snapshot",
+		"topic", qm.Topic,
+		"partitions", partitions,
+		"from", query.TimeRange.From,
+		"to", query.TimeRange.To,
+		"messageCap", lastN,
+		"timeout", timeout.String())
+
+	messages, err := streamManager.CollectSnapshot(snapCtx, partitions, qm, streamConfig, query.TimeRange.From, query.TimeRange.To)
+	if err != nil {
+		response.Error = err
+		return response
+	}
+
+	batcher := newFrameMicroBatcher(max(int(lastN)*len(partitions), 1))
+	for _, msgWithPartition := range messages {
+		frames, procErr := streamManager.ProcessMessageFramesContext(
+			snapCtx,
+			msgWithPartition.msg,
+			msgWithPartition.partition,
+			partitions,
+			streamConfig,
+			qm.Topic,
+		)
+		if procErr != nil {
+			log.DefaultLogger.Error("QueryData failed to process message",
+				"partition", msgWithPartition.partition,
+				"offset", msgWithPartition.msg.Offset,
+				"error", procErr)
+			continue
+		}
+		if len(frames) == 0 {
+			continue
+		}
+		ready, batchErr := batcher.AddFrames(frames)
+		if batchErr != nil {
+			log.DefaultLogger.Error("QueryData failed to batch frames", "error", batchErr)
+			response.Frames = append(response.Frames, frames...)
+			continue
+		}
+		response.Frames = append(response.Frames, ready...)
+	}
+	response.Frames = append(response.Frames, batcher.Flush()...)
+	response.Frames = wideSeriesForAlerting(response.Frames, strings.TrimSpace(qm.SelectedField))
+	if len(messages) > 0 && strings.TrimSpace(qm.SelectedField) != "" &&
+		!framesHaveField(response.Frames, strings.TrimSpace(qm.SelectedField)) {
+		response.Error = fmt.Errorf("selectedField %q was not found in the snapshot", qm.SelectedField)
+	}
 	return response
+}
+
+func wideSeriesForAlerting(frames data.Frames, selectedField string) data.Frames {
+	out := make(data.Frames, 0, len(frames))
+	for _, fr := range frames {
+		if fr == nil {
+			continue
+		}
+		fields := make([]*data.Field, 0, len(fr.Fields))
+		for _, f := range fr.Fields {
+			if f == nil {
+				continue
+			}
+			name := f.Name
+			if name == "offset" || name == "partition" {
+				continue
+			}
+			ft := f.Type()
+			if ft.Time() || ft == data.FieldTypeString || ft == data.FieldTypeNullableString ||
+				ft == data.FieldTypeBool || ft == data.FieldTypeNullableBool {
+				fields = append(fields, f)
+				continue
+			}
+			if !ft.Numeric() {
+				continue
+			}
+			if selectedField != "" && name != selectedField {
+				continue
+			}
+			fields = append(fields, f)
+		}
+		if !frameHasTimeAndNumeric(fields) {
+			continue
+		}
+		nf := data.NewFrame(fr.Name, fields...)
+		nf.RefID = fr.RefID
+		if nf.TimeSeriesSchema().Type == data.TimeSeriesTypeLong {
+			wide, err := data.LongToWide(nf, nil)
+			if err != nil {
+				log.DefaultLogger.Error("QueryData failed to convert alerting frame to wide series", "error", err)
+				continue
+			}
+			nf = wide
+		}
+		if nf.Meta == nil {
+			nf.Meta = &data.FrameMeta{}
+		}
+		nf.Meta.Type = data.FrameTypeTimeSeriesWide
+		out = append(out, nf)
+	}
+	return out
+}
+
+func frameHasTimeAndNumeric(fields []*data.Field) bool {
+	hasTime, hasNumeric := false, false
+	for _, f := range fields {
+		if f == nil {
+			continue
+		}
+		if f.Type().Time() {
+			hasTime = true
+		}
+		if f.Type().Numeric() {
+			hasNumeric = true
+		}
+	}
+	return hasTime && hasNumeric
+}
+
+func framesHaveField(frames data.Frames, name string) bool {
+	for _, fr := range frames {
+		if fr == nil {
+			continue
+		}
+		for _, f := range fr.Fields {
+			if f != nil && f.Name == name {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (d *KafkaDatasource) CallResource(ctx context.Context, req *backend.CallResourceRequest, sender backend.CallResourceResponseSender) error {
@@ -669,47 +921,7 @@ func (d *KafkaDatasource) RunStream(ctx context.Context, req *backend.RunStreamR
 
 	log.DefaultLogger.Debug("RunStream partitions", "topic", qm.Topic, "partitions", partitions)
 
-	// Create new stream configuration
-	streamConfig := &StreamConfig{
-		MessageFormat:                  qm.MessageFormat,
-		AvroSchemaSource:               qm.AvroSchemaSource,
-		AvroSchema:                     qm.AvroSchema,
-		ProtobufSchemaSource:           qm.ProtobufSchemaSource,
-		ProtobufSchema:                 qm.ProtobufSchema,
-		AutoOffsetReset:                qm.AutoOffsetReset,
-		TimestampMode:                  qm.TimestampMode,
-		LastN:                          qm.LastN, // Added LastN to stream config
-		KeyFormat:                      qm.KeyFormat,
-		RefID:                          qm.RefID,
-		Alias:                          qm.Alias,
-		LineProtocolTimestampPrecision: qm.LineProtocolTimestampPrecision,
-		LineProtocolMeasurements:       qm.LineProtocolMeasurements,
-		LineProtocolFields:             qm.LineProtocolFields,
-		LineProtocolTags:               qm.LineProtocolTags,
-	}
-	if streamConfig.LineProtocolTimestampPrecision == "" {
-		streamConfig.LineProtocolTimestampPrecision = "auto"
-	}
-
-	// Set default values if not provided
-	if streamConfig.MessageFormat == "" {
-		streamConfig.MessageFormat = "json"
-	}
-	if streamConfig.AvroSchemaSource == "" {
-		streamConfig.AvroSchemaSource = "schemaRegistry"
-	}
-	if streamConfig.ProtobufSchemaSource == "" {
-		streamConfig.ProtobufSchemaSource = "schemaRegistry"
-	}
-	if streamConfig.AutoOffsetReset == "" {
-		streamConfig.AutoOffsetReset = "latest"
-	}
-	if streamConfig.TimestampMode == "" {
-		streamConfig.TimestampMode = "message"
-	}
-	if streamConfig.KeyFormat == "" {
-		streamConfig.KeyFormat = "none"
-	}
+	streamConfig := streamConfigFromQuery(qm)
 
 	// Create message channel and start partition readers
 	messagesCh := make(chan messageWithPartition, streamMessageBuffer)
