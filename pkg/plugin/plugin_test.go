@@ -104,6 +104,11 @@ func (m *mockKafkaClient) ConsumerPull(ctx context.Context, reader *kafka.Reader
 }
 func (m *mockKafkaClient) Dispose() {}
 
+func (m *mockKafkaClient) SnapshotPull(ctx context.Context, reader *kafka.Reader, messageFormat string, end int64) (kafka_client.KafkaMessage, bool, error) {
+	msg, err := m.ConsumerPull(ctx, reader, messageFormat)
+	return msg, false, err
+}
+
 func defaultSnapshotBounds(messages []kafka_client.KafkaMessage, unread bool) (int64, int64) {
 	if len(messages) == 0 {
 		if unread {

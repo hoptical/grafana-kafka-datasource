@@ -49,6 +49,9 @@ func (m *internalMockClient) ConsumerPull(ctx context.Context, reader *kafka.Rea
 	return kafka_client.KafkaMessage{}, errors.New("not implemented")
 }
 
+func (m *internalMockClient) SnapshotPull(ctx context.Context, reader *kafka.Reader, messageFormat string, end int64) (kafka_client.KafkaMessage, bool, error) {
+	return kafka_client.KafkaMessage{}, false, errors.New("not implemented")
+}
 func (m *internalMockClient) Dispose()                          {}
 func (m *internalMockClient) GetMessageFormat() string          { return "json" }
 func (m *internalMockClient) GetSchemaRegistryUrl() string      { return m.schemaRegistryURL }

@@ -26,6 +26,9 @@ type mockStreamClient struct {
 	boundsHigh    int64
 	boundsErr     error
 	readerOffset  int64
+	// snapshotDoneWhenDrained makes SnapshotPull report done after the last
+	// message, like a partition whose tail is a transaction control record.
+	snapshotDoneWhenDrained bool
 }
 
 func (m *mockStreamClient) NewConnection() error    { return nil }
@@ -84,6 +87,14 @@ func (m *mockStreamClient) ConsumerPull(ctx context.Context, reader *kafka.Reade
 	msg := m.pullMessages[m.pullIndex]
 	m.pullIndex++
 	return msg, nil
+}
+
+func (m *mockStreamClient) SnapshotPull(ctx context.Context, reader *kafka.Reader, messageFormat string, end int64) (kafka_client.KafkaMessage, bool, error) {
+	if m.snapshotDoneWhenDrained && m.pullErr == nil && m.pullIndex >= len(m.pullMessages) {
+		return kafka_client.KafkaMessage{}, true, nil
+	}
+	msg, err := m.ConsumerPull(ctx, reader, messageFormat)
+	return msg, false, err
 }
 
 // Avro-related methods
@@ -648,6 +659,39 @@ func TestReadSnapshotPartitionKeepsFreshestBoundedTail(t *testing.T) {
 	}
 	if got[0].msg.Offset != 3 || got[1].msg.Offset != 4 {
 		t.Fatalf("snapshot offsets = [%d %d], want [3 4]", got[0].msg.Offset, got[1].msg.Offset)
+	}
+}
+
+func TestReadSnapshotPartitionStopsAtTransactionMarker(t *testing.T) {
+	base := time.Unix(1_700_000_000, 0).UTC()
+	// Offsets 0 and 1 are data; offset 2 is the COMMIT marker that ends the
+	// partition. The client reports done instead of blocking on it.
+	client := &mockStreamClient{
+		pullMessages: []kafka_client.KafkaMessage{
+			{Offset: 0, Timestamp: base},
+			{Offset: 1, Timestamp: base.Add(time.Second)},
+		},
+		boundsSet:               true,
+		boundsStart:             0,
+		boundsHigh:              3,
+		snapshotDoneWhenDrained: true,
+	}
+	sm := NewStreamManager(client, 5, 1000)
+
+	got, err := sm.readSnapshotPartition(
+		context.Background(),
+		0,
+		queryModel{Topic: "txn"},
+		&StreamConfig{MessageFormat: "json"},
+		1000,
+		base.Add(-time.Minute),
+		base.Add(time.Minute),
+	)
+	if err != nil {
+		t.Fatalf("readSnapshotPartition returned error: %v", err)
+	}
+	if len(got) != 2 || got[0].msg.Offset != 0 || got[1].msg.Offset != 1 {
+		t.Fatalf("snapshot = %v, want offsets [0 1]", got)
 	}
 }
 

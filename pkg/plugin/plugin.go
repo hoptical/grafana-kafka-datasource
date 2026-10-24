@@ -54,6 +54,8 @@ type KafkaClientAPI interface {
 	// SnapshotBounds returns the offset range selected by the query time range.
 	SnapshotBounds(ctx context.Context, topic string, partition int32, from, to time.Time) (start int64, end int64, err error)
 	ConsumerPull(ctx context.Context, reader *kafka.Reader, messageFormat string) (kafka_client.KafkaMessage, error)
+	// SnapshotPull reads the next visible message below end; done reports that end was reached.
+	SnapshotPull(ctx context.Context, reader *kafka.Reader, messageFormat string, end int64) (msg kafka_client.KafkaMessage, done bool, err error)
 	Dispose()
 	// Avro-related methods
 	GetMessageFormat() string
