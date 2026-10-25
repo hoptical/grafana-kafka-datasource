@@ -54,7 +54,7 @@
         "path": "img/config-authentication.png"
       }
     ],
-    "version": "1.9.1",
+    "version": "1.10.0",
     "updated": "%TODAY%"
   },
   "dependencies": {
