@@ -1232,6 +1232,9 @@ func snapshotPartitionLimits(partitionCount int, lastN int32) []int32 {
 		if limit > int64(lastN) {
 			limit = int64(lastN)
 		}
+		if limit > math.MaxInt32 {
+			limit = math.MaxInt32
+		}
 		limits[i] = int32(limit)
 	}
 	return limits
