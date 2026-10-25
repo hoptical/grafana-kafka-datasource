@@ -1,5 +1,13 @@
 # Changelog
 
+## [v1.10.0](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.10.0)
+
+[Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v1.9.1...v1.10.0)
+
+- Fix: resolve plugin-validator security findings; upgrade pnpm 12 and plugin-actions ([#181](https://github.com/hoptical/grafana-kafka-datasource/pull/181))
+- Fix: alerting snapshots on transactional and idle topics ([#180](https://github.com/hoptical/grafana-kafka-datasource/pull/180))
+- Feat: enable Grafana Alerting with QueryData snapshots ([#175](https://github.com/hoptical/grafana-kafka-datasource/pull/175))
+
 ## [v1.9.1](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.9.1)
 
 [Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v1.9.0...v1.9.1)
