@@ -125,7 +125,9 @@ func (s *SchemaRegistryClient) doGet(path string) (*http.Response, error) {
 
 		resp, err := s.Client.Do(req)
 		if err != nil {
-			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			// Stop on cancellation only. http.Client.Timeout surfaces as
+			// context.DeadlineExceeded, and a hung instance must still fail over.
+			if errors.Is(err, context.Canceled) {
 				return nil, err
 			}
 			log.DefaultLogger.Debug("Schema registry endpoint unreachable, trying next",

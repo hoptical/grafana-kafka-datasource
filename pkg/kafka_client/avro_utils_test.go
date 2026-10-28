@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestNewSchemaRegistryClient(t *testing.T) {
@@ -366,5 +367,30 @@ func TestSchemaRegistryClient_AllEndpoints5xx(t *testing.T) {
 	}
 	if hits.Load() != 2 {
 		t.Fatalf("expected both endpoints tried, got %d", hits.Load())
+	}
+}
+
+func TestSchemaRegistryClient_FailoverOnClientTimeout(t *testing.T) {
+	release := make(chan struct{})
+	hung := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-release:
+		case <-r.Context().Done():
+		}
+	}))
+	defer hung.Close()
+	defer close(release)
+
+	var hits atomic.Int32
+	good := httptest.NewServer(schemaHandler(&hits))
+	defer good.Close()
+
+	client := NewSchemaRegistryClient(hung.URL+","+good.URL, "", "", &http.Client{Timeout: 100 * time.Millisecond})
+	schema, err := client.GetSchemaByID(1)
+	if err != nil {
+		t.Fatalf("expected failover after client timeout, got %v", err)
+	}
+	if schema != `{"type":"string"}` || hits.Load() != 1 {
+		t.Fatalf("expected schema from second endpoint, got %q (hits=%d)", schema, hits.Load())
 	}
 }
