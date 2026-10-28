@@ -394,3 +394,14 @@ func TestSchemaRegistryClient_FailoverOnClientTimeout(t *testing.T) {
 		t.Fatalf("expected schema from second endpoint, got %q (hits=%d)", schema, hits.Load())
 	}
 }
+
+func TestSchemaRegistryClient_InvalidURLErrorIsRedacted(t *testing.T) {
+	client := NewSchemaRegistryClient("http://user:s%zzecret@example.test", "", "", &http.Client{})
+	_, err := client.GetSchemaByID(1)
+	if err == nil {
+		t.Fatal("expected error for malformed URL")
+	}
+	if strings.Contains(err.Error(), "zz") || strings.Contains(err.Error(), "ecret") || strings.Contains(err.Error(), "user") {
+		t.Fatalf("error leaks URL credentials: %q", err.Error())
+	}
+}

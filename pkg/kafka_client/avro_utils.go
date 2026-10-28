@@ -115,8 +115,10 @@ func (s *SchemaRegistryClient) doGet(path string) (*http.Response, error) {
 
 		req, err := http.NewRequest("GET", base+path, nil)
 		if err != nil {
-			lastErr = err
-			failures = append(failures, fmt.Sprintf("%s: %v", redactURL(base), err))
+			// The parse error echoes the raw URL, including any userinfo, so
+			// report only the redacted form.
+			lastErr = fmt.Errorf("invalid schema registry URL %s", redactURL(base))
+			failures = append(failures, lastErr.Error())
 			continue
 		}
 		if s.Username != "" && s.Password != "" {
