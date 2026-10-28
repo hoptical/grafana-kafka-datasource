@@ -300,6 +300,7 @@ func TestValidateSchemaRegistry_MultipleURLs(t *testing.T) {
 		{name: "single unreachable", urls: down, wantStatus: backend.HealthStatusError, wantMessage: "Cannot connect to schema registry"},
 		{name: "one invalid scheme", urls: up1.URL + ",ftp://registry.example", wantStatus: backend.HealthStatusError, wantMessage: "HTTP or HTTPS"},
 		{name: "only separators", urls: " , ", wantStatus: backend.HealthStatusError, wantMessage: "not configured"},
+		{name: "malformed URL is redacted", urls: "http://user:s%zzecret@example.test", wantStatus: backend.HealthStatusError, wantMessage: "Invalid schema registry URL format: <invalid url>"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

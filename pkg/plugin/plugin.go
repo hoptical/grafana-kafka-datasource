@@ -693,9 +693,11 @@ func (d *KafkaDatasource) ValidateSchemaRegistry(ctx context.Context) (*backend.
 		// Parse and validate URL format
 		parsedUrl, err := url.Parse(u)
 		if err != nil {
+			// The parse error can echo userinfo credentials, so only report the
+			// redacted entry.
 			return &backend.CheckHealthResult{
 				Status:  backend.HealthStatusError,
-				Message: fmt.Sprintf("Invalid schema registry URL format: %s", err.Error()),
+				Message: fmt.Sprintf("Invalid schema registry URL format: %s", kafka_client.RedactSchemaRegistryURLs(u)),
 			}, nil
 		}
 
