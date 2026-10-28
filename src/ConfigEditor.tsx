@@ -16,6 +16,7 @@ import { css } from '@emotion/css';
 import { ConfigSection, DataSourceDescription } from '@grafana/plugin-ui';
 import { KafkaDataSourceOptions, defaultDataSourceOptions, KafkaSecureJsonData } from './types';
 import { GssapiFields } from './GssapiFields';
+import { SchemaRegistryTlsFields } from './SchemaRegistryTlsFields';
 import { isEqual } from 'lodash';
 
 interface Props extends DataSourcePluginOptionsEditorProps<KafkaDataSourceOptions> {}
@@ -568,12 +569,12 @@ export const ConfigEditor = (props: Props) => {
       {/* Schema Registry Configuration */}
       <ConfigSection
         title="Schema Registry"
-        description="Configure Confluent Schema Registry for Avro message decoding"
+        description="Configure Confluent Schema Registry for Avro and Protobuf message decoding"
       >
         <InlineField
           label="Schema Registry URL"
           labelWidth={25}
-          tooltip="URL of the Confluent Schema Registry (e.g., http://localhost:8081)"
+          tooltip="URL of the Confluent Schema Registry (e.g., http://localhost:8081). For high availability, list several comma-separated URLs (e.g., http://sr1:8081,http://sr2:8081); the plugin fails over to the next one when an instance is unreachable."
           grow
         >
           <Input
@@ -607,6 +608,8 @@ export const ConfigEditor = (props: Props) => {
             onChange={onSchemaRegistryPasswordChange}
           />
         </InlineField>
+
+        <SchemaRegistryTlsFields options={options} onOptionsChange={onOptionsChange} />
       </ConfigSection>
 
       <Divider spacing={4} />

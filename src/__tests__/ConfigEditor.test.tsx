@@ -678,6 +678,62 @@ describe('ConfigEditor', () => {
     expect(screen.getByPlaceholderText('Schema Registry password')).toBeInTheDocument();
   });
 
+  it('defaults Schema Registry TLS to "Same as Kafka" and hides custom fields', () => {
+    renderConfigEditor();
+    expect(screen.getByTestId('schema-registry-tls-mode')).toHaveValue('kafka');
+    expect(document.getElementById('config-editor-schema-registry-tls-ca-cert')).toBeNull();
+  });
+
+  it('switches Schema Registry TLS to custom mode', () => {
+    renderConfigEditor();
+    fireEvent.change(screen.getByTestId('schema-registry-tls-mode'), { target: { value: 'custom' } });
+    expect(mockOnOptionsChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jsonData: expect.objectContaining({ schemaRegistryTlsMode: 'custom' }),
+      })
+    );
+  });
+
+  it('shows and updates custom Schema Registry TLS fields', () => {
+    renderConfigEditor({ schemaRegistryTlsMode: 'custom' as any });
+
+    fireEvent.change(document.getElementById('config-editor-schema-registry-tls-ca-cert')!, {
+      target: { value: 'ca-pem' },
+    });
+    expect(mockOnOptionsChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        secureJsonData: expect.objectContaining({ schemaRegistryTlsCACert: 'ca-pem' }),
+      })
+    );
+
+    fireEvent.change(document.getElementById('config-editor-schema-registry-tls-server-name')!, {
+      target: { value: 'sr.internal' },
+    });
+    expect(mockOnOptionsChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        jsonData: expect.objectContaining({ schemaRegistryTlsServerName: 'sr.internal' }),
+      })
+    );
+
+    fireEvent.click(document.getElementById('config-editor-schema-registry-tls-skip-verify')!);
+    expect(mockOnOptionsChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        jsonData: expect.objectContaining({ schemaRegistryTlsSkipVerify: true }),
+      })
+    );
+  });
+
+  it('resets a configured Schema Registry client key', () => {
+    renderConfigEditor({ schemaRegistryTlsMode: 'custom' as any }, {}, { schemaRegistryTlsClientKey: true });
+    fireEvent.click(screen.getByTestId('reset-textarea-button'));
+    expect(mockOnOptionsChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        secureJsonFields: expect.objectContaining({ schemaRegistryTlsClientKey: false }),
+        secureJsonData: expect.objectContaining({ schemaRegistryTlsClientKey: '' }),
+      })
+    );
+  });
+
   it('calls onOptionsChange when schema registry URL changes', () => {
     renderConfigEditor();
     const input = screen.getByPlaceholderText('http://localhost:8081');
