@@ -276,6 +276,49 @@ func TestValidateSchemaRegistry_Branches(t *testing.T) {
 	})
 }
 
+func TestValidateSchemaRegistry_MultipleURLs(t *testing.T) {
+	notFound := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "Subject not found", http.StatusNotFound)
+	})
+	up1 := httptest.NewServer(notFound)
+	defer up1.Close()
+	up2 := httptest.NewServer(notFound)
+	defer up2.Close()
+	downServer := httptest.NewServer(notFound)
+	down := downServer.URL
+	downServer.Close()
+
+	tests := []struct {
+		name        string
+		urls        string
+		wantStatus  backend.HealthStatus
+		wantMessage string
+	}{
+		{name: "all reachable", urls: up1.URL + ", " + up2.URL, wantStatus: backend.HealthStatusOk, wantMessage: "Schema registry is accessible"},
+		{name: "partially reachable", urls: down + "," + up1.URL, wantStatus: backend.HealthStatusOk, wantMessage: "1/2 endpoints reachable"},
+		{name: "none reachable", urls: down + "," + down, wantStatus: backend.HealthStatusError, wantMessage: "Cannot connect to any schema registry endpoint"},
+		{name: "single unreachable", urls: down, wantStatus: backend.HealthStatusError, wantMessage: "Cannot connect to schema registry"},
+		{name: "one invalid scheme", urls: up1.URL + ",ftp://registry.example", wantStatus: backend.HealthStatusError, wantMessage: "HTTP or HTTPS"},
+		{name: "only separators", urls: " , ", wantStatus: backend.HealthStatusError, wantMessage: "not configured"},
+		{name: "malformed URL is redacted", urls: "http://user:s%zzecret@example.test", wantStatus: backend.HealthStatusError, wantMessage: "Invalid schema registry URL format: <invalid url>"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ds := NewWithClient(&internalMockClient{schemaRegistryURL: tt.urls}, &http.Client{})
+			result, err := ds.ValidateSchemaRegistry(context.Background())
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if result.Status != tt.wantStatus {
+				t.Fatalf("expected status %v, got %v (%q)", tt.wantStatus, result.Status, result.Message)
+			}
+			if !strings.Contains(result.Message, tt.wantMessage) {
+				t.Fatalf("expected message containing %q, got %q", tt.wantMessage, result.Message)
+			}
+		})
+	}
+}
+
 func TestCallResource_ValidateSchemaEndpoints(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Subject not found", http.StatusNotFound)

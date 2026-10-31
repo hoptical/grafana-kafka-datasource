@@ -676,35 +676,39 @@ func (d *KafkaDatasource) handleValidateProtobufSchema(ctx context.Context, req 
 	})
 }
 
-// ValidateSchemaRegistry validates the schema registry configuration
+// ValidateSchemaRegistry validates the schema registry configuration.
+// When several comma-separated URLs are configured, each endpoint is probed
+// individually so a partially degraded cluster is reported as such.
 func (d *KafkaDatasource) ValidateSchemaRegistry(ctx context.Context) (*backend.CheckHealthResult, error) {
 	schemaRegistryUrl := d.client.GetSchemaRegistryUrl()
-	if schemaRegistryUrl == "" {
+	urls := kafka_client.ParseSchemaRegistryURLs(schemaRegistryUrl)
+	if len(urls) == 0 {
 		return &backend.CheckHealthResult{
 			Status:  backend.HealthStatusError,
 			Message: "Schema registry URL is not configured",
 		}, nil
 	}
 
-	// Parse and validate URL format
-	parsedUrl, err := url.Parse(schemaRegistryUrl)
-	if err != nil {
-		return &backend.CheckHealthResult{
-			Status:  backend.HealthStatusError,
-			Message: fmt.Sprintf("Invalid schema registry URL format: %s", err.Error()),
-		}, nil
-	}
+	for _, u := range urls {
+		// Parse and validate URL format
+		parsedUrl, err := url.Parse(u)
+		if err != nil {
+			// The parse error can echo userinfo credentials, so only report the
+			// redacted entry.
+			return &backend.CheckHealthResult{
+				Status:  backend.HealthStatusError,
+				Message: fmt.Sprintf("Invalid schema registry URL format: %s", kafka_client.RedactSchemaRegistryURLs(u)),
+			}, nil
+		}
 
-	// Check if it's a valid HTTP/HTTPS URL
-	if parsedUrl.Scheme != "http" && parsedUrl.Scheme != "https" {
-		return &backend.CheckHealthResult{
-			Status:  backend.HealthStatusError,
-			Message: "Schema registry URL must use HTTP or HTTPS protocol",
-		}, nil
+		// Check if it's a valid HTTP/HTTPS URL
+		if parsedUrl.Scheme != "http" && parsedUrl.Scheme != "https" {
+			return &backend.CheckHealthResult{
+				Status:  backend.HealthStatusError,
+				Message: "Schema registry URL must use HTTP or HTTPS protocol",
+			}, nil
+		}
 	}
-
-	// Try to connect to schema registry by attempting to get a schema
-	// Use a dummy subject that likely doesn't exist to test connectivity
 
 	httpClient := d.schemaRegistryHTTPClient
 	if httpClient == nil {
@@ -713,22 +717,41 @@ func (d *KafkaDatasource) ValidateSchemaRegistry(ctx context.Context) (*backend.
 			Message: "HTTP client not available for Schema Registry health check",
 		}, nil
 	}
+	httpClient = httpClientWithContext(httpClient, ctx)
 
-	schemaClient := kafka_client.NewSchemaRegistryClient(
-		schemaRegistryUrl,
-		d.client.GetSchemaRegistryUsername(),
-		d.client.GetSchemaRegistryPassword(),
-		httpClient,
-	)
+	// Try to connect to each endpoint by requesting a dummy subject that likely
+	// doesn't exist. A 404 (subject not found) means the endpoint works; any
+	// other error indicates a connection problem.
+	const testSubject = "_test_connectivity_subject_"
+	var failures []string
+	for _, u := range urls {
+		schemaClient := kafka_client.NewSchemaRegistryClient(
+			u,
+			d.client.GetSchemaRegistryUsername(),
+			d.client.GetSchemaRegistryPassword(),
+			httpClient,
+		)
+		if _, err := schemaClient.GetLatestSchema(testSubject); err != nil && !isSubjectNotFoundError(err) {
+			failures = append(failures, fmt.Sprintf("%s: %s", kafka_client.RedactSchemaRegistryURLs(u), err.Error()))
+		}
+	}
 
-	testSubject := "_test_connectivity_subject_"
-	_, err = schemaClient.GetLatestSchema(testSubject)
-	// We expect this to fail with a 404 (subject not found), which means the connection works
-	// Any other error indicates a connection problem
-	if err != nil && !isSubjectNotFoundError(err) {
+	switch {
+	case len(failures) == len(urls) && len(urls) == 1:
 		return &backend.CheckHealthResult{
 			Status:  backend.HealthStatusError,
-			Message: fmt.Sprintf("Cannot connect to schema registry: %s", err.Error()),
+			Message: fmt.Sprintf("Cannot connect to schema registry: %s", failures[0]),
+		}, nil
+	case len(failures) == len(urls):
+		return &backend.CheckHealthResult{
+			Status:  backend.HealthStatusError,
+			Message: fmt.Sprintf("Cannot connect to any schema registry endpoint: %s", strings.Join(failures, "; ")),
+		}, nil
+	case len(failures) > 0:
+		return &backend.CheckHealthResult{
+			Status: backend.HealthStatusOk,
+			Message: fmt.Sprintf("Schema registry is accessible (%d/%d endpoints reachable; unreachable: %s)",
+				len(urls)-len(failures), len(urls), strings.Join(failures, "; ")),
 		}, nil
 	}
 

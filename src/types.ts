@@ -66,6 +66,11 @@ export enum GssapiAuthType {
   KEYTAB = 'keytab',
 }
 
+export enum SchemaRegistryTlsMode {
+  KAFKA = 'kafka',
+  CUSTOM = 'custom',
+}
+
 export interface KafkaDataSourceOptions extends DataSourceJsonData {
   bootstrapServers: string;
   clientId?: string;
@@ -94,8 +99,12 @@ export interface KafkaDataSourceOptions extends DataSourceJsonData {
   // Advanced HTTP settings
   timeout?: number;
   // Avro Configuration (moved to query level)
-  schemaRegistryUrl?: string;
+  schemaRegistryUrl?: string; // one or more comma-separated URLs
   schemaRegistryUsername?: string;
+  // Schema Registry TLS: 'kafka' reuses the Kafka TLS settings, 'custom' uses the fields below
+  schemaRegistryTlsMode?: SchemaRegistryTlsMode;
+  schemaRegistryTlsSkipVerify?: boolean;
+  schemaRegistryTlsServerName?: string;
   // Advanced Json flattening settings
   flattenMaxDepth?: number;
   flattenFieldCap?: number;
@@ -125,6 +134,7 @@ export const defaultDataSourceOptions: Partial<KafkaDataSourceOptions> = {
   tlsSkipVerify: false,
   serverName: '',
   timeout: 0,
+  schemaRegistryTlsMode: SchemaRegistryTlsMode.KAFKA,
   flattenMaxDepth: 5,
   flattenFieldCap: 1000,
 };
@@ -141,6 +151,10 @@ export interface KafkaSecureJsonData {
   tlsClientKey?: string;
   // Schema Registry Authentication
   schemaRegistryPassword?: string;
+  // Schema Registry TLS (custom mode only)
+  schemaRegistryTlsCACert?: string;
+  schemaRegistryTlsClientCert?: string;
+  schemaRegistryTlsClientKey?: string;
 }
 
 export enum KeyFormat {

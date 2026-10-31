@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"math"
 	"net/http"
-	"net/url"
 	"sort"
 	"strings"
 	"sync"
@@ -482,15 +481,8 @@ func decodeAvroMessage(sm *StreamManager, client KafkaClientAPI, data []byte, co
 		// Use Schema Registry
 		schemaRegistryUrl := client.GetSchemaRegistryUrl()
 
-		// Redact credentials from URL for logging
-		redactedUrl := schemaRegistryUrl
-		if parsedUrl, err := url.Parse(schemaRegistryUrl); err == nil {
-			if parsedUrl.User != nil {
-				// Remove user info from URL for safe logging
-				parsedUrl.User = nil
-				redactedUrl = parsedUrl.String()
-			}
-		}
+		// Redact credentials from URL(s) for logging
+		redactedUrl := kafka_client.RedactSchemaRegistryURLs(schemaRegistryUrl)
 
 		log.DefaultLogger.Debug("Attempting to get schema from registry",
 			"schemaRegistryUrl", redactedUrl,
@@ -597,14 +589,8 @@ func decodeProtobufMessage(sm *StreamManager, client KafkaClientAPI, data []byte
 			return nil, fmt.Errorf("schema registry URL not configured")
 		}
 
-		// Redact credentials from URL for logging
-		redactedUrl := schemaRegistryUrl
-		if parsedUrl, err := url.Parse(schemaRegistryUrl); err == nil {
-			if parsedUrl.User != nil {
-				parsedUrl.User = nil
-				redactedUrl = parsedUrl.String()
-			}
-		}
+		// Redact credentials from URL(s) for logging
+		redactedUrl := kafka_client.RedactSchemaRegistryURLs(schemaRegistryUrl)
 		log.DefaultLogger.Debug("Using Schema Registry for Protobuf schema",
 			"schemaRegistryUrl", redactedUrl,
 			"topic", topic)

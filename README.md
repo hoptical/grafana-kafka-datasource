@@ -79,10 +79,28 @@ You can automatically configure the Kafka datasource using Grafana's provisionin
    - **Broker address** (e.g. `localhost:9094` or `kafka:9092`)
    - **Private Data Source Connect (PDC)** (optional; requires PDC to be configured in Grafana)
    - **Authentication** (SASL — PLAIN, SCRAM, OAUTHBEARER/OIDC client credentials, or GSSAPI/Kerberos — SSL/TLS, optional)
-   - **Avro Schema Registry** (if using Avro format)
+   - **Schema Registry** (if using Avro or Protobuf with Schema Registry; see [Schema Registry](#schema-registry))
    - **Timeout settings** (default: two seconds)
 
 <a href="https://raw.githubusercontent.com/hoptical/grafana-kafka-datasource/ba3d10342aca7512c5679fcd7761e5b394094598/src/img/config-basic.png"><img src="https://raw.githubusercontent.com/hoptical/grafana-kafka-datasource/ba3d10342aca7512c5679fcd7761e5b394094598/src/img/config-basic.png" alt="Kafka basic datasource configuration" width="800"></a>
+
+### Schema Registry
+
+- **Multiple URLs:** enter one URL, or several comma-separated URLs for a high-availability deployment (for example `http://sr1:8081,http://sr2:8081`). The plugin keeps using the last instance that answered and moves to the next one on connection errors or `5xx`/`429` responses. Client errors such as `404` (unknown subject) or `401` are returned straight away, because another instance would give the same answer. The **Test connection** button next to the Schema Registry option in the Query Editor checks every URL and reports which ones are unreachable.
+- **TLS:**
+  - **Same as Kafka** (default): the Schema Registry uses the CA certificate, client certificate and skip-verify settings from the Kafka TLS section. If your brokers and registry share a CA and client certificate, mTLS to the registry already works with no extra setup.
+  - **Custom:** set a separate CA certificate, client certificate and client key (PEM) for the registry. Use this when the registry is signed by a different CA than the brokers, needs a different client certificate, or uses a public CA while the brokers use a private one.
+
+Certificates must be PEM-encoded. To convert a Java keystore and truststore:
+
+```bash
+# Truststore -> CA certificate
+keytool -exportcert -rfc -keystore truststore.jks -alias <ca-alias> -file ca.pem
+# Keystore -> client certificate and key
+keytool -importkeystore -srckeystore keystore.jks -destkeystore keystore.p12 -deststoretype PKCS12
+openssl pkcs12 -in keystore.p12 -nokeys -clcerts -out client.pem
+openssl pkcs12 -in keystore.p12 -nocerts -nodes -out client.key
+```
 
 ### Build the Query
 
