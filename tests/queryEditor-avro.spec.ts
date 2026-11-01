@@ -225,8 +225,10 @@ test.describe.serial('Kafka Query Editor - Avro Tests', () => {
     await fileInputLocator.first().setInputFiles(fixturePath);
 
     // Compare trimmed textarea value to fixture to avoid newline differences
-    const textareaValue = await schemaTextarea.first().inputValue();
-    expect(textareaValue.trim()).toBe(fixtureContents.trim());
+    // The schema is populated asynchronously via FileReader, so poll instead of reading once
+    await expect
+      .poll(async () => (await schemaTextarea.first().inputValue()).trim(), { timeout: 5000 })
+      .toBe(fixtureContents.trim());
     console.log('File upload input found and textarea populated from file');
   });
 
