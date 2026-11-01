@@ -160,8 +160,10 @@ test.describe.serial('Kafka Query Editor - Protobuf Tests', () => {
     const fileInputLocator = page.locator('input[type="file"]');
     await fileInputLocator.first().setInputFiles(fixturePath);
 
-    const textareaValue = await schemaTextarea.first().inputValue();
-    expect(textareaValue.trim()).toBe(fixtureContents.trim());
+    // The schema is populated asynchronously via FileReader, so poll instead of reading once
+    await expect
+      .poll(async () => (await schemaTextarea.first().inputValue()).trim(), { timeout: 5000 })
+      .toBe(fixtureContents.trim());
   });
 
   test('should stream Protobuf data from kafka topic with schema registry', async ({

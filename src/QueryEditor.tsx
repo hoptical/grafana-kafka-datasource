@@ -242,8 +242,8 @@ class QueryEditorInner extends PureComponent<QueryEditorInnerProps, State> {
   private topicBlurTimeout?: ReturnType<typeof setTimeout>;
   private avroSchemaValidationTimeout?: ReturnType<typeof setTimeout>;
   private protobufSchemaValidationTimeout?: ReturnType<typeof setTimeout>;
-  private avroFileInputRef?: React.RefObject<HTMLInputElement>;
-  private protobufFileInputRef?: React.RefObject<HTMLInputElement>;
+  private avroFileInputRef?: React.RefObject<HTMLInputElement | null>;
+  private protobufFileInputRef?: React.RefObject<HTMLInputElement | null>;
 
   constructor(props: QueryEditorInnerProps) {
     super(props);
