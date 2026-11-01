@@ -1,5 +1,13 @@
 # Changelog
 
+## [v1.11.0](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.11.0)
+
+[Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v1.10.0...v1.11.0)
+
+- Chore: bump @grafana/create-plugin configuration to 7.17.0 ([#185](https://github.com/hoptical/grafana-kafka-datasource/pull/185))
+- Chore: upgrade Go and npm dependencies, incl. Grafana packages (React 19, TS 6) ([#184](https://github.com/hoptical/grafana-kafka-datasource/pull/184))
+- Feat: multiple Schema Registry URLs and custom Schema Registry TLS (mTLS) ([#183](https://github.com/hoptical/grafana-kafka-datasource/pull/183))
+
 ## [v1.10.0](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.10.0)
 
 [Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v1.9.1...v1.10.0)
