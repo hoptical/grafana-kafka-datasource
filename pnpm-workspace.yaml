@@ -24,3 +24,4 @@ overrides:
   serialize-javascript@<7.1.3: 7.1.3
   moment@<2.31.0: 2.31.0
   katex@<0.18.2: 0.18.2
+  basic-ftp@<6.2.1: 6.2.1
