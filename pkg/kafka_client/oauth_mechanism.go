@@ -31,6 +31,16 @@ const refreshSkewFraction = 0.2
 // oversized response.
 const maxTokenResponseBytes = 1 << 20 // 1MB
 
+// maxLoggedBodyBytes caps how much of a non-200 token response body is logged.
+const maxLoggedBodyBytes = 1024
+
+func truncateForLog(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "...(truncated)"
+}
+
 var errRedirectNotAllowed = errors.New("redirects are not followed for OAuth token requests")
 
 // oauthBearerMechanism implements the SASL/OAUTHBEARER (KIP-255, RFC 7628)
@@ -169,7 +179,12 @@ func (m *oauthBearerMechanism) getToken(ctx context.Context) (string, error) {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("token endpoint returned status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		// The response body may contain provider-specific details, so keep it out
+		// of the returned error (which is logged at Error level and returned to
+		// the caller) and only log it at Debug level for troubleshooting.
+		log.DefaultLogger.Debug("OAuth token endpoint returned a non-200 status",
+			"status", resp.StatusCode, "body", truncateForLog(strings.TrimSpace(string(body)), maxLoggedBodyBytes))
+		return "", fmt.Errorf("token endpoint returned status %d", resp.StatusCode)
 	}
 
 	var tokenResp oauthTokenResponse

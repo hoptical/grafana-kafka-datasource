@@ -165,7 +165,7 @@ func TestOAuthBearerMechanism_ConcurrentStartSingleFetch(t *testing.T) {
 
 func TestOAuthBearerMechanism_TokenEndpointError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		http.Error(w, "sensitive-provider-detail", http.StatusUnauthorized)
 	}))
 	defer server.Close()
 
@@ -173,6 +173,12 @@ func TestOAuthBearerMechanism_TokenEndpointError(t *testing.T) {
 	_, _, err := m.Start(context.Background())
 	if err == nil {
 		t.Fatal("expected error for non-200 token endpoint response")
+	}
+	if !strings.Contains(err.Error(), "status 401") {
+		t.Fatalf("expected status code in error, got %v", err)
+	}
+	if strings.Contains(err.Error(), "sensitive-provider-detail") {
+		t.Fatalf("response body must not be included in the error, got %v", err)
 	}
 }
 
