@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/http"
 	"strings"
 	"time"
 
@@ -111,6 +112,9 @@ type KafkaClient struct {
 	SaslOauthClientId      string
 	SaslOauthClientSecret  string
 	SaslOauthScope         string
+	// OAuthHTTPClient is the Grafana SDK HTTP client used for OAuth token
+	// requests. When nil, an SDK client with default options is created.
+	OAuthHTTPClient *http.Client
 	// SASL/GSSAPI (Kerberos) Configuration
 	SaslGssapiServiceName     string
 	SaslGssapiRealm           string
@@ -893,7 +897,7 @@ func getSASLMechanism(client *KafkaClient) (sasl.Mechanism, error) {
 	case "SCRAM-SHA-512":
 		return scram.Mechanism(scram.SHA512, client.SaslUsername, client.SaslPassword)
 	case "OAUTHBEARER":
-		return newOAuthBearerMechanism(client), nil
+		return newOAuthBearerMechanism(client)
 	case "GSSAPI":
 		return newGSSAPIMechanism(client)
 	default:

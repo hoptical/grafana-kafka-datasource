@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/grafana/grafana-plugin-sdk-go/backend/httpclient"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 	"github.com/segmentio/kafka-go/sasl"
 )
@@ -56,19 +57,34 @@ type oauthBearerMechanism struct {
 	expiresAt time.Time
 }
 
-func newOAuthBearerMechanism(client *KafkaClient) *oauthBearerMechanism {
+// newOAuthBearerMechanism builds the mechanism. Token requests go through the
+// Grafana SDK HTTP client (client.OAuthHTTPClient) so the SDK middlewares
+// (response limit, PDC secure socks proxy, ...) apply. A shallow copy is made so
+// the per-mechanism timeout and redirect rejection don't alter the shared client.
+func newOAuthBearerMechanism(client *KafkaClient) (*oauthBearerMechanism, error) {
 	timeout := dialerTimeout
 	if client.Timeout > 0 {
 		timeout = time.Duration(client.Timeout) * time.Millisecond
 	}
+	base := client.OAuthHTTPClient
+	if base == nil {
+		var err error
+		base, err = httpclient.New()
+		if err != nil {
+			return nil, fmt.Errorf("failed to create OAuth token HTTP client: %w", err)
+		}
+	}
+	httpClient := *base
+	httpClient.Timeout = timeout
+	httpClient.CheckRedirect = rejectRedirects
 	return &oauthBearerMechanism{
 		tokenEndpoint: client.SaslOauthTokenEndpoint,
 		clientID:      client.SaslOauthClientId,
 		clientSecret:  client.SaslOauthClientSecret,
 		scope:         client.SaslOauthScope,
-		httpClient:    &http.Client{Timeout: timeout, CheckRedirect: rejectRedirects},
+		httpClient:    &httpClient,
 		nowFunc:       time.Now,
-	}
+	}, nil
 }
 
 func rejectRedirects(req *http.Request, via []*http.Request) error {

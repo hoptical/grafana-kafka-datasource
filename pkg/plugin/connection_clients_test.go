@@ -217,3 +217,38 @@ func TestApplySchemaRegistryTLS(t *testing.T) {
 		})
 	}
 }
+
+func TestOAuthTokenHTTPClientOptions_DropsKafkaTLSAndBasicAuth(t *testing.T) {
+	opts := httpclient.Options{
+		BasicAuth: &httpclient.BasicAuthOptions{User: "u", Password: "p"},
+		TLS: &httpclient.TLSOptions{
+			CACertificate:      "ca",
+			InsecureSkipVerify: true,
+			ServerName:         "kafka",
+			MinVersion:         tls.VersionTLS12,
+		},
+	}
+	got := oauthTokenHTTPClientOptions(opts)
+	if got.BasicAuth != nil {
+		t.Fatal("expected basic auth to be dropped")
+	}
+	if got.TLS == nil || got.TLS.CACertificate != "" || got.TLS.InsecureSkipVerify || got.TLS.ServerName != "" {
+		t.Fatalf("expected Kafka TLS settings to be dropped, got %+v", got.TLS)
+	}
+	if got.TLS.MinVersion != tls.VersionTLS12 {
+		t.Fatal("expected TLS version bounds to be kept")
+	}
+	if opts.TLS.CACertificate != "ca" {
+		t.Fatal("input options must not be modified")
+	}
+}
+
+func TestNewConnectionClients_CreatesOAuthHTTPClient(t *testing.T) {
+	clients, err := newConnectionClients(context.Background(), backend.DataSourceInstanceSettings{}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if clients.oauthHTTPClient == nil {
+		t.Fatal("expected OAuth HTTP client")
+	}
+}

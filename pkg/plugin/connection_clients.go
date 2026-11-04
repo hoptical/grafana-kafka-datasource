@@ -15,6 +15,7 @@ import (
 // datasource connection configuration.
 type connectionClients struct {
 	schemaRegistryHTTPClient *http.Client
+	oauthHTTPClient          *http.Client
 	kafkaDialFunc            func(context.Context, string, string) (net.Conn, error)
 }
 
@@ -22,6 +23,13 @@ func newConnectionClients(ctx context.Context, settings backend.DataSourceInstan
 	opts, err := settings.HTTPClientOptions(ctx)
 	if err != nil {
 		return connectionClients{}, fmt.Errorf("failed to get HTTP client options: %w", err)
+	}
+
+	// Build the OAuth token client from the base options, before the Schema
+	// Registry TLS override is applied.
+	oauthHTTPClient, err := httpclient.New(oauthTokenHTTPClientOptions(opts))
+	if err != nil {
+		return connectionClients{}, fmt.Errorf("failed to create OAuth token HTTP client: %w", err)
 	}
 
 	if err := applySchemaRegistryTLS(&opts, settings); err != nil {
@@ -33,7 +41,7 @@ func newConnectionClients(ctx context.Context, settings backend.DataSourceInstan
 		return connectionClients{}, fmt.Errorf("failed to create Schema Registry HTTP client: %w", err)
 	}
 
-	clients := connectionClients{schemaRegistryHTTPClient: schemaRegistryHTTPClient}
+	clients := connectionClients{schemaRegistryHTTPClient: schemaRegistryHTTPClient, oauthHTTPClient: oauthHTTPClient}
 	if !enablePDC {
 		return clients, nil
 	}
@@ -59,6 +67,19 @@ func newConnectionClients(ctx context.Context, settings backend.DataSourceInstan
 	clients.kafkaDialFunc = contextDialer.DialContext
 
 	return clients, nil
+}
+
+// oauthTokenHTTPClientOptions derives options for OAuth token requests from the
+// datasource HTTP options. The token endpoint is a different server than Kafka,
+// so the Kafka TLS settings (custom CA, skip verify, client certs) and any
+// datasource basic auth are dropped; only the TLS version bounds are kept.
+// Proxy (PDC) options and middlewares are preserved.
+func oauthTokenHTTPClientOptions(opts httpclient.Options) httpclient.Options {
+	if opts.TLS != nil {
+		opts.TLS = &httpclient.TLSOptions{MinVersion: opts.TLS.MinVersion, MaxVersion: opts.TLS.MaxVersion}
+	}
+	opts.BasicAuth = nil
+	return opts
 }
 
 // Schema Registry TLS modes. "kafka" (the default, and the behaviour before the
