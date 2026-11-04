@@ -10,6 +10,9 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+	"unicode/utf8"
+
+	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 )
 
 func newTestOAuthMechanism(tokenEndpoint string) *oauthBearerMechanism {
@@ -291,5 +294,105 @@ func TestNewOAuthBearerMechanism_UsesClientTimeout(t *testing.T) {
 	}
 	if m.tokenEndpoint != "https://idp.example.com/token" || m.clientID != "id" || m.clientSecret != "secret" || m.scope != "kafka" {
 		t.Fatal("expected OAuth fields to be copied from the client")
+	}
+}
+
+// captureLogger records Debug calls; other levels are ignored.
+type captureLogger struct {
+	log.Logger
+	mu    sync.Mutex
+	debug [][]any
+}
+
+// Debug records the call for later inspection.
+func (c *captureLogger) Debug(msg string, args ...any) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.debug = append(c.debug, append([]any{msg}, args...))
+}
+
+// field returns the value of the first logged key/value pair named name.
+func (c *captureLogger) field(name string) (any, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, call := range c.debug {
+		for i := 1; i+1 < len(call); i += 2 {
+			if call[i] == name {
+				return call[i+1], true
+			}
+		}
+	}
+	return nil, false
+}
+
+// TestTruncateForLog covers bodies below, at, and above the cap.
+func TestTruncateForLog(t *testing.T) {
+	short := strings.Repeat("a", 10)
+	exact := strings.Repeat("a", maxLoggedBodyBytes)
+	long := strings.Repeat("a", maxLoggedBodyBytes+50)
+
+	if got := truncateForLog(short, maxLoggedBodyBytes); got != short {
+		t.Fatalf("short body should be unchanged, got %q", got)
+	}
+	if got := truncateForLog(exact, maxLoggedBodyBytes); got != exact {
+		t.Fatal("body of exactly the limit should be unchanged")
+	}
+	want := exact + "...(truncated)"
+	if got := truncateForLog(long, maxLoggedBodyBytes); got != want {
+		t.Fatalf("long body should be capped, got len %d", len(got))
+	}
+	// A cut in the middle of a multi-byte character must not yield invalid UTF-8.
+	if got := truncateForLog("ééé", 3); !utf8.ValidString(got) {
+		t.Fatalf("truncated output is not valid UTF-8: %q", got)
+	}
+}
+
+// TestRedactEndpoint verifies userinfo, query and fragment are stripped.
+func TestRedactEndpoint(t *testing.T) {
+	cases := map[string]string{
+		"https://user:pw@idp.example.com/oauth/token?secret=x#frag": "https://idp.example.com/oauth/token",
+		"https://idp.example.com/token":                             "https://idp.example.com/token",
+		"://bad":                                                    "<unparseable token endpoint>",
+		"not a url":                                                 "<unparseable token endpoint>",
+	}
+	for in, want := range cases {
+		if got := redactEndpoint(in); got != want {
+			t.Errorf("redactEndpoint(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// TestOAuthBearerMechanism_NonOKDebugLogIsTruncatedAndRedacted checks the Debug event contents.
+func TestOAuthBearerMechanism_NonOKDebugLogIsTruncatedAndRedacted(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(strings.Repeat("x", maxLoggedBodyBytes+500)))
+	}))
+	defer server.Close()
+
+	orig := log.DefaultLogger
+	capture := &captureLogger{Logger: log.NewNullLogger()}
+	log.DefaultLogger = capture
+	defer func() { log.DefaultLogger = orig }()
+
+	m := newTestOAuthMechanism(server.URL + "/token?client_secret=leak")
+	_, _, err := m.Start(context.Background())
+	if err == nil {
+		t.Fatal("expected error")
+	}
+
+	body, ok := capture.field("body")
+	if !ok {
+		t.Fatal("expected debug log with body field")
+	}
+	if want := strings.Repeat("x", maxLoggedBodyBytes) + "...(truncated)"; body != want {
+		t.Fatalf("expected truncated body in debug log, got len %d", len(body.(string)))
+	}
+	endpoint, ok := capture.field("endpoint")
+	if !ok {
+		t.Fatal("expected endpoint field in debug log")
+	}
+	if strings.Contains(endpoint.(string), "leak") || strings.Contains(endpoint.(string), "?") {
+		t.Fatalf("endpoint must be redacted, got %v", endpoint)
 	}
 }
