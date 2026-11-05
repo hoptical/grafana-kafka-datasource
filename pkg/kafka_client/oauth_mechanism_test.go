@@ -288,12 +288,59 @@ func TestNewOAuthBearerMechanism_UsesClientTimeout(t *testing.T) {
 		SaslOauthScope:         "kafka",
 		Timeout:                5000,
 	})
-	m := newOAuthBearerMechanism(&client)
+	m, err := newOAuthBearerMechanism(&client)
+	if err != nil {
+		t.Fatalf("newOAuthBearerMechanism() error = %v", err)
+	}
+	if m.httpClient.CheckRedirect == nil {
+		t.Fatal("expected redirects to be rejected")
+	}
 	if m.httpClient.Timeout != 5*time.Second {
 		t.Fatalf("expected http client timeout to derive from client.Timeout, got %v", m.httpClient.Timeout)
 	}
 	if m.tokenEndpoint != "https://idp.example.com/token" || m.clientID != "id" || m.clientSecret != "secret" || m.scope != "kafka" {
 		t.Fatal("expected OAuth fields to be copied from the client")
+	}
+}
+
+type countingTransport struct{ calls int32 }
+
+func (c *countingTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	atomic.AddInt32(&c.calls, 1)
+	return http.DefaultTransport.RoundTrip(r)
+}
+
+func TestNewOAuthBearerMechanism_UsesInjectedSDKClient(t *testing.T) {
+	server := httptest.NewServer(tokenHandler("tok", 600))
+	defer server.Close()
+
+	transport := &countingTransport{}
+	base := &http.Client{Transport: transport}
+	client := NewKafkaClient(Options{
+		BootstrapServers:       "localhost:9092",
+		SaslOauthTokenEndpoint: server.URL,
+		Timeout:                3000,
+	})
+	client.OAuthHTTPClient = base
+
+	m, err := newOAuthBearerMechanism(&client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.httpClient == base {
+		t.Fatal("expected a copy, not the shared client")
+	}
+	if m.httpClient.Timeout != 3*time.Second || m.httpClient.CheckRedirect == nil {
+		t.Fatal("expected per-mechanism timeout and redirect rejection")
+	}
+	if base.CheckRedirect != nil || base.Timeout != 0 {
+		t.Fatal("shared client must not be modified")
+	}
+	if _, _, err := m.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if atomic.LoadInt32(&transport.calls) != 1 {
+		t.Fatal("expected token request to go through the injected client's transport")
 	}
 }
 
