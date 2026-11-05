@@ -32,6 +32,28 @@ const refreshSkewFraction = 0.2
 // oversized response.
 const maxTokenResponseBytes = 1 << 20 // 1MB
 
+// maxLoggedBodyBytes caps how much of a non-200 token response body is logged.
+const maxLoggedBodyBytes = 1024
+
+// truncateForLog caps s at n bytes (without splitting a UTF-8 character),
+// appending a marker when it was shortened.
+func truncateForLog(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return strings.ToValidUTF8(s[:n], "") + "...(truncated)"
+}
+
+// redactEndpoint returns the endpoint with userinfo, query and fragment removed
+// so it is safe to log. It falls back to a placeholder if the URL can't be parsed.
+func redactEndpoint(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return "<unparseable token endpoint>"
+	}
+	return (&url.URL{Scheme: u.Scheme, Host: u.Host, Path: u.Path}).String()
+}
+
 var errRedirectNotAllowed = errors.New("redirects are not followed for OAuth token requests")
 
 // oauthBearerMechanism implements the SASL/OAUTHBEARER (KIP-255, RFC 7628)
@@ -57,10 +79,12 @@ type oauthBearerMechanism struct {
 	expiresAt time.Time
 }
 
-// newOAuthBearerMechanism builds the mechanism. Token requests go through the
-// Grafana SDK HTTP client (client.OAuthHTTPClient) so the SDK middlewares
-// (response limit, PDC secure socks proxy, ...) apply. A shallow copy is made so
-// the per-mechanism timeout and redirect rejection don't alter the shared client.
+// newOAuthBearerMechanism builds the mechanism from the client's OAuth settings,
+// using the client timeout (or dialerTimeout) for token requests. Token requests
+// go through the Grafana SDK HTTP client (client.OAuthHTTPClient) so the SDK
+// middlewares (response limit, PDC secure socks proxy, ...) apply. A shallow copy
+// is made so the per-mechanism timeout and redirect rejection don't alter the
+// shared client.
 func newOAuthBearerMechanism(client *KafkaClient) (*oauthBearerMechanism, error) {
 	timeout := dialerTimeout
 	if client.Timeout > 0 {
@@ -87,6 +111,8 @@ func newOAuthBearerMechanism(client *KafkaClient) (*oauthBearerMechanism, error)
 	}, nil
 }
 
+// rejectRedirects is an http.Client CheckRedirect that refuses to follow any
+// redirect, so the client secret is never forwarded to another host.
 func rejectRedirects(req *http.Request, via []*http.Request) error {
 	return errRedirectNotAllowed
 }
@@ -111,6 +137,7 @@ func validateTokenEndpoint(rawURL string) error {
 	return fmt.Errorf("token endpoint must use https (got %q); plaintext http is only allowed for localhost", rawURL)
 }
 
+// Name returns the SASL mechanism name.
 func (m *oauthBearerMechanism) Name() string {
 	return "OAUTHBEARER"
 }
@@ -140,6 +167,8 @@ type oauthTokenResponse struct {
 	ExpiresIn   int64  `json:"expires_in"`
 }
 
+// getToken returns the cached token, or fetches a new one from the token
+// endpoint when none is cached or the cached one is about to expire.
 func (m *oauthBearerMechanism) getToken(ctx context.Context) (string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -185,7 +214,12 @@ func (m *oauthBearerMechanism) getToken(ctx context.Context) (string, error) {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("token endpoint returned status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		// The response body may contain provider-specific details, so keep it out
+		// of the returned error (which is logged at Error level and returned to
+		// the caller) and only log it at Debug level for troubleshooting.
+		log.DefaultLogger.Debug("OAuth token endpoint returned a non-200 status",
+			"endpoint", redactEndpoint(m.tokenEndpoint), "status", resp.StatusCode, "body", truncateForLog(strings.TrimSpace(string(body)), maxLoggedBodyBytes))
+		return "", fmt.Errorf("token endpoint returned status %d", resp.StatusCode)
 	}
 
 	var tokenResp oauthTokenResponse
