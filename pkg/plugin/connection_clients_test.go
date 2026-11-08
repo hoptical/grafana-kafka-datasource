@@ -218,9 +218,10 @@ func TestApplySchemaRegistryTLS(t *testing.T) {
 	}
 }
 
-func TestOAuthTokenHTTPClientOptions_DropsKafkaTLSAndBasicAuth(t *testing.T) {
+func TestOAuthTokenHTTPClientOptions_DropsKafkaTLSBasicAuthAndHeaders(t *testing.T) {
 	opts := httpclient.Options{
 		BasicAuth: &httpclient.BasicAuthOptions{User: "u", Password: "p"},
+		Header:    http.Header{"X-Registry-Key": {"secret"}, "Content-Type": {"application/json"}},
 		TLS: &httpclient.TLSOptions{
 			CACertificate:      "ca",
 			InsecureSkipVerify: true,
@@ -231,6 +232,12 @@ func TestOAuthTokenHTTPClientOptions_DropsKafkaTLSAndBasicAuth(t *testing.T) {
 	got := oauthTokenHTTPClientOptions(opts)
 	if got.BasicAuth != nil {
 		t.Fatal("expected basic auth to be dropped")
+	}
+	if len(got.Header) != 0 {
+		t.Fatalf("expected custom headers to be dropped, got %v", got.Header)
+	}
+	if len(opts.Header) != 2 {
+		t.Fatal("input options must not be modified")
 	}
 	if got.TLS == nil || got.TLS.CACertificate != "" || got.TLS.InsecureSkipVerify || got.TLS.ServerName != "" {
 		t.Fatalf("expected Kafka TLS settings to be dropped, got %+v", got.TLS)

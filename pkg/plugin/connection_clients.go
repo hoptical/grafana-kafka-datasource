@@ -71,14 +71,16 @@ func newConnectionClients(ctx context.Context, settings backend.DataSourceInstan
 
 // oauthTokenHTTPClientOptions derives options for OAuth token requests from the
 // datasource HTTP options. The token endpoint is a different server than Kafka,
-// so the Kafka TLS settings (custom CA, skip verify, client certs) and any
-// datasource basic auth are dropped; only the TLS version bounds are kept.
+// so the Kafka TLS settings (custom CA, skip verify, client certs), any
+// datasource basic auth and any custom HTTP headers are dropped (headers would
+// otherwise be sent to the IdP); only the TLS version bounds are kept.
 // Proxy (PDC) options and middlewares are preserved.
 func oauthTokenHTTPClientOptions(opts httpclient.Options) httpclient.Options {
 	if opts.TLS != nil {
 		opts.TLS = &httpclient.TLSOptions{MinVersion: opts.TLS.MinVersion, MaxVersion: opts.TLS.MaxVersion}
 	}
 	opts.BasicAuth = nil
+	opts.Header = nil
 	return opts
 }
 
