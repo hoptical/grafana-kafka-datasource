@@ -90,6 +90,7 @@ func NewKafkaInstance(ctx context.Context, s backend.DataSourceInstanceSettings)
 	} else {
 		kc = kafka_client.NewKafkaClientWithDialFunc(*settings, clients.kafkaDialFunc)
 	}
+	kc.OAuthHTTPClient = clients.oauthHTTPClient
 	return &KafkaDatasource{client: &kc, settings: settings, schemaRegistryHTTPClient: clients.schemaRegistryHTTPClient}, nil
 }
 
