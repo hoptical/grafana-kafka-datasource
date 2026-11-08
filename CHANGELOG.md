@@ -1,5 +1,12 @@
 # Changelog
 
+## [v1.11.1](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.11.1)
+
+[Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v1.11.0...v1.11.1)
+
+- Fix: use Grafana SDK HTTP client for OAuth token requests ([#188](https://github.com/hoptical/grafana-kafka-datasource/pull/188))
+- Fix: keep OAuth token endpoint response body out of errors ([#187](https://github.com/hoptical/grafana-kafka-datasource/pull/187))
+
 ## [v1.11.0](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.11.0)
 
 [Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v1.10.0...v1.11.0)
