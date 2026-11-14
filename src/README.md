@@ -228,9 +228,9 @@ Both flat and nested structures are supported. Confluent wire format uses a magi
 
 ### Known Protobuf Limitations
 
-- **Inline schemas do not support imports**
-  - Well-known types like `google.protobuf.Timestamp` won't compile when provided inline
-  - Use inline schema for simple schemas, or provide the schema via Schema Registry if imports are needed
+- **Imports are not supported**, whether the schema is inline or comes from Schema Registry
+  - Well-known types like `google.protobuf.Timestamp` won't compile
+  - If your schema has imports, inline the imported definitions into a single self-contained `.proto`
 - **Default message selection**: the first top-level message in the `.proto` file is used as the default
 - **Schema caching**: schemas are cached by ID/subject to avoid repeated registry requests
 
