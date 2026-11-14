@@ -117,6 +117,15 @@ go mod tidy
 - Follow existing project conventions and ESLint rules.
 - Keep commits focused and add tests for new behaviours.
 
+## Documentation
+
+There are two READMEs:
+
+- `README.md` (repository root) is for GitHub readers and may include installation and development content.
+- `src/README.md` is packaged with the plugin and shown on the grafana.com catalog page and inside Grafana. It is for end users only: what the plugin does, requirements, configuration and usage. Don't add installation instructions or development content (benchmarks, sample producers, contribution docs) to it, and use absolute GitHub URLs for links.
+
+When you change user-facing behaviour, update both files.
+
 ## Reporting Issues
 
 - Use GitHub Issues for bugs, feature requests, and questions.

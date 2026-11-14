@@ -1,5 +1,7 @@
 # Kafka Datasource for Grafana
 
+<!-- The README shown in the Grafana catalog and inside Grafana is src/README.md. Keep user-facing changes in sync there; see CONTRIBUTING.md. -->
+
 [![License](https://img.shields.io/github/license/hoptical/grafana-kafka-datasource)](LICENSE)
 [![CI](https://github.com/hoptical/grafana-kafka-datasource/actions/workflows/ci.yml/badge.svg)](https://github.com/hoptical/grafana-kafka-datasource/actions/workflows/ci.yml)
 [![Release](https://github.com/hoptical/grafana-kafka-datasource/actions/workflows/release.yml/badge.svg)](https://github.com/hoptical/grafana-kafka-datasource/actions/workflows/release.yml)
