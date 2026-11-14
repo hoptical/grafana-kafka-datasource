@@ -140,16 +140,26 @@ func validateTokenEndpoint(rawURL string) error {
 	return fmt.Errorf("token endpoint must use https (got %q); plaintext http is only allowed for localhost", redactEndpoint(rawURL))
 }
 
-// sanitizeURLError replaces the URL inside any *url.Error in err's chain with
-// the redacted endpoint. net/url and net/http embed the full URL (including
-// query parameters and, for parse errors, userinfo) in *url.Error, and these
-// errors are logged at Error level, so they must not carry credentials.
+// sanitizeURLError returns err with any *url.Error rewritten so it carries no
+// credentials. net/url and net/http put the full URL (query parameters,
+// userinfo) in url.Error.URL, and the inner url.Error.Err can also echo URL
+// fragments (e.g. a malformed redirect Location header or an invalid port).
+// These errors are logged at Error level, so the URL is replaced with the
+// redacted endpoint and the inner error is kept only when it is known not to
+// contain URL text: context cancellation/deadline, network (dial) errors and
+// the redirect rejection. Anything else is replaced with a fixed message.
 func sanitizeURLError(err error, endpoint string) error {
 	var ue *url.Error
-	if errors.As(err, &ue) {
-		ue.URL = redactEndpoint(endpoint)
+	if !errors.As(err, &ue) {
+		return err
 	}
-	return err
+	inner := errors.New("details omitted")
+	var opErr *net.OpError
+	if errors.Is(ue.Err, context.Canceled) || errors.Is(ue.Err, context.DeadlineExceeded) ||
+		errors.Is(ue.Err, errRedirectNotAllowed) || errors.As(ue.Err, &opErr) {
+		inner = ue.Err
+	}
+	return &url.Error{Op: ue.Op, URL: redactEndpoint(endpoint), Err: inner}
 }
 
 // Name returns the SASL mechanism name.

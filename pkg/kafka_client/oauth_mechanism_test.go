@@ -281,6 +281,26 @@ func TestOAuthBearerMechanism_EndpointErrorsAreRedacted(t *testing.T) {
 	}
 }
 
+// TestOAuthBearerMechanism_MalformedRedirectLocationIsRedacted covers a token
+// endpoint answering with a malformed Location header: Go embeds that header
+// (including any secret in it) in the inner error of the returned *url.Error.
+func TestOAuthBearerMechanism_MalformedRedirectLocationIsRedacted(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Location", "/token?client_secret=qsecret#%")
+		w.WriteHeader(http.StatusFound)
+	}))
+	defer server.Close()
+
+	m := newTestOAuthMechanism(server.URL + "/token?client_secret=qsecret")
+	_, _, err := m.Start(context.Background())
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if strings.Contains(err.Error(), "qsecret") {
+		t.Fatalf("error leaks secret: %v", err)
+	}
+}
+
 func TestOAuthBearerMechanism_AllowsLoopbackHTTP(t *testing.T) {
 	server := httptest.NewServer(tokenHandler("loopback-token", 600))
 	defer server.Close()
