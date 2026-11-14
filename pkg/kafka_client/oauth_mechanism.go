@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend/httpclient"
@@ -125,7 +126,10 @@ func rejectRedirects(req *http.Request, via []*http.Request) error {
 func validateTokenEndpoint(rawURL string) error {
 	u, err := url.Parse(rawURL)
 	if err != nil {
-		return fmt.Errorf("invalid token endpoint URL: %w", err)
+		// The parse error embeds the raw URL (and its inner error can echo URL
+		// fragments such as an invalid port), which may carry credentials, so
+		// it is deliberately not included.
+		return errors.New("invalid token endpoint URL")
 	}
 	if u.Scheme == "https" {
 		return nil
@@ -134,7 +138,53 @@ func validateTokenEndpoint(rawURL string) error {
 	if host == "localhost" || net.ParseIP(host).IsLoopback() {
 		return nil
 	}
-	return fmt.Errorf("token endpoint must use https (got %q); plaintext http is only allowed for localhost", rawURL)
+	return fmt.Errorf("token endpoint must use https (got %q); plaintext http is only allowed for localhost", redactEndpoint(rawURL))
+}
+
+// sanitizeURLError returns err with any *url.Error rewritten so it carries no
+// credentials. net/url and net/http put the full URL (query parameters,
+// userinfo) in url.Error.URL, and the inner url.Error.Err can also echo URL
+// fragments (e.g. a malformed redirect Location header or an invalid port).
+// These errors are logged at Error level, so the URL is replaced with the
+// redacted endpoint and the inner error is rebuilt from known-safe parts (see
+// safeInnerError) instead of being retained.
+func sanitizeURLError(err error, endpoint string) error {
+	var ue *url.Error
+	if !errors.As(err, &ue) {
+		return err
+	}
+	return &url.Error{Op: ue.Op, URL: redactEndpoint(endpoint), Err: safeInnerError(ue.Err)}
+}
+
+// safeInnerError maps an error to an equivalent one whose text is built only
+// from fixed strings and non-secret transport details (operation, network,
+// dial address, errno, DNS name), never from the original error's text, since
+// that text may wrap or echo URL content. errors.Is on the context and
+// redirect sentinels keeps working.
+func safeInnerError(err error) error {
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return context.DeadlineExceeded
+	case errors.Is(err, context.Canceled):
+		return context.Canceled
+	case errors.Is(err, errRedirectNotAllowed):
+		return errRedirectNotAllowed
+	}
+	var opErr *net.OpError
+	if errors.As(err, &opErr) {
+		inner := errors.New("network error")
+		var errno syscall.Errno
+		var dnsErr *net.DNSError
+		switch {
+		case errors.As(opErr.Err, &errno):
+			inner = errno
+		case errors.As(opErr.Err, &dnsErr):
+			inner = &net.DNSError{Err: dnsErr.Err, Name: dnsErr.Name, Server: dnsErr.Server,
+				IsTimeout: dnsErr.IsTimeout, IsTemporary: dnsErr.IsTemporary, IsNotFound: dnsErr.IsNotFound}
+		}
+		return &net.OpError{Op: opErr.Op, Net: opErr.Net, Addr: opErr.Addr, Err: inner}
+	}
+	return errors.New("details omitted")
 }
 
 // Name returns the SASL mechanism name.
@@ -191,13 +241,13 @@ func (m *oauthBearerMechanism) getToken(ctx context.Context) (string, error) {
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, m.tokenEndpoint, strings.NewReader(form.Encode()))
 	if err != nil {
-		return "", fmt.Errorf("failed to build token request: %w", err)
+		return "", fmt.Errorf("failed to build token request: %w", sanitizeURLError(err, m.tokenEndpoint))
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	resp, err := m.httpClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("token endpoint request failed: %w", err)
+		return "", fmt.Errorf("token endpoint request failed: %w", sanitizeURLError(err, m.tokenEndpoint))
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
