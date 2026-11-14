@@ -5,7 +5,6 @@
 [![Release](https://github.com/hoptical/grafana-kafka-datasource/actions/workflows/release.yml/badge.svg)](https://github.com/hoptical/grafana-kafka-datasource/actions/workflows/release.yml)
 [![Go Version](https://img.shields.io/badge/go-1.26.5-blue?logo=go)](https://golang.org/doc/go1.26)
 [![Grafana v10.2+](https://img.shields.io/badge/grafana-10.2%2B-orange?logo=grafana)](https://grafana.com)
-[![Buy Me a Coffee](https://img.shields.io/badge/buy%20me%20a%20coffee-donate-yellow?logo=buy-me-a-coffee&style=flat)](https://www.buymeacoffee.com/hoptical)
 
 ---
 
