@@ -1,12 +1,11 @@
 # Kafka Datasource for Grafana
 
-<!-- The README shown in the Grafana catalog and inside Grafana is src/README.md. Keep user-facing changes in sync there; see CONTRIBUTING.md. -->
-
 [![License](https://img.shields.io/github/license/hoptical/grafana-kafka-datasource)](LICENSE)
 [![CI](https://github.com/hoptical/grafana-kafka-datasource/actions/workflows/ci.yml/badge.svg)](https://github.com/hoptical/grafana-kafka-datasource/actions/workflows/ci.yml)
 [![Release](https://github.com/hoptical/grafana-kafka-datasource/actions/workflows/release.yml/badge.svg)](https://github.com/hoptical/grafana-kafka-datasource/actions/workflows/release.yml)
 [![Go Version](https://img.shields.io/badge/go-1.26.5-blue?logo=go)](https://golang.org/doc/go1.26)
 [![Grafana v10.2+](https://img.shields.io/badge/grafana-10.2%2B-orange?logo=grafana)](https://grafana.com)
+[![Buy Me a Coffee](https://img.shields.io/badge/buy%20me%20a%20coffee-donate-yellow?logo=buy-me-a-coffee&style=flat)](https://www.buymeacoffee.com/hoptical)
 
 ---
 
@@ -14,47 +13,11 @@
 
 ---
 
-## Why Kafka Datasource?
+A Grafana data source plugin that streams Kafka topics into dashboards in real time. It supports JSON, Avro, Protobuf, Plaintext and InfluxDB Line Protocol messages, Schema Registry, SASL (PLAIN, SCRAM, OAUTHBEARER/OIDC, GSSAPI/Kerberos) and SSL/TLS, and Grafana Alerting. Requires Apache Kafka v0.11+ and Grafana v10.2+.
 
-- **Live streaming:** Monitor Kafka topics in real time.
-- **Flexible queries:** Select topics, partitions, offsets, and timestamp modes.
-- **Rich JSON support:** Handles flat, nested, and array data.
-- **Avro support:** Integrates with Schema Registry for Avro messages.
-- **Plaintext support:** Reads raw Kafka payload bytes without schema decoding.
-- **Line Protocol support:** Parses InfluxDB Line Protocol messages into a single long-format Grafana frame per message, with tags carried as columns.
-- **Secure:** SASL authentication (PLAIN, SCRAM, OAUTHBEARER/OIDC, GSSAPI/Kerberos) & SSL/TLS encryption.
-- **Easy setup:** Install and configure in minutes.
+**Features, configuration, querying and format support are documented in the [end-user README](https://github.com/hoptical/grafana-kafka-datasource/blob/main/src/README.md)**, which is also the page shown in the Grafana plugin catalog and inside Grafana.
 
-## How It Works
-
-This plugin connects your Grafana instance directly to Kafka brokers, allowing you to query, visualize, and explore streaming data with powerful time-series panels and dashboards.
-
-## Requirements
-
-- Apache Kafka v0.11+
-- Grafana v10.2+
-
-> Note: Without PDC, the Grafana server must access the Kafka broker and Schema Registry directly. With PDC enabled, Grafana must access the PDC proxy, and the PDC agent must access the Kafka broker and Schema Registry.
-
-## Features
-
-- Real-time monitoring of Kafka topics
-- Kafka authentication (SASL: PLAIN, SCRAM, OAUTHBEARER/OIDC client credentials, GSSAPI/Kerberos) & encryption (SSL/TLS)
-- Query all or specific partitions
-- Autocomplete for topic names
-- Flexible offset options (latest, last N, earliest)
-- Timestamp modes (Kafka event time, dashboard received time)
-- Advanced JSON support (flat, nested, arrays, mixed types)
-- Avro support with Schema Registry integration (inline schema or Schema Registry)
-- Protobuf support with Schema Registry integration (inline schema or Schema Registry)
-- Plaintext support for raw byte payloads (no schema required)
-- Line Protocol support (InfluxDB format) with per-query timestamp-precision selection (auto / ns / µs / ms / s)
-- Transactional topic support (committed messages only; control records are filtered)
-- Message key support (None, String, JSON, Base64 formats)
-- Configurable flattening depth (default: 5)
-- Configurable max fields per message (default: 1000)
-- Customizable query aliases with placeholders
-- Grafana Alerting on a snapshot of recent topic messages
+<img src="https://raw.githubusercontent.com/hoptical/grafana-kafka-datasource/ba3d10342aca7512c5679fcd7761e5b394094598/src/img/graph.gif" alt="Kafka dashboard live demo" width="800">
 
 ## Installation
 
@@ -71,194 +34,6 @@ Download the [latest release](https://github.com/hoptical/grafana-kafka-datasour
 ### Provisioning
 
 You can automatically configure the Kafka datasource using Grafana's provisioning feature. For a ready-to-use template and configuration options, refer to `provisioning/datasources/datasource.yaml` in this repository.
-
-## Usage
-
-### Configuration
-
-1. Add a new data source in Grafana and select "Kafka Datasource".
-2. Configure connection settings:
-   - **Broker address** (e.g. `localhost:9094` or `kafka:9092`)
-   - **Private Data Source Connect (PDC)** (optional; requires PDC to be configured in Grafana)
-   - **Authentication** (SASL — PLAIN, SCRAM, OAUTHBEARER/OIDC client credentials, or GSSAPI/Kerberos — SSL/TLS, optional)
-   - **Schema Registry** (if using Avro or Protobuf with Schema Registry; see [Schema Registry](#schema-registry))
-   - **Timeout settings** (default: two seconds)
-
-<a href="https://raw.githubusercontent.com/hoptical/grafana-kafka-datasource/ba3d10342aca7512c5679fcd7761e5b394094598/src/img/config-basic.png"><img src="https://raw.githubusercontent.com/hoptical/grafana-kafka-datasource/ba3d10342aca7512c5679fcd7761e5b394094598/src/img/config-basic.png" alt="Kafka basic datasource configuration" width="800"></a>
-
-### Schema Registry
-
-- **Multiple URLs:** enter one URL, or several comma-separated URLs for a high-availability deployment (for example `http://sr1:8081,http://sr2:8081`). The plugin keeps using the last instance that answered and moves to the next one on connection errors or `5xx`/`429` responses. Client errors such as `404` (unknown subject) or `401` are returned straight away, because another instance would give the same answer. The **Test connection** button next to the Schema Registry option in the Query Editor checks every URL and reports which ones are unreachable.
-- **TLS:**
-  - **Same as Kafka** (default): the Schema Registry uses the CA certificate, client certificate and skip-verify settings from the Kafka TLS section. If your brokers and registry share a CA and client certificate, mTLS to the registry already works with no extra setup.
-  - **Custom:** set a separate CA certificate, client certificate and client key (PEM) for the registry. Use this when the registry is signed by a different CA than the brokers, needs a different client certificate, or uses a public CA while the brokers use a private one.
-
-Certificates must be PEM-encoded. To convert a Java keystore and truststore:
-
-```bash
-# Truststore -> CA certificate
-keytool -exportcert -rfc -keystore truststore.jks -alias <ca-alias> -file ca.pem
-# Keystore -> client certificate and key
-keytool -importkeystore -srckeystore keystore.jks -destkeystore keystore.p12 -deststoretype PKCS12
-openssl pkcs12 -in keystore.p12 -nokeys -clcerts -out client.pem
-openssl pkcs12 -in keystore.p12 -nocerts -nodes -out client.key
-```
-
-### Build the Query
-
-1. Create a new dashboard panel in Grafana.
-2. Select your Kafka data source.
-3. Configure the query:
-   - **Topic**: Enter or select your Kafka topic (autocomplete available).
-   - **Fetch Partitions**: Click to retrieve available partitions.
-   - **Partition**: Choose a specific partition or "all" for all partitions.
-   - **Message Format**:
-     - `JSON`: For JSON messages
-     - `Avro`: For Avro messages (requires schema registry or inline schema)
-     - `Protobuf`: For Protobuf messages (requires schema registry or inline schema)
-     - `Plaintext`: For raw payload bytes (no schema required)
-     - `Line Protocol`: For InfluxDB Line Protocol messages. All lines in a Kafka message are combined into the rows of a single long-format frame; tags become columns; field types (float/int/uint/bool/string) are preserved per spec. A **Timestamp Precision** selector (`Auto-detect` by default) controls how inline timestamps are interpreted.
-   - **Offset Reset**:
-     - `latest`: Only new messages
-     - `last N messages`: Start from the most recent N messages (set N in the UI)
-     - `earliest`: Start from the oldest message
-   - **Transactional Topics**: The datasource reads committed messages and automatically skips Kafka transaction control records (COMMIT/ABORT markers).
-   - **Timestamp Mode**: Choose between Kafka event time or dashboard received time.
-   - **Alias**: Optional custom name for the query series. Supports template placeholders:
-     - `{{topic}}`: The Kafka topic name
-     - `{{field}}`: The field name (for field display names)
-     - `{{partition}}`: The partition number
-     - `{{refid}}`: The query RefID (e.g., A, B)
-   - **Key Format**: Choose how to process Kafka message keys:
-     - `None`: Ignore keys (default, backward compatible)
-     - `String`: Single "key" column with UTF-8 decoded key
-     - `JSON`: Flatten JSON keys with "key." prefix (e.g., key.userId, key.region)
-     - `Base64`: Single "key" column with raw binary key encoded as a base64 string
-
-**Tip:** Numeric fields become time series, string fields are labels, arrays and nested objects are automatically flattened for visualization.
-
-<img src="https://raw.githubusercontent.com/hoptical/grafana-kafka-datasource/ba3d10342aca7512c5679fcd7761e5b394094598/src/img/query-json.png" alt="JSON query editor example" width="800">
-
-### Grafana Alerting
-
-Dashboard panels still stream over Grafana Live. Alert rules cannot subscribe to Live channels, so this plugin evaluates alerts from messages inside the rule's time range.
-
-QueryData resolves the partition offsets selected by the rule's time range (`ListOffsets` by timestamp). It returns the freshest bounded tail: up to 1000 messages across all selected partitions, with at most eight concurrent partition readers. Keeping the newest messages makes Reduce → Last evaluate the freshest available value instead of a value from the beginning of a busy range.
-
-The 1000-message cap is global and is divided across selected partitions. When a range contains more messages than that cap, Reduce → Min, Max, Mean, and Count describe only the returned tail, not the entire time range. This bound keeps alert evaluation memory, CPU, and broker reads predictable.
-
-A producer with no messages in the range evaluates as **No data**. If the query deadline arrives before the selected end offset, the evaluation is **Error** instead of a partial snapshot. Latest, last N, and earliest still control dashboard streaming. They do not define the alert window.
-
-Topics written by transactional (exactly-once) producers are supported. The snapshot reads committed data up to the partition's last stable offset, so an open transaction or a trailing COMMIT/ABORT marker does not stall the evaluation.
-
-Line protocol is not supported for alerting yet. JSON, Avro, Protobuf, and plaintext return **wide time series**. String fields become series labels, and Kafka `offset`/`partition` columns are removed, so Reduce does not fail with `must be a wide series but got type long`. Set **Alert field** (`selectedField`) to the numeric payload field (for example `value1` or `metrics.cpu.load`), then Reduce → Last. That field is shown only in the alerting query editor. Dashboard Live streaming is unchanged.
-
-## Supported JSON Structures
-
-- Flat objects
-- Nested objects (flattened)
-- Top-level arrays
-- Mixed types
-
-**Examples:**
-
-Simple flat object:
-
-```json
-{
-  "temperature": 23.5,
-  "humidity": 65.2,
-  "status": "active"
-}
-```
-
-Nested object (flattened as `user.name`, `user.age`, `settings.theme`):
-
-```json
-{
-  "user": {
-    "name": "John Doe",
-    "age": 30
-  },
-  "settings": {
-    "theme": "dark"
-  }
-}
-```
-
-Top-level array (flattened as `item_0.id`, `item_0.value`, `item_1.id`, etc.):
-
-```json
-[
-  { "id": 1, "value": 10.5 },
-  { "id": 2, "value": 20.3 }
-]
-```
-
-## Avro Support
-
-Avro messages are supported using either:
-
-- **Inline schema**: paste your Avro schema (JSON format) in the UI
-- **Schema Registry**: the plugin fetches the latest schema by subject from the configured Schema Registry
-
-<img src="https://raw.githubusercontent.com/hoptical/grafana-kafka-datasource/ba3d10342aca7512c5679fcd7761e5b394094598/src/img/query-avro-inline-schema.png" alt="Avro inline schema editor" width="800">
-
-**Example Avro schema:**
-
-```json
-{
-  "type": "record",
-  "name": "SensorReading",
-  "fields": [
-    { "name": "sensor_id", "type": "string" },
-    { "name": "temperature", "type": "double" },
-    { "name": "timestamp", "type": "long" }
-  ]
-}
-```
-
-Both flat and nested structures are supported. When using Schema Registry, messages are encoded in Confluent wire format with schema ID prefix for efficient deserialization.
-
-## Protobuf Support
-
-Protobuf messages are supported using either:
-
-- **Inline schema**: paste your `.proto` schema definition in the UI
-- **Schema Registry**: the plugin extracts the schema ID from the Confluent wire format header and fetches the schema from the configured Schema Registry
-
-**Example Protobuf schema:**
-
-```protobuf
-syntax = "proto3";
-
-message SensorReading {
-  string sensor_id = 1;
-  double temperature = 2;
-  int64 timestamp = 3;
-}
-```
-
-Both flat and nested structures are supported. Confluent wire format uses a magic byte (0x00) followed by a 4-byte schema ID, then a variable-length message-indexes array (varint-encoded), and finally the Protobuf payload. The message-indexes identify which message type in the schema the payload encodes.
-
-### Known Protobuf Limitations
-
-- **Inline schemas do not support imports**
-  - Well-known types like `google.protobuf.Timestamp` won't compile when provided inline
-  - Use inline schema for simple schemas, or provide the schema via Schema Registry if imports are needed
-- **Default message selection**: the first top-level message in the `.proto` file is used as the default
-- **Schema caching**: schemas are cached by ID/subject to avoid repeated registry requests
-
-If you encounter issues with complex Protobuf schemas, open an issue so we can prioritize improvements.
-
-## Live Demo
-
-<img src="https://raw.githubusercontent.com/hoptical/grafana-kafka-datasource/ba3d10342aca7512c5679fcd7761e5b394094598/src/img/graph.gif" alt="Kafka dashboard live demo" width="800">
-
-More screenshots and recordings (click to open):
-
-- [Streaming dashboard (high-resolution screenshot)](https://raw.githubusercontent.com/hoptical/grafana-kafka-datasource/ba3d10342aca7512c5679fcd7761e5b394094598/src/img/stream-json-screenshot.png)
-- [Authentication and TLS configuration](https://raw.githubusercontent.com/hoptical/grafana-kafka-datasource/ba3d10342aca7512c5679fcd7761e5b394094598/src/img/config-authentication.png)
 
 ## Sample Data Generator
 
@@ -290,22 +65,13 @@ benchstat before.norm.txt after.txt
 
 The Avro and Protobuf schema caches remain bounded with a hardcoded default size of `256` entries. For benchmark methodology, before/after numbers, profiling commands, and architecture notes, see [Performance Optimizations](https://github.com/hoptical/grafana-kafka-datasource/blob/main/docs/PERFORMANCE_OPTIMIZATIONS.md).
 
-## FAQ & Troubleshooting
-
-- **Can I use this with any Kafka broker?** Yes, supports Apache Kafka v0.11+ and compatible brokers.
-- **Does it support secure connections?** Yes, SASL (PLAIN, SCRAM-SHA-256/512, OAUTHBEARER/OIDC client credentials, GSSAPI/Kerberos) and SSL/TLS are supported. See [OAuth 2.0 Authentication](https://github.com/hoptical/grafana-kafka-datasource/blob/main/docs/OAUTH2_AUTH.md) for OAUTHBEARER setup, and [Kerberos Authentication](https://github.com/hoptical/grafana-kafka-datasource/blob/main/docs/KERBEROS_AUTH.md) for GSSAPI setup.
-- **What JSON formats are supported?** Flat, nested, arrays, mixed types.
-- **What is Plaintext format?** It bypasses schema decoding and renders raw payload bytes in a single `message` field.
-- **What is Line Protocol format?** It parses [InfluxDB Line Protocol](https://docs.influxdata.com/influxdb/v2/reference/syntax/line-protocol/) messages — `measurement,tag=val field=val timestamp`. Each Kafka message produces a single Grafana frame in **long format**, one row per LP field, with a fixed streaming-friendly schema: `Time | _measurement | _field | value | value_str | <one column per tag key> | offset`. This shape works correctly with Grafana Live streaming (consistent schema per channel), and you can pivot it into Influx-style per-series frames with Grafana's **Transform → Partition by values** on `_measurement` + `_field` for dashboards that were built around the InfluxDB datasource. The **Timestamp Precision** dropdown decides how inline timestamps are interpreted; `Auto-detect` picks ns/µs/ms/s from the magnitude.
-- **Can I use this with Grafana Alerting?** Yes. Alert rules evaluate a snapshot of recent messages (see Grafana Alerting above). Use Reduce → Last on a numeric field. Dashboard live streaming is unchanged.
-- **How do I generate test data?** Use the included Go or Python producers.
-- **Where do I find more help?** See this README or open an issue.
-
 ## Documentation & Links
 
+- [End-user documentation (usage, configuration, formats, FAQ)](https://github.com/hoptical/grafana-kafka-datasource/blob/main/src/README.md)
 - [Sample Producers](https://github.com/hoptical/grafana-kafka-datasource/blob/main/example/README.md)
 - [OAuth 2.0 Authentication](https://github.com/hoptical/grafana-kafka-datasource/blob/main/docs/OAUTH2_AUTH.md)
 - [Kerberos Authentication](https://github.com/hoptical/grafana-kafka-datasource/blob/main/docs/KERBEROS_AUTH.md)
+- [Message Keys](https://github.com/hoptical/grafana-kafka-datasource/blob/main/docs/MESSAGE_KEYS.md)
 - [Performance Optimizations](https://github.com/hoptical/grafana-kafka-datasource/blob/main/docs/PERFORMANCE_OPTIMIZATIONS.md)
 - [Changelog](https://github.com/hoptical/grafana-kafka-datasource/blob/main/CHANGELOG.md)
 - [Contribution Guidelines](https://github.com/hoptical/grafana-kafka-datasource/blob/main/CONTRIBUTING.md)
@@ -319,5 +85,3 @@ The Avro and Protobuf schema caches remain bounded with a hardcoded default size
 If you find this plugin useful, please consider giving it a ⭐ on GitHub or supporting development:
 
 [![Buy Me a Coffee](https://img.shields.io/badge/buy%20me%20a%20coffee-donate-yellow?logo=buy-me-a-coffee&style=flat)](https://www.buymeacoffee.com/hoptical)
-
-For more information, see the documentation files above or open an issue/PR.

@@ -119,12 +119,9 @@ go mod tidy
 
 ## Documentation
 
-There are two READMEs:
+User-facing documentation lives in `src/README.md`. It is packaged with the plugin and shown on the grafana.com catalog page and inside Grafana, so it must stay end-user only: what the plugin does, requirements, configuration and usage. Don't add installation instructions or development content to it, and use absolute GitHub URLs for links.
 
-- `README.md` (repository root) is for GitHub readers and may include installation and development content.
-- `src/README.md` is packaged with the plugin and shown on the grafana.com catalog page and inside Grafana. It is for end users only: what the plugin does, requirements, configuration and usage. Don't add installation instructions or development content (benchmarks, sample producers, contribution docs) to it, and use absolute GitHub URLs for links.
-
-When you change user-facing behaviour, update both files.
+The root `README.md` holds installation, development and benchmark content for GitHub readers and links to `src/README.md` for usage. Put new user-facing documentation in `src/README.md`, not in both files.
 
 ## Reporting Issues
 
