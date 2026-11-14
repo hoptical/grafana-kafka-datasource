@@ -8,7 +8,7 @@
   "alerting": true,
   "executable": "gpx_kafka-datasource",
   "info": {
-    "description": "Kafka Datasource Plugin",
+    "description": "Stream Kafka topics into Grafana dashboards in real time. Supports JSON, Avro, Protobuf, Plaintext and Line Protocol messages, Schema Registry, SASL and TLS.",
     "author": {
       "name": "Hamed Karbasi",
       "url": "https://github.com/hoptical"
