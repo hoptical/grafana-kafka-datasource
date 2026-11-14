@@ -117,6 +117,12 @@ go mod tidy
 - Follow existing project conventions and ESLint rules.
 - Keep commits focused and add tests for new behaviours.
 
+## Documentation
+
+User-facing documentation lives in `src/README.md`. It is packaged with the plugin and shown on the grafana.com catalog page and inside Grafana, so it must stay end-user only: what the plugin does, requirements, configuration and usage. Don't add installation instructions or development content to it, and use absolute GitHub URLs for links.
+
+The root `README.md` holds installation, development and benchmark content for GitHub readers and links to `src/README.md` for usage. Put new user-facing documentation in `src/README.md`, not in both files.
+
 ## Reporting Issues
 
 - Use GitHub Issues for bugs, feature requests, and questions.
