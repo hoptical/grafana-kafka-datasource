@@ -125,7 +125,10 @@ func rejectRedirects(req *http.Request, via []*http.Request) error {
 func validateTokenEndpoint(rawURL string) error {
 	u, err := url.Parse(rawURL)
 	if err != nil {
-		return fmt.Errorf("invalid token endpoint URL: %w", err)
+		// The parse error embeds the raw URL (and its inner error can echo URL
+		// fragments such as an invalid port), which may carry credentials, so
+		// it is deliberately not included.
+		return errors.New("invalid token endpoint URL")
 	}
 	if u.Scheme == "https" {
 		return nil
@@ -134,7 +137,19 @@ func validateTokenEndpoint(rawURL string) error {
 	if host == "localhost" || net.ParseIP(host).IsLoopback() {
 		return nil
 	}
-	return fmt.Errorf("token endpoint must use https (got %q); plaintext http is only allowed for localhost", rawURL)
+	return fmt.Errorf("token endpoint must use https (got %q); plaintext http is only allowed for localhost", redactEndpoint(rawURL))
+}
+
+// sanitizeURLError replaces the URL inside any *url.Error in err's chain with
+// the redacted endpoint. net/url and net/http embed the full URL (including
+// query parameters and, for parse errors, userinfo) in *url.Error, and these
+// errors are logged at Error level, so they must not carry credentials.
+func sanitizeURLError(err error, endpoint string) error {
+	var ue *url.Error
+	if errors.As(err, &ue) {
+		ue.URL = redactEndpoint(endpoint)
+	}
+	return err
 }
 
 // Name returns the SASL mechanism name.
@@ -191,13 +206,13 @@ func (m *oauthBearerMechanism) getToken(ctx context.Context) (string, error) {
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, m.tokenEndpoint, strings.NewReader(form.Encode()))
 	if err != nil {
-		return "", fmt.Errorf("failed to build token request: %w", err)
+		return "", fmt.Errorf("failed to build token request: %w", sanitizeURLError(err, m.tokenEndpoint))
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	resp, err := m.httpClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("token endpoint request failed: %w", err)
+		return "", fmt.Errorf("token endpoint request failed: %w", sanitizeURLError(err, m.tokenEndpoint))
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {

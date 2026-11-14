@@ -235,6 +235,52 @@ func TestOAuthBearerMechanism_RejectsNonLoopbackHTTP(t *testing.T) {
 	}
 }
 
+// TestOAuthBearerMechanism_EndpointErrorsAreRedacted ensures credentials in the
+// token endpoint URL (userinfo, query, or fragments of a malformed URL) never
+// appear in returned errors, which are logged at Error level.
+func TestOAuthBearerMechanism_EndpointErrorsAreRedacted(t *testing.T) {
+	// Grab a free loopback port and close it so the request fails to connect.
+	closed := httptest.NewServer(http.NotFoundHandler())
+	closedURL := closed.URL
+	closed.Close()
+
+	cases := map[string]struct {
+		endpoint string
+		wantMsg  string
+	}{
+		"non-https endpoint": {
+			endpoint: "http://user:pwsecret@idp.example.com/token?client_secret=qsecret",
+			wantMsg:  "must use https",
+		},
+		"unparseable endpoint": {
+			endpoint: "http://user:pwsecret@idp.example.com:qsecret/token",
+			wantMsg:  "invalid token endpoint URL",
+		},
+		"request failure": {
+			endpoint: closedURL + "/token?client_secret=qsecret",
+			wantMsg:  "token endpoint request failed",
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			m := newTestOAuthMechanism(tc.endpoint)
+			_, _, err := m.Start(context.Background())
+			if err == nil {
+				t.Fatal("expected error")
+			}
+			msg := err.Error()
+			if !strings.Contains(msg, tc.wantMsg) {
+				t.Fatalf("expected error containing %q, got %v", tc.wantMsg, err)
+			}
+			for _, secret := range []string{"pwsecret", "qsecret", "user:"} {
+				if strings.Contains(msg, secret) {
+					t.Fatalf("error leaks %q: %v", secret, err)
+				}
+			}
+		})
+	}
+}
+
 func TestOAuthBearerMechanism_AllowsLoopbackHTTP(t *testing.T) {
 	server := httptest.NewServer(tokenHandler("loopback-token", 600))
 	defer server.Close()
