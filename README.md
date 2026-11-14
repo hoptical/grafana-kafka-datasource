@@ -34,7 +34,7 @@ You can automatically configure the Kafka datasource using Grafana's provisionin
 
 ## Usage
 
-Once the plugin is installed, add a Kafka data source in Grafana and build your first query. The [end-user README](https://github.com/hoptical/grafana-kafka-datasource/blob/main/src/README.md) covers the complete usage guide: configuration (brokers, authentication, TLS, Schema Registry, provisioning), building queries, Grafana Alerting, and the supported JSON, Avro, Protobuf, Plaintext and Line Protocol formats. It is also the page shown in the Grafana plugin catalog and inside Grafana.
+Once the plugin is installed, add a Kafka data source in Grafana and build your first query. The [end-user README](https://github.com/hoptical/grafana-kafka-datasource/blob/main/src/README.md) covers the complete usage guide: configuration (brokers, authentication, TLS, Schema Registry, provisioning), building queries, Grafana Alerting, and the supported JSON, Avro, Protobuf, Plaintext and Line Protocol formats.
 
 ## Sample Data Generator
 
