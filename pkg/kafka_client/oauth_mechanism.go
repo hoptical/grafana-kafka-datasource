@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend/httpclient"
@@ -145,21 +146,45 @@ func validateTokenEndpoint(rawURL string) error {
 // userinfo) in url.Error.URL, and the inner url.Error.Err can also echo URL
 // fragments (e.g. a malformed redirect Location header or an invalid port).
 // These errors are logged at Error level, so the URL is replaced with the
-// redacted endpoint and the inner error is kept only when it is known not to
-// contain URL text: context cancellation/deadline, network (dial) errors and
-// the redirect rejection. Anything else is replaced with a fixed message.
+// redacted endpoint and the inner error is rebuilt from known-safe parts (see
+// safeInnerError) instead of being retained.
 func sanitizeURLError(err error, endpoint string) error {
 	var ue *url.Error
 	if !errors.As(err, &ue) {
 		return err
 	}
-	inner := errors.New("details omitted")
-	var opErr *net.OpError
-	if errors.Is(ue.Err, context.Canceled) || errors.Is(ue.Err, context.DeadlineExceeded) ||
-		errors.Is(ue.Err, errRedirectNotAllowed) || errors.As(ue.Err, &opErr) {
-		inner = ue.Err
+	return &url.Error{Op: ue.Op, URL: redactEndpoint(endpoint), Err: safeInnerError(ue.Err)}
+}
+
+// safeInnerError maps an error to an equivalent one whose text is built only
+// from fixed strings and non-secret transport details (operation, network,
+// dial address, errno, DNS name), never from the original error's text, since
+// that text may wrap or echo URL content. errors.Is on the context and
+// redirect sentinels keeps working.
+func safeInnerError(err error) error {
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return context.DeadlineExceeded
+	case errors.Is(err, context.Canceled):
+		return context.Canceled
+	case errors.Is(err, errRedirectNotAllowed):
+		return errRedirectNotAllowed
 	}
-	return &url.Error{Op: ue.Op, URL: redactEndpoint(endpoint), Err: inner}
+	var opErr *net.OpError
+	if errors.As(err, &opErr) {
+		inner := errors.New("network error")
+		var errno syscall.Errno
+		var dnsErr *net.DNSError
+		switch {
+		case errors.As(opErr.Err, &errno):
+			inner = errno
+		case errors.As(opErr.Err, &dnsErr):
+			inner = &net.DNSError{Err: dnsErr.Err, Name: dnsErr.Name, Server: dnsErr.Server,
+				IsTimeout: dnsErr.IsTimeout, IsTemporary: dnsErr.IsTemporary, IsNotFound: dnsErr.IsNotFound}
+		}
+		return &net.OpError{Op: opErr.Op, Net: opErr.Net, Addr: opErr.Addr, Err: inner}
+	}
+	return errors.New("details omitted")
 }
 
 // Name returns the SASL mechanism name.

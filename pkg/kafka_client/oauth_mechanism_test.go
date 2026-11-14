@@ -2,9 +2,12 @@ package kafka_client
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -298,6 +301,38 @@ func TestOAuthBearerMechanism_MalformedRedirectLocationIsRedacted(t *testing.T) 
 	}
 	if strings.Contains(err.Error(), "qsecret") {
 		t.Fatalf("error leaks secret: %v", err)
+	}
+}
+
+// TestSanitizeURLError_DropsSecretsFromWrappedInnerErrors checks that inner
+// errors which merely wrap a safe sentinel (or a net.OpError) but whose text
+// contains URL content are not retained verbatim.
+func TestSanitizeURLError_DropsSecretsFromWrappedInnerErrors(t *testing.T) {
+	const endpoint = "https://idp.example.com/token?client_secret=qsecret"
+	secretWrap := func(inner error) error {
+		return fmt.Errorf("Post %q: %w", endpoint, inner)
+	}
+	cases := map[string]struct {
+		inner  error
+		wantIs error
+	}{
+		"wrapped deadline": {secretWrap(context.DeadlineExceeded), context.DeadlineExceeded},
+		"wrapped canceled": {secretWrap(context.Canceled), context.Canceled},
+		"wrapped redirect": {secretWrap(errRedirectNotAllowed), errRedirectNotAllowed},
+		"op error with secret text": {
+			&net.OpError{Op: "dial", Net: "tcp", Err: errors.New("lookup " + endpoint)}, nil},
+		"unknown error": {errors.New("boom " + endpoint), nil},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			err := sanitizeURLError(&url.Error{Op: "Post", URL: endpoint, Err: tc.inner}, endpoint)
+			if strings.Contains(err.Error(), "qsecret") {
+				t.Fatalf("error leaks secret: %v", err)
+			}
+			if tc.wantIs != nil && !errors.Is(err, tc.wantIs) {
+				t.Fatalf("expected errors.Is(err, %v) to hold, got %v", tc.wantIs, err)
+			}
+		})
 	}
 }
 
