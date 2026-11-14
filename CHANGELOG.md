@@ -1,5 +1,14 @@
 # Changelog
 
+## [v1.11.2](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.11.2)
+
+[Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v1.11.1...v1.11.2)
+
+- Fix: resolve plugin-validator security findings (Go 1.26.11, basic-ftp) ([#193](https://github.com/hoptical/grafana-kafka-datasource/pull/193))
+- Fix: bump golang.org/x/crypto to v0.59.0 (GO-2026-5932) ([#192](https://github.com/hoptical/grafana-kafka-datasource/pull/192))
+- Docs: split READMEs by audience (end-user src/README.md for the catalog) ([#191](https://github.com/hoptical/grafana-kafka-datasource/pull/191))
+- Fix: keep OAuth token endpoint URL out of errors ([#190](https://github.com/hoptical/grafana-kafka-datasource/pull/190))
+
 ## [v1.11.1](https://github.com/hoptical/grafana-kafka-datasource/tree/v1.11.1)
 
 [Full Changelog](https://github.com/hoptical/grafana-kafka-datasource/compare/v1.11.0...v1.11.1)
