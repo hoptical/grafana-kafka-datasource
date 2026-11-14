@@ -134,7 +134,9 @@ A producer with no messages in the range evaluates as **No data**. If the query 
 
 Topics written by transactional (exactly-once) producers are supported. The snapshot reads committed data up to the partition's last stable offset, so an open transaction or a trailing COMMIT/ABORT marker does not stall the evaluation.
 
-Line protocol is not supported for alerting yet. JSON, Avro, Protobuf, and plaintext return **wide time series**. String fields become series labels, and Kafka `offset`/`partition` columns are removed, so Reduce does not fail with `must be a wide series but got type long`. Set **Alert field** (`selectedField`) to the numeric payload field (for example `value1` or `metrics.cpu.load`), then Reduce → Last. That field is shown only in the alerting query editor. Dashboard Live streaming is unchanged.
+Line protocol is not supported for alerting yet. JSON, Avro, and Protobuf return **wide time series**. String fields become series labels, and Kafka `offset`/`partition` columns are removed, so Reduce does not fail with `must be a wide series but got type long`. Set **Alert field** (`selectedField`) to the numeric payload field (for example `value1` or `metrics.cpu.load`), then Reduce → Last. That field is shown only in the alerting query editor. Dashboard Live streaming is unchanged.
+
+Plaintext messages only produce a string `message` field, so they cannot supply a numeric alert value. Use JSON, Avro, or Protobuf for alert rules.
 
 ## Supported JSON Structures
 
