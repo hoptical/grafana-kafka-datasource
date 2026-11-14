@@ -14,8 +14,6 @@
 
 A Grafana data source plugin that streams Kafka topics into dashboards in real time. It supports JSON, Avro, Protobuf, Plaintext and InfluxDB Line Protocol messages, Schema Registry, SASL (PLAIN, SCRAM, OAUTHBEARER/OIDC, GSSAPI/Kerberos) and SSL/TLS, and Grafana Alerting. Requires Apache Kafka v0.11+ and Grafana v10.2+.
 
-**Features, configuration, querying and format support are documented in the [end-user README](https://github.com/hoptical/grafana-kafka-datasource/blob/main/src/README.md)**, which is also the page shown in the Grafana plugin catalog and inside Grafana.
-
 <img src="https://raw.githubusercontent.com/hoptical/grafana-kafka-datasource/ba3d10342aca7512c5679fcd7761e5b394094598/src/img/graph.gif" alt="Kafka dashboard live demo" width="800">
 
 ## Installation
@@ -33,6 +31,10 @@ Download the [latest release](https://github.com/hoptical/grafana-kafka-datasour
 ### Provisioning
 
 You can automatically configure the Kafka datasource using Grafana's provisioning feature. For a ready-to-use template and configuration options, refer to `provisioning/datasources/datasource.yaml` in this repository.
+
+## Usage
+
+Once the plugin is installed, add a Kafka data source in Grafana and build your first query. The [end-user README](https://github.com/hoptical/grafana-kafka-datasource/blob/main/src/README.md) covers the complete usage guide: configuration (brokers, authentication, TLS, Schema Registry, provisioning), building queries, Grafana Alerting, and the supported JSON, Avro, Protobuf, Plaintext and Line Protocol formats. It is also the page shown in the Grafana plugin catalog and inside Grafana.
 
 ## Sample Data Generator
 
