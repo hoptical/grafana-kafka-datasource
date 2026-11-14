@@ -1,6 +1,6 @@
 module github.com/hoptical/grafana-kafka-datasource-example-go
 
-go 1.26.10
+go 1.26.11
 
 require (
 	github.com/IBM/sarama v1.61.1

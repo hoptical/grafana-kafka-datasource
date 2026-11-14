@@ -92,6 +92,6 @@ Changes that add a new query option (like `keyFormat`) typically touch all of: `
 
 ## Notes
 
-- Go module: `github.com/hoptical/grafana-kafka-datasource`, Go 1.26.5, uses `linkedin/goavro`, `bufbuild/protocompile`, `segmentio/kafka-go`.
+- Go module: `github.com/hoptical/grafana-kafka-datasource`, Go 1.26.11, uses `linkedin/goavro`, `bufbuild/protocompile`, `segmentio/kafka-go`.
 - Tool versions are pinned in `mise.toml` (go, node, mage, pnpm, golangci-lint) and `package.json#packageManager` (pnpm).
 - CI (`.github/workflows/ci.yml`) runs, in order: frontend typecheck/lint/lint:md/test/build, then backend lint/coverage/testRace/buildAll, then builds the example Go producer, then Playwright E2E against multiple Grafana versions.
